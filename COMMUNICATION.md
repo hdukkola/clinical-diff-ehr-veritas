@@ -197,3 +197,7 @@ The draft now runs the editorial interface and comparison service from one check
 ### UI-006 — live model and browser verification
 
 Codex verified offline 4B comparison from the app on two fictional notes and checked replay, keyboard review, recovery, mobile navigation and activity export. Fixed keyboard focus in snapshot review and corrected the README's clinician-review wording. Review branch includes a one-page write-up draft and demo outline. GitHub access and submission still require the team's decision.
+
+### UI-007 — discharge review and follow-up
+
+Codex added clarification and review controls beside the original notes' evidence in Compare notes. Decisions appear in the session export. Verified keyboard use, follow-up states, and export with live local inference and mobile replay. The change is on draft PR #9.

@@ -314,10 +314,14 @@ body[data-view="extract"] .crumbs, body[data-view="extract"] #health { display:n
 .extract-result-header h2 { font:600 18px var(--sans); color:var(--strong); }
 .extract-metrics { color:var(--muted); font-size:12px; }
 .extract-rows { list-style:none; }
-.extract-rows li { padding:11px 0; border-top:1px solid var(--line); }
+.extract-rows li { padding:13px 0; border-top:1px solid var(--line); }
 .extract-row-title { display:flex; flex-wrap:wrap; gap:9px; align-items:baseline; }
 .extract-row-title strong, .extract-detail strong { color:var(--strong); }
 .extract-row-title span { font-size:12px; color:var(--muted); }
+.extract-review-summary { padding-bottom:12px; color:var(--muted); font-size:12px; }
+.extract-review-controls { display:flex; flex-wrap:wrap; gap:8px; margin-top:9px; }
+.extract-review-controls .btn[aria-pressed="true"] { background:var(--sel); border-color:var(--accent); color:var(--strong); }
+.extract-followup { margin-top:7px; color:var(--text); font-size:13px; overflow-wrap:anywhere; }
 .extract-workspace blockquote { font-size:13px; border-left:2px solid var(--line-2); padding-left:10px; margin-top:5px; overflow-wrap:anywhere; white-space:pre-wrap; }
 .extract-workspace mark { color:var(--strong); background:var(--sel); border-bottom:1px solid var(--accent); }
 .extract-workspace details, .extract-detail { margin-top:12px; }
@@ -662,6 +666,11 @@ VIEWS.extract = () => {
     onComparison(mode, count) {
       const label = mode === "deterministic_replay" ? "Simulated replay" : "Local model";
       addAudit("Comparison", label, `${count} mention ${count === 1 ? "difference" : "differences"}`);
+      renderChrome();
+    },
+    onReview(name, label, decision) {
+      const actions = { clarify: "Flagged mention for clarification", reviewed: "Reviewed mention", null: "Cleared mention review" };
+      addAudit("Reviewer", actions[decision], `${label} · ${name}`);
       renderChrome();
     }
   });

@@ -1,11 +1,11 @@
 "use strict";
 
-function createNoteWorkspace({ onService, onComparison }) {
+function createNoteWorkspace({ onService, onComparison, onReview }) {
   const workspace = document.createElement("section");
   workspace.className = "extract-workspace";
   workspace.innerHTML = `
     <header class="extract-hero">
-      <h1 class="h1" tabindex="-1">Medication mentions</h1>
+      <h1 class="h1" tabindex="-1">Discharge medication review</h1>
     </header>
     <div class="extract-shell">
       <div class="extract-status">
@@ -170,7 +170,7 @@ function createNoteWorkspace({ onService, onComparison }) {
       if (!hasValidMode(data) || data.mode !== health.mode) {
         throw new Error("The service mode changed. Use Check service before comparing again.");
       }
-      const diffCount = renderExtractionResult(result, data, payload);
+      const diffCount = renderExtractionResult(result, data, payload, onReview);
       setStatus(modeLabel(data.mode), data.simulated ? "replay" : "live");
       onComparison(data.mode, diffCount);
       if (workspace.isConnected) result.querySelector("h2").focus();
@@ -293,7 +293,7 @@ function extractionQuote(evidence, source) {
   return quote;
 }
 
-function renderExtractionResult(result, data, payload) {
+function renderExtractionResult(result, data, payload, onReview) {
   if (!result || typeof result.replaceChildren !== "function") {
     throw new Error("Cannot render comparison result.");
   }
@@ -403,12 +403,41 @@ function renderExtractionResult(result, data, payload) {
   const heading = extractionElement("h2", "Mention differences");
   heading.id = "extraction-result-title";
   heading.tabIndex = -1;
+  const reviewSummary = extractionElement("p", undefined, "extract-review-summary");
+  reviewSummary.setAttribute("role", "status");
+  const decisions = new Map();
+  function updateReviewSummary() {
+    const flagged = [...decisions.values()].filter(decision => decision === "clarify").length;
+    reviewSummary.textContent = `${dedupedDifferences.length - decisions.size} to review · ${flagged} flagged for clarification`;
+  }
   const list = extractionElement("ul", undefined, "extract-rows");
   for (const entry of dedupedDifferences) {
     const row = extractionElement("li");
     const title = extractionElement("div", undefined, "extract-row-title");
     title.append(extractionElement("strong", entry.name), extractionElement("span", `${entry.label} only`));
-    row.append(title, ...entry.quotes);
+    const controls = extractionElement("div", undefined, "extract-review-controls");
+    controls.setAttribute("role", "group");
+    controls.setAttribute("aria-label", `Review ${entry.name} · ${entry.label.toLowerCase()}`);
+    const clarify = extractionElement("button", "Flag for clarification", "btn");
+    const reviewed = extractionElement("button", "Mark reviewed", "btn");
+    const question = extractionElement("p", `Why does ${entry.name} appear only in the ${entry.label.toLowerCase()}?`, "extract-followup");
+    question.hidden = true;
+    for (const [button, choice] of [[clarify, "clarify"], [reviewed, "reviewed"]]) {
+      button.type = "button";
+      button.setAttribute("aria-pressed", "false");
+      button.addEventListener("click", () => {
+        const next = decisions.get(entry) === choice ? null : choice;
+        if (next) decisions.set(entry, next);
+        else decisions.delete(entry);
+        clarify.setAttribute("aria-pressed", String(next === "clarify"));
+        reviewed.setAttribute("aria-pressed", String(next === "reviewed"));
+        question.hidden = next !== "clarify";
+        updateReviewSummary();
+        onReview?.(entry.name, entry.label, next);
+      });
+    }
+    controls.append(clarify, reviewed);
+    row.append(title, ...entry.quotes, controls, question);
     list.append(row);
   }
   const detail = extractionElement("details");
@@ -428,9 +457,10 @@ function renderExtractionResult(result, data, payload) {
   const count = dedupedDifferences.length;
   header.append(heading, extractionElement("span",
     `${count} ${count === 1 ? "difference" : "differences"}`, "extract-metrics"));
-  result.replaceChildren(header, count
-    ? list
-    : extractionElement("p", "No differences in extracted mentions. Review both notes.", "empty"), detail,
+  updateReviewSummary();
+  result.replaceChildren(header, ...(count
+    ? [reviewSummary, list]
+    : [extractionElement("p", "No differences in extracted mentions. Review both notes.", "empty")]), detail,
     extractionElement("p", "Extracted mentions can be missed. Compare the source text before drawing conclusions.", "extract-result-note"));
   result.hidden = false;
   return count;

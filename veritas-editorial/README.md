@@ -1,6 +1,6 @@
 # Veritas Editorial
 
-**Compare notes** opens by default. It compares medication mentions in two fictional notes and highlights each difference in its source text. **Snapshot review** lets you inspect the example records and mark differences for review. **Review suggestions** runs the built-in rules against those snapshots. **Evaluations** runs the deterministic comparison against held-out fictional fixtures. **Session activity** records comparison counts, review actions, and connector changes and can be exported as CSV or JSON. **Models & data** shows the note service mode and the snapshot drivers.
+**Compare notes** opens by default. Compare the fictional earlier and discharge notes, read the source quotes, and flag a mention for clarification or mark it reviewed. **Snapshot review** lets you inspect the example records and mark differences for review. **Review suggestions** runs the built-in rules against those snapshots. **Evaluations** runs the deterministic comparison against held-out fictional fixtures. **Session activity** records comparison counts, review actions, and connector changes and can be exported as CSV or JSON. **Models & data** shows the note service mode and the snapshot drivers.
 
 From the repository root, start the local preview with Python 3:
 
