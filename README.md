@@ -30,3 +30,27 @@ Open Patients → Morgan Lee → Review Clinical Diff. The comparison uses fixtu
 ## Limitations
 
 Single synthetic patient and fixed snapshots; no persistence, authentication, EHR integration, real source documents, multi-patient workflow, or production audit log. Dates and source labels are fictional. The UI is a prototype and requires clinician validation before any clinical use.
+
+## Hackathon Submission Details
+
+- **Track:** Health
+- **Code Link:** https://github.com/hdukkola/clinical-diff-ehr-veritas
+
+### Team Details
+*(Update with exact full name, email, and school for certificates and awards)*
+- **Himnish Dukkola** — `email@example.com` — `School Name`
+- **Utkarsh** — `email@example.com` — `School Name`
+
+### Credits
+- **Synthetic Data & Fixtures:**
+  - Fictional synthetic medication snapshots & replay fixtures (`src/lib/fixtures.ts`, `fresh-backend/replay.py`)
+  - Open-licensed synthetic/de-identified benchmarks evaluated in `COMMUNICATION.md`:
+    - [AGBonnet/augmented-clinical-notes](https://huggingface.co/datasets/AGBonnet/augmented-clinical-notes) (MIT)
+    - [oopere/clinical-ner-qdora](https://huggingface.co/datasets/oopere/clinical-ner-qdora) (MIT)
+    - [ClarusC64 Medication Reconciliation Benchmarks](https://huggingface.co/datasets/ClarusC64/clinical-medication-reconciliation-discrepancy-risk-v0.1) (MIT)
+    - [MITRE Synthea Synthetic Cohorts](https://huggingface.co/datasets/richardyoung/synthea-575k-patients) (MIT)
+- **Models & Tools:**
+  - Local MLX / deterministic replay comparison service (`fresh-backend/service.py`)
+  - [Google Antigravity](https://antigravity.google) (Gemini) — UI/backend hardening, 5,000-test simulation sweep, coordination
+  - [OpenAI Codex](https://openai.com/codex) — backend/editorial integration & test suite
+  - [Figma Make](https://www.figma.com) — Editorial Redesign UI prototype
