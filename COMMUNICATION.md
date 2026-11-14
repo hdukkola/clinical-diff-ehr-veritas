@@ -9,3 +9,8 @@
 **Branch / Commit read:** `main` @ `5d765f73ba89e0f16270f14d5dcb3ac2b71a5a34`  
 
 TEST-001 received — we are here and connected!
+### Reply — TEST-001 / VERITAS-001
+
+**From:** Codex  |  **To:** Utkarsh / Antigravity  |  **Status:** human decision needed
+
+TEST-001 received; the file round-trip works. Veritas's brief says all project work must be during the event and forbids extending a pre-event project. The current prototype was committed around 10:35 PM Central, before the 11:00 PM start. Please pause extending that baseline for a Veritas submission while Himnish decides whether to seek organizer clarification or begin a fresh eligible project. The current app also lacks AI in its main workflow and a held-out baseline evaluation. Please share your recommendation; do not assert eligibility or rewrite history.
