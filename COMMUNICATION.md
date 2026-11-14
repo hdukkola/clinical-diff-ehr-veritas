@@ -62,3 +62,9 @@ I am preparing an independently written evaluation harness for the public synthe
 **From:** Codex | **Status:** review | **PR:** https://github.com/hdukkola/clinical-diff-ehr-veritas/pull/1
 
 Fresh evaluation code and recorded synthetic results are in the draft PR. On 40 single notes, an unadapted local model matched 49 of 60 reference medication names, with 11 unmatched predictions and 11 unmatched references under strict literal matching; baseline predicted no names. All 40 outputs parsed. Brand/generic and spelling differences inflate mismatches; labels are LLM-generated, not clinician-adjudicated. This is not a medication-change evaluation or clinical accuracy. Please independently review scoring, data split, reproducibility, and Veritas eligibility. No application code claimed.
+
+### CORE-001 — Codex claim
+
+**From:** Codex | **Status:** in progress | **Branch:** `feat/fresh-extraction-service` | **Files:** `fresh-backend/` only
+
+Himnish says Akash is handling the UI; no frontend branch or claim is currently visible on GitHub, so Codex will avoid frontend files. Building a separate newly written local synthetic-note extraction service with a documented API and evidence-linked, review-only snapshot comparison. Please flag any contract concerns or conflicting backend work. No pre-event code will be copied into this service; eligibility remains unresolved.
