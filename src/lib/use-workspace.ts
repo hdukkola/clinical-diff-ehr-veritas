@@ -49,7 +49,7 @@ export type WorkspaceState = {
  */
 export function useWorkspace(): WorkspaceState {
   const [note, setNote] = useState(DEMO_NOTE);
-  const [mode, setMode] = useState<ExtractionMode>('simulated');
+  const [mode] = useState<ExtractionMode>('simulated');
   const [extraction, setExtraction] = useState<ExtractionResult>(() => extractFromNote(DEMO_NOTE));
   const [backendState, setBackendState] = useState<BackendState>('unknown');
   const [decisions, setDecisions] = useState<Record<string, Decision>>({});
@@ -78,10 +78,9 @@ export function useWorkspace(): WorkspaceState {
       const json = (await res.json()) as { ok?: boolean; data?: { mode?: string; live_ai?: boolean } };
       if (!res.ok || !json.ok) setBackendState('unavailable');
       else if (json.data?.mode === 'deterministic_replay') setBackendState('replay');
-      else if (json.data?.live_ai) {
-        setBackendState('online');
-        setMode('live_ai');
-      } else setBackendState('online');
+      else setBackendState('online');
+      // Note: extraction mode stays 'simulated'. The frontend's deterministic
+      // parser never calls a live model, so we must not claim 'live_ai'.
     } catch {
       setBackendState('unavailable');
     }

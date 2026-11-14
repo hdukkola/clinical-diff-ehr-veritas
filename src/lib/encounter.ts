@@ -14,6 +14,14 @@ export const SIMULATED_DISCLAIMER =
   'Simulated deterministic parse of fictional text — not live AI inference. Values are only those explicitly written; nothing is inferred.';
 
 const ROUTES = ['oral', 'by mouth', 'po', 'intravenous', 'iv', 'subcutaneous', 'im', 'topical', 'inhaled'] as const;
+// Word-boundary regex so substring matches (e.g. 'po' inside 'hypoglycemia')
+// are not treated as routes. Trailing \w* allows suffixes ('orally' -> 'oral').
+const ROUTE_RE = new RegExp(
+  '\\b(' +
+    ROUTES.map((r) => r.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(' ', '\\s+')).join('|') +
+    ')\\w*',
+  'i'
+);
 const FREQ_PATTERNS: { re: RegExp; label: string }[] = [
   { re: /\bonce daily\b|\bdaily\b|\bq24h\b|\bevery 24 hours\b/i, label: 'daily' },
   { re: /\btwice daily\b|\bbid\b|\btwo times a day\b|\bevery 12 hours\b|\bq12h\b/i, label: 'twice daily' },
@@ -40,9 +48,12 @@ function findDose(text: string): string | null {
   return m ? `${m[1]} ${m[2]}` : null;
 }
 function findRoute(text: string): string | null {
-  const lower = text.toLowerCase();
-  for (const r of ROUTES) if (lower.includes(r)) return r;
-  return null;
+  const m = text.match(ROUTE_RE);
+  if (!m) return null;
+  const matched = m[1].toLowerCase();
+  // Return canonical route name from the ROUTES list.
+  for (const r of ROUTES) if (r.toLowerCase() === matched) return r;
+  return matched;
 }
 function findFrequency(text: string): string | null {
   for (const f of FREQ_PATTERNS) if (f.re.test(text)) return f.label;

@@ -8,7 +8,7 @@ import {
   toFhirPreview,
 } from './proposals';
 import { extractFromNote, parseStatements } from './encounter';
-import type { ExtractedMedication, Medication, Statement } from './types';
+import type { ExtractedMedication, Medication, Proposal, Statement } from './types';
 
 const med = (over: Partial<Medication> = {}): Medication => ({
   id: 'm1', name: 'Lisinopril', dose: '10 mg', route: 'oral', frequency: 'daily', ...over,
@@ -191,5 +191,217 @@ describe('parseStatements', () => {
     const stmts = parseStatements(note);
     const span = stmts[0].evidence!;
     expect(note.slice(span.start, span.end)).toBe('Lisinopril 10 mg daily.');
+  });
+});
+
+describe('extractFromNote: route detection', () => {
+  it('does not match short route inside unrelated word (po in hypoglycemia)', () => {
+    const r = extractFromNote('Patient has hypoglycemia and takes Lisinopril.');
+    const lisinopril = r.medications.find((m) => m.name === 'Lisinopril')!;
+    expect(lisinopril.route).toBeNull();
+  });
+
+  it('maps orally to oral route', () => {
+    const r = extractFromNote('Lisinopril 20 mg orally once daily.');
+    const lisinopril = r.medications.find((m) => m.name === 'Lisinopril')!;
+    expect(lisinopril.route).toBe('oral');
+  });
+
+  it('maps IV to iv route', () => {
+    const r = extractFromNote('Insulin IV infusion.');
+    const insulin = r.medications.find((m) => m.name === 'Insulin')!;
+    expect(insulin.route).toBe('iv');
+  });
+
+  it('matches by mouth route', () => {
+    const r = extractFromNote('Metformin by mouth twice daily.');
+    const metformin = r.medications.find((m) => m.name === 'Metformin')!;
+    expect(metformin.route).toBe('by mouth');
+  });
+});
+
+describe('extractFromNote: medication recognition', () => {
+  it('does not extract unknown medications not in formulary', () => {
+    const r = extractFromNote('Patient takes Xylocaine 100 mg.');
+    expect(r.medications.length).toBe(0);
+  });
+
+  it('extracts multiple medications from one note', () => {
+    const r = extractFromNote('Lisinopril 20 mg daily. Metformin 500 mg twice daily. Atorvastatin 40 mg nightly.');
+    expect(r.medications.length).toBe(3);
+    expect(r.medications.map((m) => m.name).sort()).toEqual(['Atorvastatin', 'Lisinopril', 'Metformin']);
+  });
+
+  it('parses dose without space before unit (20mg)', () => {
+    const r = extractFromNote('Aspirin 81mg daily.');
+    const aspirin = r.medications.find((m) => m.name === 'Aspirin')!;
+    expect(aspirin.dose).toBe('81 mg');
+  });
+
+  it('always labels mode as simulated (never live_ai)', () => {
+    const r = extractFromNote('Lisinopril 10 mg daily.');
+    expect(r.mode).toBe('simulated');
+    expect(r.disclaimer).toMatch(/Simulated/);
+    expect(r.disclaimer).not.toMatch(/Live AI/);
+  });
+});
+
+describe('buildProposal: patient-reported restrictions', () => {
+  it('blocks start proposal from patient-reported evidence', () => {
+    const p = buildProposal({
+      id: 'p-pr',
+      extracted: extract({ name: 'Aspirin', dose: '81 mg', route: 'oral', frequency: 'daily' }),
+      current: undefined,
+      statements: stmts(['Patient reports taking aspirin 81 mg daily.']),
+      authority: 'patient_reported',
+    });
+    expect(p.action).toBe('start');
+    expect(p.gate.passed).toBe(false);
+    expect(p.abstainReason).toMatch(/patient-reported/i);
+  });
+
+  it('allows continue proposal from patient-reported evidence when no change', () => {
+    const p = buildProposal({
+      id: 'p-pr-cont',
+      extracted: extract({ name: 'Aspirin', dose: '81 mg', route: 'oral', frequency: 'daily' }),
+      current: med({ name: 'Aspirin', dose: '81 mg', route: 'oral', frequency: 'daily' }),
+      statements: stmts(['Patient reports taking aspirin 81 mg daily.']),
+      authority: 'patient_reported',
+    });
+    expect(p.action).toBe('continue');
+    expect(p.diff).toEqual([]);
+  });
+});
+
+describe('buildProposal: evidence gate edge cases', () => {
+  it('continue with no evidence fails the gate', () => {
+    const p = buildProposal({
+      id: 'p-noev',
+      extracted: extract({ name: 'Lisinopril', dose: '10 mg', route: 'oral', frequency: 'daily' }),
+      current: med(),
+      statements: [],
+      authority: 'chart_fact',
+    });
+    expect(p.action).toBe('continue');
+    expect(p.gate.passed).toBe(false);
+    expect(p.gate.reasons).toContain('No literal evidence supports the continuation.');
+  });
+
+  it('change proposal with missing required field abstains', () => {
+    const p = buildProposal({
+      id: 'p-missing',
+      extracted: extract({ name: 'Lisinopril', dose: null, route: 'oral', frequency: 'daily' }),
+      current: med({ dose: '10 mg', route: 'oral', frequency: 'daily' }),
+      statements: stmts(['Lisinopril route oral daily.']),
+      authority: 'chart_fact',
+    });
+    expect(p.action).toBe('change');
+    expect(p.gate.passed).toBe(false);
+    expect(p.abstainReason).toMatch(/dose/);
+  });
+
+  it('uncertain authority blocks start proposal', () => {
+    const p = buildProposal({
+      id: 'p-unc',
+      extracted: extract({ name: 'Lisinopril', dose: '20 mg', route: 'oral', frequency: 'daily' }),
+      current: undefined,
+      statements: stmts(['Lisinopril dose is unclear.']),
+      authority: 'uncertain',
+    });
+    expect(p.gate.passed).toBe(false);
+    expect(p.gate.reasons).toContain('Source is uncertain or contradictory; resolve before proposing a change.');
+  });
+});
+
+describe('recordDecision: stop action and revalidation', () => {
+  // buildProposal cannot produce action='stop' (extraction never reports a
+  // medication as stopped), so construct a stop proposal directly.
+  const stopProposal: Proposal = {
+    id: 'p-stop',
+    medication: 'Aspirin',
+    action: 'stop',
+    current: [
+      { field: 'medication', label: 'Medication', before: 'Aspirin', after: 'Aspirin' },
+      { field: 'dose', label: 'Dose', before: '81 mg', after: '81 mg' },
+      { field: 'route', label: 'Route', before: 'oral', after: 'oral' },
+      { field: 'frequency', label: 'Frequency', before: 'daily', after: 'daily' },
+    ],
+    proposed: [
+      { field: 'medication', label: 'Medication', before: null, after: 'Aspirin' },
+      { field: 'dose', label: 'Dose', before: null, after: null },
+      { field: 'route', label: 'Route', before: null, after: null },
+      { field: 'frequency', label: 'Frequency', before: null, after: null },
+    ],
+    diff: [
+      { field: 'dose', before: '81 mg', after: null },
+      { field: 'route', before: 'oral', after: null },
+      { field: 'frequency', before: 'daily', after: null },
+    ],
+    evidence: [{ text: 'Aspirin stopped.', sourceRef: 'encounter-note', start: 0, end: 15 }],
+    authority: 'chart_fact',
+    uncertainty: 'low',
+    gate: { passed: true, reasons: [], abstained: false },
+    abstainReason: null,
+  };
+
+  it('stop action produces FHIR status stopped', () => {
+    const a = recordDecision({ proposal: stopProposal, decision: 'accepted', actor: 'demo-clinician' });
+    expect(a.fhirPreview?.status).toBe('stopped');
+  });
+
+  it('accepted proposal that was edited but not revalidated produces no FHIR preview', () => {
+    const editedFields = [
+      { field: 'medication' as const, label: 'Medication', before: null, after: 'Aspirin' },
+      { field: 'dose' as const, label: 'Dose', before: null, after: null },
+      { field: 'route' as const, label: 'Route', before: null, after: null },
+      { field: 'frequency' as const, label: 'Frequency', before: null, after: null },
+    ];
+    const a = recordDecision({
+      proposal: stopProposal,
+      decision: 'accepted',
+      actor: 'demo-clinician',
+      editedFields,
+      revalidated: false,
+    });
+    expect(a.fhirPreview).toBeNull();
+  });
+
+  it('accepted proposal that was edited and revalidated produces FHIR preview', () => {
+    const editedFields = [
+      { field: 'medication' as const, label: 'Medication', before: null, after: 'Aspirin' },
+      { field: 'dose' as const, label: 'Dose', before: null, after: '81 mg' },
+      { field: 'route' as const, label: 'Route', before: null, after: 'oral' },
+      { field: 'frequency' as const, label: 'Frequency', before: null, after: 'daily' },
+    ];
+    const a = recordDecision({
+      proposal: stopProposal,
+      decision: 'accepted',
+      actor: 'demo-clinician',
+      editedFields,
+      revalidated: true,
+    });
+    expect(a.fhirPreview).not.toBeNull();
+    expect(a.fhirPreview?.medicationCodeableConcept.text).toBe('Aspirin');
+  });
+});
+
+describe('evidenceGate: authority restrictions', () => {
+  const base = { action: 'start' as const, evidenceCount: 1, proposed: [
+    { field: 'medication' as const, label: 'Medication', before: null, after: 'Lisinopril' },
+    { field: 'dose' as const, label: 'Dose', before: null, after: '20 mg' },
+    { field: 'route' as const, label: 'Route', before: null, after: 'oral' },
+    { field: 'frequency' as const, label: 'Frequency', before: null, after: 'daily' },
+  ] };
+
+  it('uncertain authority fails gate', () => {
+    expect(evidenceGate({ ...base, authority: 'uncertain' }).passed).toBe(false);
+  });
+
+  it('patient_reported start fails gate', () => {
+    expect(evidenceGate({ ...base, authority: 'patient_reported' }).passed).toBe(false);
+  });
+
+  it('chart_fact start passes gate', () => {
+    expect(evidenceGate({ ...base, authority: 'chart_fact' }).passed).toBe(true);
   });
 });

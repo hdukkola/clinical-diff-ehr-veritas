@@ -259,7 +259,11 @@ export function recordDecision(args: {
 }): AuditEntry {
   const { proposal, decision, actor, editedFields, revalidated } = args;
   const isMutation = decision === 'accepted' || decision === 'edited';
-  const needsRevalidation = decision === 'edited';
+  // Revalidation is required whenever the proposal was edited (editedFields
+  // provided), regardless of whether the final decision is 'accepted' or
+  // 'edited'. Accepting an edited proposal without revalidation would let a
+  // clinician bypass the evidence-sufficiency gate on modified values.
+  const needsRevalidation = decision === 'edited' || editedFields !== undefined;
   const canPreview = isMutation && (!needsRevalidation || revalidated === true);
 
   return {
