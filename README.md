@@ -2,6 +2,8 @@
 
 A clinician-reviewed, retrospective hackathon prototype using **fictional data only**. It compares two medication snapshots, preserving their source labels and recorded dates. Differences do not establish clinical errors, authorization, timing, or harm. It is not a medical device, prescribing tool, complete audit trail, or system for real patient information.
 
+For the fictional note comparison demo, use the [Veritas Editorial launch instructions](veritas-editorial/README.md).
+
 ## Run locally
 
 Requires Node.js 20.9 or newer and npm.
