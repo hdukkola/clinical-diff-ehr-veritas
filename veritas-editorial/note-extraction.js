@@ -5,8 +5,7 @@ function createNoteWorkspace({ onService, onComparison }) {
   workspace.className = "extract-workspace";
   workspace.innerHTML = `
     <header class="extract-hero">
-      <h1 class="h1" tabindex="-1">Compare notes</h1>
-      <p class="lede">See which medication names appear in each fictional note, with the original wording alongside every difference.</p>
+      <h1 class="h1" tabindex="-1">Medication mentions</h1>
     </header>
     <div class="extract-shell">
       <div class="extract-status">
@@ -35,7 +34,7 @@ function createNoteWorkspace({ onService, onComparison }) {
       <p id="extraction-error" role="alert"></p>
     </div>
     <section id="extraction-result" aria-labelledby="extraction-result-title" hidden></section>
-    <p class="extract-scope">Use fictional notes only. A mention difference can reflect missed text and does not establish a change in treatment. Review both notes.</p>`;
+    <p class="extract-scope">Fictional notes only. Review both sources before interpreting a difference.</p>`;
 
   const form = workspace.querySelector("form");
   const fields = [...form.querySelectorAll("textarea")];
@@ -80,8 +79,8 @@ function createNoteWorkspace({ onService, onComparison }) {
 
   function updateCount(input, index) {
     const length = Array.from(input.value).length;
-    counts[index].textContent = health?.simulated ? "Fictional example · read only" :
-      `${length.toLocaleString()} / 12,000 characters`;
+    counts[index].hidden = health?.simulated === true;
+    counts[index].textContent = length > 10000 ? `${length.toLocaleString()} / 12,000 characters` : "";
   }
 
   async function request(path, options, timeout) {
@@ -177,7 +176,7 @@ function createNoteWorkspace({ onService, onComparison }) {
         throw new Error("The service mode changed. Use Check service before comparing again.");
       }
       renderExtractionResult(result, data, payload);
-      setStatus(`${modeLabel(data.mode)} · comparison complete`, data.simulated ? "replay" : "live");
+      setStatus(modeLabel(data.mode), data.simulated ? "replay" : "live");
       onComparison(data.mode, data.differences.length);
       if (workspace.isConnected) result.querySelector("h2").focus();
     } catch (failure) {
@@ -226,8 +225,10 @@ function extractionQuote(evidence, source) {
   if (chars.slice(start, end).join("") !== name) {
     throw new Error("A result did not match the source text. Review both notes manually.");
   }
-  const first = Math.max(0, start - 52);
-  const last = Math.min(chars.length, end + 52);
+  let first = Math.max(0, start - 85);
+  let last = Math.min(chars.length, end + 85);
+  while (first < start && first > 0 && !/\s/u.test(chars[first - 1])) first++;
+  while (last > end && last < chars.length && !/\s/u.test(chars[last])) last--;
   const quote = extractionElement("blockquote");
   quote.append(first > 0 ? "…" : "", chars.slice(first, start).join(""),
     extractionElement("mark", name), chars.slice(end, last).join(""), last < chars.length ? "…" : "");
@@ -239,7 +240,7 @@ function renderExtractionResult(result, data, payload) {
     Array.isArray(source?.mentions) && Array.isArray(source.unsupported_outputs))) {
     throw new Error("The comparison response is incomplete. Review both notes manually.");
   }
-  const heading = extractionElement("h2", "Mention differences", "h2");
+  const heading = extractionElement("h2", "Mention differences");
   heading.id = "extraction-result-title";
   heading.tabIndex = -1;
   const list = extractionElement("ul", undefined, "extract-rows");
@@ -278,12 +279,12 @@ function renderExtractionResult(result, data, payload) {
     detail.append(group);
   }
   const header = extractionElement("div", undefined, "extract-result-header");
-  heading.classList.remove("h2");
   const count = data.differences.length;
   header.append(heading, extractionElement("span",
     `${count} ${count === 1 ? "difference" : "differences"}`, "extract-metrics"));
   result.replaceChildren(header, data.differences.length
     ? list
-    : extractionElement("p", "No differences in extracted mentions. Review both notes.", "empty"), detail);
+    : extractionElement("p", "No differences in extracted mentions. Review both notes.", "empty"), detail,
+    extractionElement("p", "Extracted mentions can be missed. Compare the source text before drawing conclusions.", "extract-result-note"));
   result.hidden = false;
 }
