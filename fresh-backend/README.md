@@ -24,7 +24,7 @@ Replay does not load or call the local model. It accepts only the fixed fictiona
 
 A successful response contains `earlier` and `later` source IDs, `mentions` and `unsupported_outputs`, plus `differences` whose kinds are `earlier_only` or `later_only`, `review_required`, a disclaimer and explicit limitations. Evidence contains the source ID, literal matched text (`name`) and zero-based Unicode code-point offsets with exclusive end. JavaScript string offsets use UTF-16, so a client must convert indices before slicing when non-BMP characters occur. A difference means only that the extractor found a name in one source and not the other. Failed inference or malformed output returns an error rather than empty results; do not display it as a removal or a completed review. Responses are not saved and request bodies are not logged.
 
-Health also reports `mode` (`local_mlx` or `deterministic_replay`), `simulated`, and `live_ai`. In MLX mode: `mode=local_mlx`, `simulated=false`, `live_ai=true`.
+Health and successful comparisons report `mode` (`local_mlx` or `deterministic_replay`), `simulated`, and `live_ai`. In MLX mode: `mode=local_mlx`, `simulated=false`, `live_ai=true`.
 
 ### Deterministic replay contract (opt-in)
 
@@ -44,7 +44,7 @@ When `CLINICAL_DIFF_REPLAY` is enabled, `POST /compare` accepts **only** this ex
 }
 ```
 
-Any other body returns HTTP 400. Every replay HTTP JSON body (health, success, and errors) includes:
+In replay mode, `GET /health` includes this payload as `fixture`. Any other comparison body returns HTTP 400. Every replay HTTP JSON body (health, success, and errors) includes:
 
 | Field | Value |
 | --- | --- |

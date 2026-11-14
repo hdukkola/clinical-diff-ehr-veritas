@@ -8,6 +8,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse
 
 from replay import (
+    FIXTURE_PAYLOAD,
     ReplayExtractor,
     label_replay_response,
     replay_enabled,
@@ -112,7 +113,8 @@ def run_compare(payload):
     if replay_enabled():
         validate_replay_payload(payload)
         return label_replay_response(compare(payload, replay_extract))
-    return compare(payload, extract)
+    return {**compare(payload, extract), 'mode': 'local_mlx',
+            'simulated': False, 'live_ai': True}
 
 class LocalModel:
     def __init__(self):
@@ -134,6 +136,7 @@ class LocalModel:
 extract = LocalModel()
 
 class Handler(BaseHTTPRequestHandler):
+    allowed_origins = ALLOWED_ORIGINS
     def log_message(self, *args):
         pass  # Never log request bodies or note text.
     def send_json(self, status, payload):
@@ -145,13 +148,13 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header('Content-Length', str(len(raw)))
         self.send_header('Cache-Control', 'no-store')
         origin = self.headers.get('Origin')
-        if origin in ALLOWED_ORIGINS:
+        if origin in self.allowed_origins:
             self.send_header('Access-Control-Allow-Origin', origin)
             self.send_header('Vary', 'Origin')
         self.end_headers()
         self.wfile.write(raw)
     def do_OPTIONS(self):
-        if self.headers.get('Origin') not in ALLOWED_ORIGINS:
+        if self.headers.get('Origin') not in self.allowed_origins:
             return self.send_json(403, {'error': 'Origin not allowed.'})
         self.send_response(204)
         self.send_header('Access-Control-Allow-Origin', self.headers['Origin'])
@@ -168,6 +171,7 @@ class Handler(BaseHTTPRequestHandler):
                 'mode': 'deterministic_replay',
                 'simulated': True,
                 'live_ai': False,
+                'fixture': FIXTURE_PAYLOAD,
                 'disclaimer': DISCLAIMER,
             })
         self.send_json(200, {
@@ -181,7 +185,7 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         if self.path != '/compare': return self.send_json(404, {'error':'Not found.'})
         origin = self.headers.get('Origin')
-        if origin and origin not in ALLOWED_ORIGINS:
+        if origin and origin not in self.allowed_origins:
             return self.send_json(403, {'error':'Origin not allowed.'})
         try:
             length = int(self.headers.get('Content-Length', '0'))

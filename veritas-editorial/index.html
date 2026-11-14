@@ -244,6 +244,35 @@ pre.code .k{color:var(--accent-ink)} pre.code .c{color:var(--faint)}
 @media (max-width:1180px){.frame{grid-template-columns:232px minmax(0,1fr)}.rail-r{display:none}}
 @media (max-width:780px){.frame{grid-template-columns:1fr}.rail-l{display:none}.col{padding:28px 18px 80px}.form{grid-template-columns:1fr}.entry{grid-template-columns:22px 1fr}.entry .seg{grid-column:2;margin-top:10px}.crumbs{display:none}}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}.canvas{scroll-behavior:auto}}
+
+/* Note extraction */
+.mobile-extract { display: none; }
+.extract-workspace .lede { color:var(--text); }
+.extract-status { margin-top:22px; color:var(--strong); gap:8px; }
+.extract-actions { margin-top:14px; }
+.extract-workspace .field { min-width:0; }
+.extract-workspace .field label { color:var(--text); }
+.extract-workspace .field textarea { font:inherit; min-height:128px; }
+.extract-workspace textarea[readonly] { background:var(--raised); }
+.extract-workspace textarea:focus-visible { outline:2px solid var(--accent); }
+#extraction-error { color:var(--del); margin-top:12px; }
+#extraction-result { margin-top:26px; }
+.extract-rows { list-style:none; }
+.extract-rows li { padding:12px 0; border-bottom:1px solid var(--line); }
+.extract-row-title { display:flex; flex-wrap:wrap; gap:10px; align-items:baseline; color:var(--text); }
+.extract-row-title strong, .extract-detail strong { color:var(--strong); }
+.extract-workspace blockquote { border-left:2px solid var(--line-2); padding-left:10px; margin-top:5px; overflow-wrap:anywhere; white-space:pre-wrap; }
+.extract-workspace mark { color:var(--strong); background:var(--sel); border-bottom:1px solid var(--accent); }
+.extract-workspace details, .extract-detail { margin-top:12px; }
+.extract-workspace summary { cursor:pointer; }
+.extract-scope { color:var(--text); margin-top:20px; font-size:12px; }
+@media (max-width:780px) {
+  .mobile-extract { display:inline-flex; }
+  .top { padding:0 8px; }
+  .top-r { gap:2px; }
+  .top-r .ghost { padding:0 5px; }
+  .top-r #health, .wordmark span { display:none; }
+}
 </style>
 </head>
 <body>
@@ -253,6 +282,7 @@ pre.code .k{color:var(--accent-ink)} pre.code .c{color:var(--faint)}
     <div class="crumbs" id="crumbs"></div>
   </div>
   <div class="top-r">
+    <button class="ghost mobile-extract" data-action="nav" data-value="extract" data-nav="extract">Note extraction</button>
     <button class="ghost" id="health" data-action="nav" data-value="models" title="Connection health"></button>
     <div class="menu-wrap">
       <button class="ghost" id="pal-btn" data-action="pal-toggle" aria-haspopup="menu" aria-expanded="false">Palette</button>
@@ -297,6 +327,7 @@ pre.code .k{color:var(--accent-ink)} pre.code .c{color:var(--faint)}
 </div>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
+<script src="note-extraction.js"></script>
 <script>
 "use strict";
 /* ================================================================
@@ -418,9 +449,6 @@ function registerDriver(d) {
   if (booted) render();
   return Drivers[d.id];
 }
-async function simulatedHealth(conn) {
-  return { state: "error", detail: "This connector is not implemented. No connection was attempted." };
-}
 
 function heuristicInfer({ item, patient }) {
   const p = patient, src = [`A · ${p.a.label} · ${p.a.date}`, `B · ${p.b.label} · ${p.b.date}`];
@@ -472,7 +500,10 @@ async function testConn(id, quiet) {
   const d = Drivers[c.driver];
   c.state = "checking"; if (!quiet) render();
   let r;
-  try { r = d.health ? await d.health(c) : await simulatedHealth(c); }
+  try {
+    r = d.health ? await d.health(c) :
+      { state: "error", detail: "This connector is not implemented. No connection was attempted." };
+  }
   catch (e) { r = { state: "error", detail: e.message }; }
   Object.assign(c, { state: r.state, latency: r.latency ?? null, detail: r.detail || "", checkedAt: now() });
   if (!quiet) logConn(`${c.name}: ${r.state}${r.latency != null ? " · " + r.latency + " ms" : ""}`, c.kind);
@@ -545,9 +576,10 @@ function summaryLine(r) {
    ================================================================ */
 const VIEWS = {};
 const OUTLINE = {};
+let noteWorkspace;
 VIEWS.extract = () => {
-  OUTLINE.extract = [];
-  return `<section class="prose"><h1>Fictional note extraction</h1><p>Compare two synthetic notes with the local extraction service. The embedded workspace identifies fixed-fixture replay as simulated. It does not infer clinical intent.</p><iframe title="Synthetic note comparison" src="fresh-web/index.html" style="width:100%;height:1100px;border:1px solid #777;border-radius:8px;background:#fff"></iframe></section>`;
+  noteWorkspace ??= createNoteWorkspace();
+  return noteWorkspace;
 };
 
 VIEWS.diff = () => {
@@ -586,7 +618,7 @@ VIEWS.diff = () => {
         <p>A field that is empty is shown as <span class="nd">Not documented</span>. A medication that does not appear at all is shown as <span class="na">Not in snapshot</span>. Neither is treated as discontinued.</p>
         <p>Source labels and recorded dates are kept as they appear. A difference does not establish an error, an authorisation, the timing of a change, or harm.</p></section>
       <section class="sec" id="o-limits"><h2 class="h2">Limits</h2>
-        <p>Review decisions are held in this browser session only and reset on reload. No clinician has validated the fixtures or the wording. Model suggestions from placeholder connectors are labelled as simulated.</p></section>
+        <p>Review decisions are held in this browser session only and reset on reload. No clinician has validated the fixtures or the wording. The rule-based baseline uses fictional snapshots. Placeholder connectors require an implementation before use.</p></section>
     </div>`;
     OUTLINE.diff = [["o-scope", "Scope"], ["o-rules", "Comparison rules"], ["o-limits", "Limits"]];
   }
@@ -620,21 +652,21 @@ function entryHtml(r) {
 VIEWS.triage = () => {
   const p = P(), m = activeConn("model"), list = S.triage[S.patient] || [];
   const pending = list.filter(s => !s.decision || s.decision === "override-pending").length;
-  const simulated = m && !Drivers[m.driver].infer;
+  const canRun = Boolean(m && Drivers[m.driver].infer);
   OUTLINE.triage = [["o-model", "Model"], ["o-queue", "Queue"]];
   return head(`AI triage · ${p.name}`, "Suggestions waiting for a clinician",
     "The active model reads each difference and proposes what to check. Nothing is applied until a person accepts it.") + `
     <section class="sec" id="o-model" style="margin-top:28px">
       <h2 class="h2">Model</h2>
       <div class="bar" style="padding:12px 0;border-bottom:1px solid var(--line)">
-        <div class="bar-l">${m ? `<span class="dot ${m.state}"></span><span style="color:var(--strong)">${esc(m.name)}</span><span class="mono" style="font-size:11.5px">${esc(Drivers[m.driver].label)}${simulated ? " · simulated" : ""}</span>` : "No model connected"}</div>
+        <div class="bar-l">${m ? `<span class="dot ${m.state}"></span><span style="color:var(--strong)">${esc(m.name)}</span><span class="mono" style="font-size:11.5px">${esc(Drivers[m.driver].label)}${canRun ? "" : " · unavailable"}</span>` : "No model connected"}</div>
         <div style="display:flex;gap:6px"><button class="btn quiet" data-action="nav" data-value="models">Change</button>
-        <button class="btn primary" data-action="triage-run" ${!m || S.triageBusy ? "disabled" : ""}>${S.triageBusy ? "Running…" : list.length ? "Re-run triage" : "Run triage"}</button></div>
+        <button class="btn primary" data-action="triage-run" ${!canRun || S.triageBusy ? "disabled" : ""}>${S.triageBusy ? "Running…" : list.length ? "Re-run triage" : "Run triage"}</button></div>
       </div>
     </section>
     <section class="sec" id="o-queue">
       <h2 class="h2">Queue <span>${list.length ? `${pending} open of ${list.length}` : ""}</span></h2>
-      ${list.length ? `<ol class="entries">${list.map(triageHtml).join("")}</ol>` : `<div class="empty"><b>No suggestions yet.</b> Run triage to send ${diffFor(S.patient).filter(r => r.kind !== "same").length} differences to the active model.</div>`}
+      ${list.length ? `<ol class="entries">${list.map(triageHtml).join("")}</ol>` : `<div class="empty"><b>No suggestions yet.</b> ${canRun ? "Run triage on the snapshot differences." : "Choose an implemented connector to run triage."}</div>`}
     </section>`;
 };
 function triageHtml(s) {
@@ -840,7 +872,10 @@ function renderRight() {
 
 function render() {
   if (!VIEWS[S.view]) return;
-  $("#view").innerHTML = VIEWS[S.view]();
+  const view = VIEWS[S.view]();
+  const container = $("#view");
+  if (typeof view === "string") container.innerHTML = view;
+  else if (container.firstElementChild !== view) container.replaceChildren(view);
   renderChrome(); renderRight();
 }
 
@@ -852,24 +887,35 @@ function applyRailFilter() {
 /* ================================================================
    Actions
    ================================================================ */
-function go(view) { S.view = view; S.selected = null; $("#canvas").scrollTop = 0; render(); }
+function go(view) {
+  S.view = view;
+  history.replaceState(null, "", view === "extract" ? "#extract" : location.pathname + location.search);
+  S.selected = null;
+  $("#canvas").scrollTop = 0;
+  render();
+  if (view === "extract") noteWorkspace.querySelector("h1").focus();
+}
 async function runTriage() {
   const m = activeConn("model"); if (!m || S.triageBusy) return;
-  const d = Drivers[m.driver], p = P();
+  const d = Drivers[m.driver], patientId = S.patient, p = P();
   if (!d.infer) { toast("This model connector is not implemented; no model ran."); return; }
   S.triageBusy = true; render();
-  const items = diffFor(S.patient).filter(r => r.kind !== "same");
-  const out = [];
-  for (const item of items) {
-    let s;
-    if (d.infer) s = await d.infer({ item, patient: p });
-
-    out.push({ id: uid("sg"), medId: item.id, model: m.model || d.label, simulated: !d.infer, decision: null, reason: null, ...s });
+  try {
+    const items = diffFor(patientId).filter(r => r.kind !== "same");
+    const out = [];
+    for (const item of items) {
+      const suggestion = await d.infer({ item, patient: p });
+      out.push({ ...suggestion, id: uid("sg"), medId: item.id, model: m.model || d.label, decision: null, reason: null });
+    }
+    S.triage[patientId] = out;
+    addAudit("Model", `Triage run · ${out.length} suggestions`, m.name);
+    toast(`${out.length} suggestions from ${m.name}`);
+  } catch (_) {
+    toast("Triage failed. Check the model connection and try again.");
+  } finally {
+    S.triageBusy = false;
+    render();
   }
-  S.triage[S.patient] = out; S.triageBusy = false;
-  addAudit("Model", `Triage run · ${out.length} suggestions`, m.name);
-  toast(`${out.length} suggestions from ${m.name}`);
-  render();
 }
 function runEval() {
   let tp = 0, fp = 0, fn = 0, exact = 0, n = 0;
@@ -1034,6 +1080,7 @@ $("#cmd").addEventListener("click", e => { if (e.target.id === "cmd") closeCmd()
    Boot + heartbeat for live connections
    ================================================================ */
 booted = true;
+if (location.hash === "#extract") S.view = "extract";
 render();
 S.conns.filter(c => c.active).forEach(c => testConn(c.id, true));
 setInterval(() => { S.conns.filter(c => c.state === "ok" || c.state === "degraded").forEach(c => testConn(c.id, true)); }, 20000);
