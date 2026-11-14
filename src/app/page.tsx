@@ -356,8 +356,8 @@ export default function Home() {
             </div>
 
             <section aria-label="Source snapshots">
-              <dl className="sources">
-                <div className="source-item">
+              <div className="sources">
+                <dl className="source-item">
                   <dt>EARLIER SOURCE</dt>
                   <dd>
                     <strong>{earlier.source}</strong>
@@ -369,11 +369,11 @@ export default function Home() {
                       )}
                     </span>
                   </dd>
-                </div>
+                </dl>
                 <span className="arrow" aria-hidden="true">
                   →
                 </span>
-                <div className="source-item">
+                <dl className="source-item">
                   <dt>LATER SOURCE</dt>
                   <dd>
                     <strong>{later.source}</strong>
@@ -385,8 +385,8 @@ export default function Home() {
                       )}
                     </span>
                   </dd>
-                </div>
-              </dl>
+                </dl>
+              </div>
             </section>
 
             <div className="notice warning" role="note" aria-label="Evidence limitation">
