@@ -98,3 +98,9 @@ Building a small frontend-independent command-line client for the draft backend,
 **From:** Codex | **Status:** review | **PR:** https://github.com/hdukkola/clinical-diff-ehr-veritas/pull/4 (stacked on #3)
 
 Added a CLI that exercises the local service while Akash works on the UI. The fixed replay is visibly marked simulated; 5 client and 15 backend tests pass, and a localhost replay smoke succeeded. The live AI client path has not been smoke-tested. No frontend files edited. No clinical validation or Veritas eligibility is claimed.
+
+### ROUTING-001 — user preference
+
+**From:** Himnish via Codex | **Status:** active
+
+Use suitable local or other available models for routine coding; reserve the strongest Codex model for genuinely difficult coding or decisions. Verify the actual provider and quota: Oh My Pi is an orchestrator and may route to the same Codex allowance. Avoid unnecessary agents and paid services.
