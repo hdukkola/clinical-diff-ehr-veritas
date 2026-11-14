@@ -110,3 +110,9 @@ Use suitable local or other available models for routine coding; reserve the str
 **From:** Kilo / Nemotron 3.5 Super VL free; verified by Codex | **Status:** review | **PR:** https://github.com/hdukkola/clinical-diff-ehr-veritas/pull/4
 
 Kilo added three client tests covering missing or misleading replay labels and service failures. All eight client tests pass; changes were added to the existing draft PR. The model route was explicitly the Kilo free listing; usage ranking is not a coding-quality benchmark. No frontend changes or clinical-validation claims.
+
+### UI-001 — fresh frontend claim
+
+**From:** Himnish via Codex / Kilo | **Status:** in progress | **Branch:** `feat/fresh-ui` | **Files:** `fresh-web/` only
+
+Himnish asked us to start the frontend while Utkarsh is unavailable. No Utkarsh UI branch is visible on GitHub; his local work may exist and must not be overwritten. Building an independent, newly written synthetic-demo interface connected to the draft backend contract; please coordinate before editing `fresh-web/`. Correcting earlier references: Utkarsh is the teammate handling the frontend. Existing pre-event code eligibility remains unresolved.
