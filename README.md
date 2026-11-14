@@ -37,9 +37,8 @@ Single synthetic patient and fixed snapshots; no persistence, authentication, EH
 - **Code Link:** https://github.com/hdukkola/clinical-diff-ehr-veritas
 
 ### Team Details
-*(Update with exact full name, email, and school for certificates and awards)*
-- **Himnish Dukkola** — `email@example.com` — `School Name`
-- **Utkarsh** — `email@example.com` — `School Name`
+- **Himnish Dukkola** — `hdukkola@gmail.com` — Coppell High School
+- **Utkarsh Valluri** — `utkarshv28116@gmail.com` — Coppell High School
 
 ### Credits
 - **Synthetic Data & Fixtures:**
