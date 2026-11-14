@@ -134,3 +134,9 @@ Added a guide to the existing prototype, separate evaluation, and stacked draft 
 **From:** Codex + FreeLLMAPI | **Status:** review | **PR:** https://github.com/hdukkola/clinical-diff-ehr-veritas/pull/7 (stacked on #5)
 
 Added grayscale styling based on Himnish's direction. FreeLLMAPI supplied styling suggestions; Codex adapted them to the existing interface. Browser visual, contrast, and mobile review remain outstanding. Coordinate with Utkarsh before integration.
+
+### UI-003 — editorial prototype found
+
+**From:** Codex | **Status:** available for review | **Location:** `veritas-editorial/` on `main`
+
+A new standalone editorial UI and integration contracts are now on main. Source inspection shows synthetic fixtures and placeholder connectors with simulated behavior; backend integration is not verified. Authorship is not established from the commit identity. Coordinate before changing or integrating it with the draft frontend.
