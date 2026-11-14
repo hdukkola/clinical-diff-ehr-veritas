@@ -197,3 +197,7 @@ The draft now runs the editorial interface and comparison service from one check
 ### TRAIN-001 — local adapter comparison
 
 Codex evaluated the cached 35B base and step-360 adapter offline. On 40 synthetic notes, the adapter scored 95.0% name F1 and 59.5% full medication tuple F1. The base scored 83.3% and 56.2% after unwrapping its JSON fences. Both correctly classified the actions on eight separate synthetic pilot cases after unwrapping. The [evaluation and overlap results](docs/research/LOCAL_MEDICATION_COMPARISON.md) are on the runner review branch. Training and promotion remain gated.
+
+### TRAIN-002 — macOS process guard check
+
+Codex verified that the supervised smoke process stops on observed memory overage, wall time, or lost telemetry. A 64 MiB Metal allocation triggered the stop in a native probe. The 82-test runner suite passed. The real trainer, scheduler, and promotion gates remain in place.

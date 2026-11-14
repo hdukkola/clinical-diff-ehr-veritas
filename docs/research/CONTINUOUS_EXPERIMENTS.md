@@ -16,7 +16,7 @@ CMED is a useful annotation-schema reference. Its controlled-access data did not
 
 ## Checks and recovery
 
-Run the five isolated safety checks from the repository root. They use temporary files and a dummy process and do not require MLX.
+Run the isolated safety checks from the repository root. They use temporary files and a dummy process and do not require MLX.
 
 ```sh
 python3 -m unittest discover -s tests -p test_runner_safety.py -v
@@ -30,7 +30,9 @@ python3 -m mlx_runner.cli --mode dry-run
 python3 -m mlx_runner.cli --mode evaluate-only
 ```
 
-The dry run exited blocked. Six dataset entries require license review and the existing memory check reported 1.7 GiB of free pages against a 40 GiB threshold. That counter is not a validated estimate of usable memory under Apple Silicon memory pressure. The simulated smoke subprocess took zero training steps and left the existing checkpoint alone. An abort terminated an owned dummy child. An unapproved promotion was rejected and left the current adapter fixture byte-for-byte unchanged. A checkpoint edited after its manifest was written was rejected. The generated launchd template is disabled and invokes dry-run only. No job was installed.
+The dry run exited blocked on six dataset entries requiring license review. Memory preflight passed on the 48 GiB Mac. It checks the macOS memory-pressure level and requires at least 4 GiB between the per-process threshold and installed memory. The simulated smoke subprocess took zero training steps and left the existing checkpoint alone. An abort terminated an owned dummy child. An unapproved promotion was rejected and left the current adapter fixture byte-for-byte unchanged. A checkpoint edited after its manifest was written was rejected. The generated launchd template is disabled and invokes dry-run only. No job was installed.
+
+The smoke subprocess runs in its own process group. A supervisor polls its macOS physical footprint at intervals of up to 100 ms and stops the group on an observed overage, a wall-time violation, or unreadable telemetry during the run. A real 64 MiB MLX Metal allocation raised the probe process to 136.3 MiB of physical footprint and triggered termination at a 96 MiB threshold. A separate native probe hit a 0.25-second timeout. This sampled guard can observe a footprint above the configured threshold and measures the main child, so a real trainer also needs an allocation budget and a policy for worker processes. [macOS resource accounting API](https://github.com/apple-oss-distributions/xnu/blob/main/bsd/sys/resource.h)
 
 For a foreground check, stop with Ctrl+C. If an owned child remains, inspect its exact PID and parent with `ps -p PID -o pid=,ppid=,command=`, send `kill -TERM PID`, then check whether it exited before escalating to `kill -KILL PID`. Avoid broad process-name matching. After interruption, rerun preflight and inspect the run log and manifest. A SHA-256 match verifies file integrity only. Recovery currently verifies a file and does not resume an optimizer.
 

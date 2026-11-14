@@ -11,8 +11,10 @@ from pathlib import Path
 from unittest.mock import patch
 
 from mlx_runner.config import PipelineConfig
+from mlx_runner.memory import GIB
 from mlx_runner.promotion import PromotionGate
 from mlx_runner.scheduler import ExperimentScheduler
+from mlx_runner.supervisor import kill_owned_group, supervise
 from mlx_runner.trainer import TrainingEngine, TrainingStatus
 
 
@@ -51,6 +53,46 @@ class RunnerSafetyTests(unittest.TestCase):
         self.engine.abort()
         self.assertIsNotNone(child.poll())
         self.assertEqual(self.engine.status(), TrainingStatus.ABORTED)
+
+    def start_process_probe(self, code):
+        child = subprocess.Popen([sys.executable, "-c", code], start_new_session=True)
+        self.addCleanup(lambda: kill_owned_group(child) if child.poll() is None else None)
+        return child
+
+    @unittest.skipUnless(sys.platform == "darwin", "Uses native macOS process footprint")
+    def test_supervisor_stops_process_above_observed_footprint_limit(self):
+        child = self.start_process_probe("import time; data = bytearray(48 * 1024**2); time.sleep(20)")
+        limit = 32 * 1024**2
+        result = supervise(child, timeout=5, max_bytes=limit)
+        self.assertGreaterEqual(result.peak_footprint, limit)
+        self.assertIn("Physical footprint", result.abort_reason)
+        self.assertLess(result.returncode, 0)
+
+    def test_supervisor_stops_process_at_wall_time_limit(self):
+        child = self.start_process_probe("import time; time.sleep(20)")
+        with patch("mlx_runner.supervisor.process_footprint", return_value=1024):
+            result = supervise(child, timeout=0.15, max_bytes=GIB)
+        self.assertEqual(result.abort_reason, "Wall time limit reached")
+        self.assertLess(result.returncode, 0)
+
+    def test_supervisor_fails_closed_on_telemetry_loss(self):
+        child = self.start_process_probe("import time; time.sleep(20)")
+        with patch("mlx_runner.supervisor.process_footprint", side_effect=OSError):
+            result = supervise(child, timeout=1, max_bytes=GIB)
+        self.assertEqual(result.abort_reason, "Process memory telemetry unavailable")
+        self.assertLess(result.returncode, 0)
+
+    def test_supervisor_cleans_up_after_an_interrupt(self):
+        child = self.start_process_probe("import time; time.sleep(20)")
+        with patch("mlx_runner.supervisor.process_footprint", side_effect=KeyboardInterrupt):
+            with self.assertRaises(KeyboardInterrupt):
+                supervise(child, timeout=1, max_bytes=GIB)
+        self.assertLess(child.returncode, 0)
+
+    def test_elevated_memory_pressure_blocks_preflight(self):
+        with patch("mlx_runner.trainer.system_memory_status", return_value=(48 * GIB, 2)):
+            issues = self.engine.check_resources()
+        self.assertIn("System memory pressure is elevated or unknown (level 2)", issues)
 
     def test_checkpoint_tampering_blocks_recovery(self):
         path = self.engine.checkpoint_dir / "candidate_adapters.safetensors"

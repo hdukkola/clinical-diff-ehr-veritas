@@ -20,16 +20,16 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-import signal
 import subprocess
+import sys
+import tempfile
 import time
-from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Any
-
-from .config import ModelConfig, PipelineConfig, ResourceLimits, RunMode
+from .config import PipelineConfig
+from .memory import GIB, NORMAL_PRESSURE, process_footprint, system_memory_status
+from .supervisor import kill_owned_group, supervise
 
 
 class TrainingStatus(str, Enum):
@@ -85,6 +85,7 @@ class TrainingEngine:
         for d in (self.checkpoint_dir, self.run_dir, self.log_dir):
             d.mkdir(parents=True, exist_ok=True)
         self._current_process: subprocess.Popen | None = None
+        self._group_leader: subprocess.Popen | None = None
         self._status = TrainingStatus.PENDING
         self._max_checkpoints: int = 5  # Avoid uncontrolled accumulation
 
@@ -127,22 +128,16 @@ class TrainingEngine:
         except OSError:
             reasons.append("Cannot determine free disk space")
 
-        # Memory
+        # Memory pressure describes current system conditions. The process cap is
+        # enforced separately while the supervised child is running.
         try:
-            mem_bytes = int(subprocess.check_output(["sysctl", "-n", "hw.memsize"], text=True).strip())
-            total_gb = mem_bytes / (1024**3)
-            # Read free pages from vm_stat
-            vm = subprocess.check_output(["vm_stat"], text=True)
-            free_pages = 0
-            for line in vm.splitlines():
-                if "Pages free:" in line:
-                    free_pages = int(line.split(":")[1].strip().replace(".", ""))
-                    break
-            free_gb = (free_pages * 16384) / (1024**3)
-            if free_gb < self.config.resources.max_memory_gb:
-                reasons.append(f"Free memory {free_gb:.1f} GB < required {self.config.resources.max_memory_gb} GB")
-        except (subprocess.CalledProcessError, ValueError, OSError):
-            reasons.append("Cannot determine memory availability")
+            total_bytes, pressure = system_memory_status()
+            if not 0 < self.config.resources.max_memory_gb <= (total_bytes / GIB) - 4:
+                reasons.append("Process memory limit must leave at least 4 GiB for macOS and other apps")
+            if pressure != NORMAL_PRESSURE:
+                reasons.append(f"System memory pressure is elevated or unknown (level {pressure})")
+        except (subprocess.SubprocessError, ValueError, OSError):
+            reasons.append("Cannot determine physical memory and system pressure")
 
         # Thermal telemetry
         if self.config.resources.max_temperature_c is not None:
@@ -246,7 +241,10 @@ class TrainingEngine:
     # ------------------------------------------------------------------
     def run_smoke_test(self) -> TrainingResult:
         """Run a lightweight smoke test before permitting a larger job."""
-        return self._run_smoke_subprocess()
+        self._status = TrainingStatus.RUNNING
+        result = self._run_smoke_subprocess()
+        self._status = result.status
+        return result
 
     def run_training(self, smoke_test: bool = False, resume_from: Path | str | None = None) -> TrainingResult:
         """Run a training experiment with all safeguards."""
@@ -286,67 +284,58 @@ class TrainingEngine:
         return result
 
     def _run_smoke_subprocess(self) -> TrainingResult:
-        """Test subprocess startup and timeout without touching checkpoints."""
-        script = self._build_smoke_script().resolve()
+        """Exercise subprocess startup and runtime guards without model weights."""
+        try:
+            process_footprint(os.getpid())
+        except OSError:
+            return TrainingResult(status=TrainingStatus.BLOCKED, smoke_test=True,
+                                  blocked_reason="Process memory telemetry unavailable")
 
-        log_path = self.log_dir / f"training_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.log"
-        with open(log_path, "w") as logf:
-            proc = subprocess.Popen(
-                ["python3", script],
-                stdout=logf,
-                stderr=subprocess.STDOUT,
-                cwd=str(self.work_dir),
-                env={**os.environ, "MLX_RUNNER_SMOKE": "1"},
-            )
-            self._current_process = proc
-
-            try:
-                returncode = proc.wait(timeout=self.config.resources.smoke_test_max_duration_minutes * 60)
-            except subprocess.TimeoutExpired:
-                proc.terminate()
-                try:
-                    proc.wait(timeout=10)
-                except subprocess.TimeoutExpired:
-                    proc.kill()
-                    proc.wait()
-                self._current_process = None
-                self._status = TrainingStatus.ABORTED
-                return TrainingResult(
-                    status=TrainingStatus.ABORTED,
-                    error_message="Simulated subprocess exceeded the smoke test time limit",
+        try:
+            timeout = self.config.resources.smoke_test_max_duration_minutes * 60
+            max_bytes = int(self.config.resources.max_memory_gb * GIB)
+            with tempfile.NamedTemporaryFile(dir=self.log_dir, prefix="smoke_", suffix=".log", delete=False) as log:
+                child = subprocess.Popen(
+                    [sys.executable, "-c", 'print("Simulated subprocess. No model or checkpoint loaded.")'],
+                    stdout=log,
+                    stderr=subprocess.STDOUT,
+                    cwd=self.work_dir,
+                    start_new_session=True,
                 )
+                self._current_process = self._group_leader = child
+                result = supervise(child, timeout=timeout, max_bytes=max_bytes)
+        except (OSError, ValueError, OverflowError) as exc:
+            return TrainingResult(status=TrainingStatus.FAILED, smoke_test=True, error_message=str(exc))
+        except KeyboardInterrupt:
+            return TrainingResult(status=TrainingStatus.ABORTED, smoke_test=True,
+                                  error_message="Operator interrupted the smoke test")
+        finally:
+            self._current_process = self._group_leader = None
 
-            self._current_process = None
-
-        if returncode != 0:
-            self._status = TrainingStatus.FAILED
-            return TrainingResult(
-                status=TrainingStatus.FAILED,
-                error_message=f"Training exited with code {returncode}",
-            )
-
-        self._status = TrainingStatus.COMPLETED
-        return TrainingResult(status=TrainingStatus.COMPLETED, smoke_test=True)
-
-    def _build_smoke_script(self) -> Path:
-        """Build a subprocess probe that writes no checkpoint."""
-        script_path = self.run_dir / "smoke_train.py"
-        script_path.write_text(
-            'print("Simulated subprocess smoke test. No model or checkpoint loaded.")\n'
-        )
-        return script_path
+        peak = result.peak_footprint / GIB
+        if result.abort_reason or self._status == TrainingStatus.ABORTED:
+            return TrainingResult(status=TrainingStatus.ABORTED, smoke_test=True, peak_memory_gb=peak,
+                                  error_message=result.abort_reason or "Operator stopped the smoke test")
+        if result.returncode:
+            return TrainingResult(status=TrainingStatus.FAILED, smoke_test=True, peak_memory_gb=peak,
+                                  error_message=f"Smoke test exited with code {result.returncode}")
+        return TrainingResult(status=TrainingStatus.COMPLETED, smoke_test=True, peak_memory_gb=peak)
 
     def abort(self) -> None:
         """Gracefully terminate the current training process."""
-        if self._current_process is not None:
-            self._current_process.terminate()
-            try:
-                self._current_process.wait(timeout=10)
-            except subprocess.TimeoutExpired:
-                self._current_process.kill()
-                self._current_process.wait()
-            self._current_process = None
         self._status = TrainingStatus.ABORTED
+        child = self._current_process
+        if child is not None:
+            if child is self._group_leader:
+                kill_owned_group(child)
+            else:
+                child.terminate()
+                try:
+                    child.wait(timeout=10)
+                except subprocess.TimeoutExpired:
+                    child.kill()
+                    child.wait()
+            self._current_process = self._group_leader = None
 
     def status(self) -> TrainingStatus:
         return self._status
