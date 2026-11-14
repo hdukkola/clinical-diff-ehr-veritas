@@ -1044,12 +1044,33 @@ function setPalette(id) {
   S.palette = id; try { localStorage.setItem("cd-palette", id); } catch (e) {}
   closeMenus(); render(); toast("Palette: " + PALETTES.find(p => p.id === id).name);
 }
+
+function snapshotRow(id) {
+  return document.querySelector(`.entry[data-value="${CSS.escape(id)}"]`);
+}
+
+function toggleSnapshotRow(row) {
+  const id = row.dataset.value;
+  const restoreFocus = document.activeElement === row;
+  S.selected = S.selected === id ? null : id;
+  render();
+  if (restoreFocus) snapshotRow(id)?.focus({ preventScroll: true });
+}
+
 function setReview(id, val) {
+  const active = document.activeElement;
+  const restoreFocus = active.closest(".entry")?.dataset.value === id;
+  const reviewValue = active.matches("[data-action=review]") ? active.dataset.value : null;
   const key = rk(id), prev = S.reviews[key];
   if (prev === val) delete S.reviews[key]; else S.reviews[key] = val;
   const r = diffFor(S.patient).find(x => x.id === id);
   addAudit("Clinician", prev === val ? `Cleared ${val}` : `Marked ${val}`, `${P().name} · ${r ? r.name : id}`);
   render();
+  if (restoreFocus) {
+    const row = snapshotRow(id);
+    const control = reviewValue ? row?.querySelector(`[data-action=review][data-value="${CSS.escape(reviewValue)}"]`) : row;
+    control?.focus({ preventScroll: true });
+  }
 }
 function closeMobileMenu() {
   $("#app-navigation").classList.remove("nav-open");
@@ -1067,7 +1088,7 @@ const ACTIONS = {
   patient: v => { S.patient = v; S.filter = "all"; go(["diff", "triage"].includes(S.view) ? S.view : "diff"); },
   tab: (v, el) => { S.tabs[el.dataset.group] = v; S.formError = ""; render(); },
   filter: v => { S.filter = v; render(); },
-  select: (v, el, e) => { if (e.target.closest(".detail")) return; S.selected = S.selected === v ? null : v; render(); },
+  select: (_v, el, e) => { if (!e.target.closest(".detail")) toggleSnapshotRow(el); },
   review: (v, el) => setReview(el.dataset.id, v),
   "triage-run": () => runTriage(),
   "triage-decide": (v, el) => {
@@ -1145,11 +1166,11 @@ document.addEventListener("keydown", e => {
   if (k === "j" || k === "k") {
     e.preventDefault();
     const next = rows[Math.max(0, Math.min(rows.length - 1, i < 0 ? 0 : i + (k === "j" ? 1 : -1)))];
-    if (next) { S.selected = next.id; render(); const el = document.querySelector(`.entry[data-value="${next.id}"]`); if (el) el.scrollIntoView({ block: "nearest" }); }
+    if (next) { S.selected = next.id; render(); const el = snapshotRow(next.id); if (el) el.scrollIntoView({ block: "nearest" }); }
   } else if (S.selected && ({ v: "verified", f: "flagged", d: "deferred" })[k]) {
     const r = rows[i]; if (r && r.kind !== "same") setReview(r.id, { v: "verified", f: "flagged", d: "deferred" }[k]);
   } else if (k === "enter" && document.activeElement.classList.contains("entry")) {
-    const v = document.activeElement.dataset.value; S.selected = S.selected === v ? null : v; render();
+    toggleSnapshotRow(document.activeElement);
   }
 });
 
