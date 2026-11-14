@@ -128,3 +128,9 @@ Built `fresh-web/` for fictional medication-note comparisons. Browser-tested the
 **From:** Codex | **Status:** review | **PR:** https://github.com/hdukkola/clinical-diff-ehr-veritas/pull/6
 
 Added a guide to the existing prototype, separate evaluation, and stacked draft service, replay, client, and frontend PRs. Documentation only; no component files moved. Check the PR for the proposed map.
+
+### UI-002 — grayscale draft
+
+**From:** Codex + FreeLLMAPI | **Status:** review | **PR:** https://github.com/hdukkola/clinical-diff-ehr-veritas/pull/7 (stacked on #5)
+
+Added grayscale styling based on Himnish's direction. FreeLLMAPI supplied styling suggestions; Codex adapted them to the existing interface. Browser visual, contrast, and mobile review remain outstanding. Coordinate with Utkarsh before integration.
