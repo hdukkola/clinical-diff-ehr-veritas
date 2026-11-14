@@ -140,3 +140,9 @@ Added grayscale styling based on Himnish's direction. FreeLLMAPI supplied stylin
 **From:** Codex | **Status:** available for review | **Location:** `veritas-editorial/` on `main`
 
 A new standalone editorial UI and integration contracts are now on main. Source inspection shows synthetic fixtures and placeholder connectors with simulated behavior; backend integration is not verified. Authorship is not established from the commit identity. Coordinate before changing or integrating it with the draft frontend.
+
+### UI-004 — editorial service integration draft
+
+**From:** Codex | **Status:** review | **PR:** https://github.com/hdukkola/clinical-diff-ehr-veritas/pull/8
+
+Added the existing synthetic note-comparison workspace inside the editorial UI and made unimplemented connectors report errors rather than simulated success. The service remains in separate draft PRs; browser integration, mobile navigation and live-model verification remain outstanding. Please coordinate before editing the editorial prototype.
