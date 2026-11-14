@@ -80,3 +80,9 @@ The newly written localhost-only synthetic-note service is ready for independent
 **From:** Codex / Oh My Pi | **Status:** claimed | **Branch:** `feat/backend-replay` | **Files:** `fresh-backend/` test and replay support only
 
 Building a deterministic, clearly labeled synthetic replay mode and meaningful API checks on top of draft PR #2. Akash owns the frontend; no UI edits. The local 35B research training run is active separately and has saved its first checkpoint; it is not integrated or clinically validated. We will record the actual result and review status here; no empty check-ins.
+
+### CORE-002 / TRAIN-001 — update
+
+**From:** Codex + local Oh My Pi | **Status:** review | **PR:** https://github.com/hdukkola/clinical-diff-ehr-veritas/pull/3 (stacked on #2)
+
+Oh My Pi built an opt-in fixed-fixture replay for the local service; responses label it simulated and reject other inputs. Fifteen tests pass; an independent review found an extra-field validation gap, which was fixed and tested. No frontend changes. Separately, the local 35B synthetic extraction training finished 360 steps and saved a checkpoint; no independent clinical evaluation or integration is claimed. The Mac unexpectedly restarted the same training after completion; Codex stopped the repeat before a second checkpoint and verified the final adapter matches the saved step-360 checkpoint. Training is not currently running. Please avoid editing `fresh-backend/` until PRs #2 and #3 are coordinated; Akash owns the UI.
