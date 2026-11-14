@@ -3,6 +3,17 @@ Pipeline configuration for the Safe ML Experiment Runner.
 
 All configuration is defined in code (dataclasses) with optional YAML overrides.
 No model weights, adapters, credentials, or restricted data are referenced here.
+
+Model identity (corrected):
+- Qwen3.6-35B-A3B is the TARGET base model per the research plan. It is NOT
+  available locally; downloading it (~70 GB BF16 / ~17.5 GB 4-bit) is prohibited
+  without explicit operator approval.
+- The only locally available base model is Qwen2.5-7B-Instruct-4bit
+  (/Users/himnishdukkola/Documents/tds-agent/tds-model-qwen/), 7.6B params,
+  4-bit quantized, ~4 GB on disk.
+- Local adapters (tds-agent, tds-agent-qwen) are LoRA adapters trained on
+  Qwen2.5-7B-Instruct-4bit, NOT on Qwen3.6-35B-A3B.
+- There is NO Qwen3.6-35B-A3B adapter and NO step-360 checkpoint locally.
 """
 
 from __future__ import annotations
@@ -77,21 +88,61 @@ class ResourceLimits:
 
 
 @dataclass
-class ModelConfig:
-    """Model configuration. Qwen3.6-35B-A3B is NOT available locally."""
+class EvaluationLeakageConfig:
+    """Configuration for evaluation/training leakage prevention (Phase 3).
 
+    Ensures article-level and patient-level disjointness between training and
+    held-out evaluation sets. Never fabricates gold labels or treats
+    model-generated annotations as clinical ground truth.
+    """
+
+    enabled: bool = True
+    check_article_id_overlap: bool = True
+    check_patient_id_overlap: bool = True
+    exclude_training_ids_from_eval: bool = True
+    eval_split_must_be_disjoint: bool = True
+    # Article/patient IDs that must never appear in evaluation (from training data)
+    forced_exclusion_ids: list[str] = field(default_factory=list)
+    # IDs observed in training data that are automatically excluded from eval
+    observed_training_ids: list[str] = field(default_factory=list)
+
+
+@dataclass
+class ModelConfig:
+    """Model configuration.
+
+    Qwen3.6-35B-A3B is the target base model but is NOT available locally.
+    The local model is Qwen2.5-7B-Instruct-4bit.
+    """
+
+    # Target base model (per research plan) - NOT available locally
     base_model_id: str = "Qwen/Qwen3.6-35B-A3B"
     base_model_available_locally: bool = False
+    base_model_download_size_gb_4bit: float = 17.5
+    base_model_download_size_gb_bf16: float = 70.0
+
+    # Locally available base model
     local_model_path: str | None = "/Users/himnishdukkola/Documents/tds-agent/tds-model-qwen"
     local_model_id: str = "mlx-community/Qwen2.5-7B-Instruct-4bit"
     local_model_params: int = 7_615_616_512
     local_model_quantization: str = "4-bit"
+    local_model_architecture: str = "Qwen2ForCausalLM"
+
+    # Adapter configuration
     adapter_path: str | None = None
     training_framework: str = "mlx"
     fine_tune_type: str = "lora"
     lora_rank: int = 8
     lora_layers: int = 8
     max_seq_length: int = 2048
+
+    # Local adapters (trained on Qwen2.5-7B-Instruct-4bit, NOT Qwen3.6-35B-A3B)
+    local_adapters: dict[str, str] = field(
+        default_factory=lambda: {
+            "tds-agent": "/Users/himnishdukkola/Documents/tds-agent/adapters/tds-agent",
+            "tds-agent-qwen": "/Users/himnishdukkola/Documents/tds-agent/adapters/tds-agent-qwen",
+        }
+    )
 
 
 @dataclass
@@ -102,6 +153,7 @@ class PipelineConfig:
     datasets: list[DatasetEntry] = field(default_factory=list)
     resources: ResourceLimits = field(default_factory=ResourceLimits)
     model: ModelConfig = field(default_factory=ModelConfig)
+    leakage: EvaluationLeakageConfig = field(default_factory=EvaluationLeakageConfig)
     work_dir: str = str(Path.cwd())
     checkpoint_dir: str = str(Path.cwd() / "checkpoints")
     run_dir: str = str(Path.cwd() / "runs")
@@ -131,12 +183,20 @@ class PipelineConfig:
         if self.resources.max_memory_gb > 44.0:
             errors.append("max_memory_gb should not exceed 44 GB on 48 GB unified memory")
 
-        # No 35B training
+        # No 35B training locally (target model not available, would exceed memory)
         if self.model.base_model_id == "Qwen/Qwen3.6-35B-A3B" and self.mode in (
             RunMode.TRAIN_ONCE,
             RunMode.SCHEDULED,
         ):
-            errors.append("Qwen3.6-35B-A3B training not available locally (70 GB BF16 > 48 GB memory)")
+            errors.append(
+                "Qwen3.6-35B-A3B training not available locally "
+                f"({self.model.base_model_download_size_gb_4bit} GB 4-bit > 48 GB memory). "
+                "Use the local Qwen2.5-7B-Instruct-4bit model instead."
+            )
+
+        # Leakage config must be enabled
+        if not self.leakage.enabled:
+            errors.append("evaluation leakage detection must be enabled")
 
         return errors
 

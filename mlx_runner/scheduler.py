@@ -6,6 +6,10 @@ Supports modes: dry-run, evaluate-only, train-once, scheduled.
 
 Never allows unattended training solely because the scheduler is installed.
 Operator approval is required for any training job.
+
+Automatic comparison (Phase 5):
+- Compares base model vs adapter using frozen, disjoint evaluation data
+- Detects safety-critical regressions before any promotion
 """
 
 from __future__ import annotations
@@ -17,7 +21,14 @@ from pathlib import Path
 from typing import Any
 
 from .config import PipelineConfig, RunMode
-from .evaluator import EvaluationResult, evaluate_all, load_dev_cases, load_dev_results
+from .evaluator import (
+    EvaluationResult,
+    ModelComparisonResult,
+    compare_base_vs_adapter,
+    evaluate_all,
+    load_dev_cases,
+    load_dev_results,
+)
 from .registry import DatasetRegistry, build_default_registry
 from .trainer import TrainingEngine, TrainingResult, TrainingStatus
 
@@ -32,6 +43,7 @@ class ExperimentRecord:
     dataset_names: list[str] = field(default_factory=list)
     evaluation: dict[str, Any] | None = None
     training: dict[str, Any] | None = None
+    comparison: dict[str, Any] | None = None
     promotion_decision: str | None = None
     rejection_reason: str | None = None
 
@@ -104,7 +116,6 @@ class ExperimentScheduler:
         results_path = Path("fresh-eval/development-results.json")
 
         if dev_path.exists():
-            # Just verify file exists and is readable
             try:
                 load_dev_cases(dev_path)
             except Exception as exc:
@@ -116,6 +127,25 @@ class ExperimentScheduler:
             except Exception as exc:
                 issues.append(f"Dev results unreadable: {exc}")
 
+        return issues
+
+    def check_evaluation_leakage(self) -> list[str]:
+        """Check for article/patient ID leakage between training and eval sets."""
+        issues = []
+        # The dev set is development data only; no training data is present locally.
+        # Verify that evaluation data does not contain training IDs.
+        from .evaluator import check_evaluation_leakage
+
+        dev_cases = load_dev_cases("fresh-eval/seed-v2.jsonl")
+        result = check_evaluation_leakage(
+            training_data=None,  # No local training data
+            evaluation_data=dev_cases,
+            config=self.config.leakage,
+        )
+        if not result.passed:
+            issues.extend(result.reasons)
+        else:
+            issues.extend(result.reasons)  # Informational
         return issues
 
     def check_resources(self) -> list[str]:
@@ -147,10 +177,13 @@ class ExperimentScheduler:
         # Evaluation integrity
         integrity_issues = self.check_evaluation_integrity()
 
+        # Evaluation leakage
+        leakage_issues = self.check_evaluation_leakage()
+
         # Resource check
         resource_issues = self.check_resources()
 
-        all_issues = blocked + config_errors + integrity_issues + resource_issues
+        all_issues = blocked + config_errors + integrity_issues + leakage_issues + resource_issues
         record.status = "blocked" if all_issues else "completed"
         record.rejection_reason = "; ".join(all_issues) if all_issues else None
 
@@ -164,13 +197,14 @@ class ExperimentScheduler:
             "blocked_datasets": blocked,
             "config_errors": config_errors,
             "integrity_issues": integrity_issues,
+            "leakage_issues": leakage_issues,
             "resource_issues": resource_issues,
             "ingestible_datasets": [e.name for e in self.registry.ingestible()],
             "experiment_id": record.id,
         }
 
     def run_evaluate_only(self) -> dict[str, Any]:
-        """Evaluate existing saved results or explicitly approved checkpoints."""
+        """Evaluate existing saved results and compare base vs adapter."""
         record = ExperimentRecord(
             id=self._new_id("evaluate-only"),
             mode=RunMode.EVALUATE_ONLY.value,
@@ -181,21 +215,61 @@ class ExperimentScheduler:
         dev_cases = load_dev_cases("fresh-eval/seed-v2.jsonl")
         dev_responses = load_dev_results("fresh-eval/development-results.json")
 
-        evaluation = evaluate_all(dev_cases, dev_responses)
+        # Evaluate base and adapter separately
+        base_responses = {
+            k: v for k, v in dev_responses.items()
+        }
+        # The development-results.json has separate "base" and "adapter" lists.
+        # We need to split responses by variant.
+        raw = json.loads(Path("fresh-eval/development-results.json").read_text())
+        base_responses = {
+            row["id"]: row["response"] for row in raw.get("base", [])
+        }
+        adapter_responses = {
+            row["id"]: row["response"] for row in raw.get("adapter", [])
+        }
+
+        base_eval = evaluate_all(dev_cases, base_responses)
+        adapter_eval = evaluate_all(dev_cases, adapter_responses)
+
+        comparison = compare_base_vs_adapter(base_eval, adapter_eval)
 
         record.status = "completed"
         record.finished_at = datetime.now(timezone.utc).isoformat()
         record.evaluation = {
-            "total_events": evaluation.total_events,
-            "pair_matches": evaluation.pair_matches,
-            "dose_exact": evaluation.dose_exact,
-            "time_exact": evaluation.time_exact,
-            "evidence_literal": evaluation.evidence_literal,
-            "authority_matches": evaluation.authority_matches,
-            "abstentions_correct": evaluation.abstentions_correct,
-            "unauthorized_changes": evaluation.unauthorized_changes,
-            "null_type_errors": evaluation.null_type_errors,
-            "strict_json_valid_cases": evaluation.strict_json_valid_cases,
+            "base": {
+                "total_events": base_eval.total_events,
+                "pair_matches": base_eval.pair_matches,
+                "dose_exact": base_eval.dose_exact,
+                "time_exact": base_eval.time_exact,
+                "evidence_literal": base_eval.evidence_literal,
+                "authority_matches": base_eval.authority_matches,
+                "abstentions_correct": base_eval.abstentions_correct,
+                "unauthorized_changes": base_eval.unauthorized_changes,
+                "null_type_errors": base_eval.null_type_errors,
+                "strict_json_valid_cases": base_eval.strict_json_valid_cases,
+            },
+            "adapter": {
+                "total_events": adapter_eval.total_events,
+                "pair_matches": adapter_eval.pair_matches,
+                "dose_exact": adapter_eval.dose_exact,
+                "time_exact": adapter_eval.time_exact,
+                "evidence_literal": adapter_eval.evidence_literal,
+                "authority_matches": adapter_eval.authority_matches,
+                "abstentions_correct": adapter_eval.abstentions_correct,
+                "unauthorized_changes": adapter_eval.unauthorized_changes,
+                "null_type_errors": adapter_eval.null_type_errors,
+                "strict_json_valid_cases": adapter_eval.strict_json_valid_cases,
+            },
+        }
+        record.comparison = {
+            "pair_match_delta": comparison.pair_match_delta,
+            "dose_exact_delta": comparison.dose_exact_delta,
+            "time_exact_delta": comparison.time_exact_delta,
+            "evidence_literal_delta": comparison.evidence_literal_delta,
+            "null_type_error_delta": comparison.null_type_error_delta,
+            "adapter_better": comparison.adapter_better,
+            "safety_regressions": comparison.safety_regressions,
         }
 
         self.state.experiments.append(record)
@@ -206,6 +280,7 @@ class ExperimentScheduler:
             "mode": "evaluate-only",
             "status": record.status,
             "evaluation": record.evaluation,
+            "comparison": record.comparison,
             "experiment_id": record.id,
         }
 
@@ -273,6 +348,7 @@ class ExperimentScheduler:
             "checkpoint_sha256": smoke_result.checkpoint_sha256,
             "error_message": smoke_result.error_message,
             "blocked_reason": smoke_result.blocked_reason,
+            "recovered_from_checkpoint": smoke_result.recovered_from_checkpoint,
         }
 
         if smoke_result.status != TrainingStatus.COMPLETED:
@@ -308,9 +384,10 @@ class ExperimentScheduler:
         # Check licenses and evaluation integrity
         blocked = self.check_licenses()
         integrity = self.check_evaluation_integrity()
+        leakage = self.check_evaluation_leakage()
         resources = self.check_resources()
 
-        issues = blocked + integrity + resources
+        issues = blocked + integrity + leakage + resources
 
         # Scheduled mode only runs dry-run + evaluate-only, NEVER train
         dry_run = self.run_dry_run()
@@ -331,6 +408,7 @@ class ExperimentScheduler:
             "evaluate_only": evaluate,
             "blocked_datasets": blocked,
             "integrity_issues": integrity,
+            "leakage_issues": leakage,
             "resource_issues": resources,
             "experiment_id": record.id,
         }

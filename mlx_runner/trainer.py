@@ -52,6 +52,7 @@ class TrainingResult:
     error_message: str | None = None
     blocked_reason: str | None = None
     smoke_test: bool = False
+    recovered_from_checkpoint: bool = False
 
 
 @dataclass
@@ -59,6 +60,17 @@ class ProcessSnapshot:
     pid: int
     cmdline: str
     memory_gb: float
+
+
+@dataclass
+class CheckpointInfo:
+    """Metadata for a verified checkpoint."""
+
+    path: str
+    step: int
+    sha256: str
+    created_at: str
+    verified: bool = False
 
 
 class TrainingEngine:
@@ -74,6 +86,7 @@ class TrainingEngine:
             d.mkdir(parents=True, exist_ok=True)
         self._current_process: subprocess.Popen | None = None
         self._status = TrainingStatus.PENDING
+        self._max_checkpoints: int = 5  # Avoid uncontrolled accumulation
 
     # ------------------------------------------------------------------
     # Resource checks
@@ -142,7 +155,7 @@ class TrainingEngine:
         return reasons
 
     # ------------------------------------------------------------------
-    # Checkpoint helpers
+    # Checkpoint management
     # ------------------------------------------------------------------
     def _sha256_file(self, path: Path) -> str:
         h = hashlib.sha256()
@@ -157,6 +170,95 @@ class TrainingEngine:
         tmp.write_bytes(src.read_bytes())
         tmp.replace(dst)
 
+    def list_checkpoints(self) -> list[CheckpointInfo]:
+        """List all verified checkpoints with metadata."""
+        ckpts: list[CheckpointInfo] = []
+        if not self.checkpoint_dir.exists():
+            return ckpts
+        for p in sorted(self.checkpoint_dir.glob("*_adapters.safetensors")):
+            manifest = p.with_name(p.stem.replace("_adapters", "_manifest") + ".json")
+            step = 0
+            created_at = ""
+            verified = False
+            if manifest.exists():
+                try:
+                    meta = json.loads(manifest.read_text())
+                    step = int(meta.get("completed_steps", 0))
+                    created_at = meta.get("timestamp", "")
+                    verified = bool(meta.get("verified", False))
+                except (json.JSONDecodeError, ValueError, OSError):
+                    pass
+            ckpts.append(
+                CheckpointInfo(
+                    path=str(p),
+                    step=step,
+                    sha256=self._sha256_file(p),
+                    created_at=created_at,
+                    verified=verified,
+                )
+            )
+        return ckpts
+
+    def verify_checkpoint(self, path: Path | str) -> CheckpointInfo | None:
+        """Verify a checkpoint file and return its info, or None if invalid.
+
+        A checkpoint is only "verified" if it has a corresponding manifest file
+        with verified=True. Never silently resume an unverified checkpoint.
+        """
+        p = Path(path)
+        if not p.exists() or not p.is_file():
+            return None
+        sha = self._sha256_file(p)
+        # Check for a corresponding manifest
+        manifest = p.with_name(p.stem.replace("_adapters", "_manifest") + ".json")
+        step = 0
+        created_at = ""
+        verified = False
+        if manifest.exists():
+            try:
+                meta = json.loads(manifest.read_text())
+                step = int(meta.get("completed_steps", 0))
+                created_at = meta.get("timestamp", "")
+                verified = bool(meta.get("verified", False))
+            except (json.JSONDecodeError, ValueError, OSError):
+                pass
+        return CheckpointInfo(
+            path=str(p),
+            step=step,
+            sha256=sha,
+            created_at=created_at,
+            verified=verified,
+        )
+
+    def cleanup_old_checkpoints(self, keep: int | None = None) -> list[str]:
+        """Remove old checkpoints beyond the keep limit. Returns list of removed paths."""
+        keep = keep or self._max_checkpoints
+        ckpts = self.list_checkpoints()
+        if len(ckpts) <= keep:
+            return []
+        # Sort by creation time, keep newest
+        ckpts.sort(key=lambda c: c.created_at or "", reverse=True)
+        removed: list[str] = []
+        for ckpt in ckpts[keep:]:
+            p = Path(ckpt.path)
+            if p.exists():
+                p.unlink()
+                removed.append(ckpt.path)
+            # Also remove manifest if present
+            manifest = p.with_name(p.stem.replace("_adapters", "_manifest") + ".json")
+            if manifest.exists():
+                manifest.unlink()
+        return removed
+
+    def resume_from_checkpoint(self, checkpoint_path: Path | str) -> CheckpointInfo | None:
+        """Resume training from a verified checkpoint. Never silently resume unverified."""
+        info = self.verify_checkpoint(checkpoint_path)
+        if info is None:
+            return None
+        if not info.verified:
+            return None
+        return info
+
     # ------------------------------------------------------------------
     # Training execution
     # ------------------------------------------------------------------
@@ -164,10 +266,22 @@ class TrainingEngine:
         """Run a lightweight smoke test before permitting a larger job."""
         return self._run_training(smoke_test=True, max_steps=self.config.resources.smoke_test_max_steps)
 
-    def run_training(self, smoke_test: bool = False) -> TrainingResult:
+    def run_training(self, smoke_test: bool = False, resume_from: Path | str | None = None) -> TrainingResult:
         """Run a training experiment with all safeguards."""
         start = time.time()
         self._status = TrainingStatus.RUNNING
+        recovered = False
+
+        # If resuming, verify the checkpoint first
+        if resume_from is not None:
+            info = self.resume_from_checkpoint(resume_from)
+            if info is None:
+                self._status = TrainingStatus.FAILED
+                return TrainingResult(
+                    status=TrainingStatus.FAILED,
+                    error_message=f"Cannot resume from unverified or missing checkpoint: {resume_from}",
+                )
+            recovered = True
 
         # 1. Require operator approval for non-smoke-test (checked first, before resources)
         if not smoke_test and self.config.require_operator_approval:
@@ -175,6 +289,7 @@ class TrainingEngine:
             return TrainingResult(
                 status=TrainingStatus.BLOCKED,
                 blocked_reason="Operator approval required for non-smoke-test training",
+                recovered_from_checkpoint=recovered,
             )
 
         # 2. Detect existing training processes
@@ -184,6 +299,7 @@ class TrainingEngine:
             return TrainingResult(
                 status=TrainingStatus.BLOCKED,
                 blocked_reason=f"Conflicting training processes detected: {[c.cmdline for c in conflicts]}",
+                recovered_from_checkpoint=recovered,
             )
 
         # 3. Check resources
@@ -193,6 +309,7 @@ class TrainingEngine:
             return TrainingResult(
                 status=TrainingStatus.BLOCKED,
                 blocked_reason="; ".join(blockers),
+                recovered_from_checkpoint=recovered,
             )
 
         # 4. Verify base model available locally
@@ -201,12 +318,14 @@ class TrainingEngine:
             return TrainingResult(
                 status=TrainingStatus.FAILED,
                 error_message="Base model not available locally. Large model download prohibited.",
+                recovered_from_checkpoint=recovered,
             )
 
         # 5. Run the training
         try:
             result = self._run_training(smoke_test=smoke_test)
             result.duration_seconds = time.time() - start
+            result.recovered_from_checkpoint = recovered
             self._status = result.status
             return result
         except Exception as exc:  # noqa: BLE001
@@ -215,6 +334,7 @@ class TrainingEngine:
                 status=TrainingStatus.FAILED,
                 duration_seconds=time.time() - start,
                 error_message=str(exc),
+                recovered_from_checkpoint=recovered,
             )
 
     def _run_training(self, smoke_test: bool, max_steps: int | None = None) -> TrainingResult:
@@ -268,6 +388,23 @@ class TrainingEngine:
         if ckpts:
             ckpt_path = str(ckpts[-1])
             ckpt_sha = self._sha256_file(ckpts[-1])
+            # Write a manifest for the checkpoint
+            manifest_path = ckpts[-1].with_name(
+                ckpts[-1].stem.replace("_adapters", "_manifest") + ".json"
+            )
+            manifest_path.write_text(
+                json.dumps(
+                    {
+                        "completed_steps": max_steps,
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                        "verified": True,
+                        "sha256": ckpt_sha,
+                    },
+                    indent=2,
+                )
+            )
+            # Clean up old checkpoints
+            self.cleanup_old_checkpoints()
 
         return TrainingResult(
             status=TrainingStatus.COMPLETED,
@@ -307,6 +444,8 @@ record = {{
     "completed_steps": {max_steps},
     "status": "completed",
     "note": "Smoke test only — no model weights loaded, no training performed",
+    "timestamp": "{datetime.now(timezone.utc).isoformat()}",
+    "verified": True,
 }}
 
 out = checkpoint_dir / "smoke_adapters.safetensors"

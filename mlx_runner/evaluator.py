@@ -14,6 +14,10 @@ Reproducible evaluation harness covering:
 
 Uses the existing two-case medication-event set strictly as development data,
 not a statistically meaningful clinical test.
+
+Evaluation leakage prevention:
+- Article-level and patient-level disjointness between training and eval sets
+- Never fabricates gold labels or treats model-generated annotations as ground truth
 """
 
 from __future__ import annotations
@@ -80,6 +84,32 @@ class EvaluationResult:
     strict_json_valid_cases: int
 
 
+@dataclass
+class LeakageCheckResult:
+    """Result of an evaluation/training leakage check."""
+
+    passed: bool
+    article_ids_overlap: list[str] = field(default_factory=list)
+    patient_ids_overlap: list[str] = field(default_factory=list)
+    eval_ids_in_training: list[str] = field(default_factory=list)
+    reasons: list[str] = field(default_factory=list)
+
+
+@dataclass
+class ModelComparisonResult:
+    """Comparison between base model and adapter evaluation results."""
+
+    base: EvaluationResult
+    adapter: EvaluationResult
+    pair_match_delta: int
+    dose_exact_delta: int
+    time_exact_delta: int
+    evidence_literal_delta: int
+    null_type_error_delta: int
+    adapter_better: bool
+    safety_regressions: list[str] = field(default_factory=list)
+
+
 def sha256_file(path: Path | str) -> str:
     h = hashlib.sha256()
     with open(path, "rb") as f:
@@ -131,6 +161,102 @@ def _norm(v: Any) -> str | None:
             return "STRING_NULL"
         return " ".join(s.split()).casefold()
     return str(v)
+
+
+def _extract_ids(obj: Any, id_keys: set[str] | None = None) -> set[str]:
+    """Recursively extract article/patient IDs from a JSON-like object."""
+    if id_keys is None:
+        id_keys = {"id", "article_id", "patient_id", "case_id", "encounter_id", "note_id"}
+    found: set[str] = set()
+
+    def _walk(o: Any) -> None:
+        if isinstance(o, dict):
+            for k, v in o.items():
+                if k in id_keys and isinstance(v, (str, int)):
+                    found.add(str(v))
+                _walk(v)
+        elif isinstance(o, list):
+            for item in o:
+                _walk(item)
+
+    _walk(obj)
+    return found
+
+
+def check_evaluation_leakage(
+    training_data: list[dict] | None,
+    evaluation_data: list[dict] | None,
+    config: Any = None,
+) -> LeakageCheckResult:
+    """Check for article/patient ID leakage between training and evaluation sets.
+
+    Returns a LeakageCheckResult indicating whether any IDs overlap. If training
+    and evaluation data are both None, the check passes with a note.
+    Forced exclusion and observed training ID checks are evaluated independently
+    of training_data presence.
+    """
+    result = LeakageCheckResult(passed=True)
+
+    # ID overlap between training and evaluation (only when both present)
+    if training_data is not None and evaluation_data is not None:
+        training_ids = set()
+        for item in training_data:
+            training_ids |= _extract_ids(item)
+
+        eval_ids = set()
+        for item in evaluation_data:
+            eval_ids |= _extract_ids(item)
+
+        # Article/patient ID overlap
+        overlap = training_ids & eval_ids
+        if overlap:
+            result.passed = False
+            result.article_ids_overlap = sorted(overlap)
+            result.reasons.append(
+                f"LEAKAGE: {len(overlap)} ID(s) appear in both training and evaluation: "
+                f"{sorted(overlap)[:10]}"
+            )
+    elif evaluation_data is not None:
+        eval_ids = set()
+        for item in evaluation_data:
+            eval_ids |= _extract_ids(item)
+    else:
+        eval_ids = set()
+
+    # Forced exclusion list check (independent of training_data)
+    if config is not None and getattr(config, "forced_exclusion_ids", None):
+        forced = set(config.forced_exclusion_ids)
+        eval_in_forced = eval_ids & forced
+        if eval_in_forced:
+            result.passed = False
+            result.eval_ids_in_training = sorted(eval_in_forced)
+            result.reasons.append(
+                f"LEAKAGE: {len(eval_in_forced)} eval ID(s) in forced exclusion list: "
+                f"{sorted(eval_in_forced)[:10]}"
+            )
+
+    # Observed training IDs exclusion (independent of training_data)
+    if config is not None and getattr(config, "observed_training_ids", None):
+        observed = set(config.observed_training_ids)
+        eval_in_observed = eval_ids & observed
+        if eval_in_observed:
+            result.passed = False
+            if not result.eval_ids_in_training:
+                result.eval_ids_in_training = sorted(eval_in_observed)
+            else:
+                result.eval_ids_in_training = sorted(set(result.eval_ids_in_training) | eval_in_observed)
+            result.reasons.append(
+                f"LEAKAGE: {len(eval_in_observed)} eval ID(s) observed in training data: "
+                f"{sorted(eval_in_observed)[:10]}"
+            )
+
+    if result.passed:
+        if training_data is None and evaluation_data is None:
+            result.reasons.append("No training or evaluation data provided; leakage check skipped")
+        else:
+            result.reasons.append("No article/patient ID overlap detected between training and evaluation")
+
+    return result
 
 
 def evaluate_case(case: dict, response: str, source_text: str = "") -> CaseResult:
@@ -271,3 +397,58 @@ def load_dev_cases(path: Path | str) -> list[dict]:
             if line:
                 cases.append(json.loads(line))
     return cases
+
+
+def compare_base_vs_adapter(
+    base_result: EvaluationResult,
+    adapter_result: EvaluationResult,
+) -> ModelComparisonResult:
+    """Compare base model and adapter evaluation results.
+
+    Computes metric deltas and detects safety-critical regressions:
+    - unauthorized_changes increase
+    - null_type_errors increase
+    - abstention_correct decrease
+    """
+    pair_match_delta = adapter_result.pair_matches - base_result.pair_matches
+    dose_exact_delta = adapter_result.dose_exact - base_result.dose_exact
+    time_exact_delta = adapter_result.time_exact - base_result.time_exact
+    evidence_literal_delta = adapter_result.evidence_literal - base_result.evidence_literal
+    null_type_error_delta = adapter_result.null_type_errors - base_result.null_type_errors
+
+    adapter_better = (
+        pair_match_delta >= 0
+        and dose_exact_delta >= 0
+        and time_exact_delta >= 0
+        and evidence_literal_delta >= 0
+        and null_type_error_delta <= 0
+    )
+
+    safety_regressions: list[str] = []
+    if adapter_result.unauthorized_changes > base_result.unauthorized_changes:
+        safety_regressions.append(
+            f"unauthorized_changes increased from {base_result.unauthorized_changes} "
+            f"to {adapter_result.unauthorized_changes}"
+        )
+    if adapter_result.null_type_errors > base_result.null_type_errors:
+        safety_regressions.append(
+            f"null_type_errors increased from {base_result.null_type_errors} "
+            f"to {adapter_result.null_type_errors}"
+        )
+    if adapter_result.abstentions_correct < base_result.abstentions_correct:
+        safety_regressions.append(
+            f"abstentions_correct decreased from {base_result.abstentions_correct} "
+            f"to {adapter_result.abstentions_correct}"
+        )
+
+    return ModelComparisonResult(
+        base=base_result,
+        adapter=adapter_result,
+        pair_match_delta=pair_match_delta,
+        dose_exact_delta=dose_exact_delta,
+        time_exact_delta=time_exact_delta,
+        evidence_literal_delta=evidence_literal_delta,
+        null_type_error_delta=null_type_error_delta,
+        adapter_better=adapter_better,
+        safety_regressions=safety_regressions,
+    )
