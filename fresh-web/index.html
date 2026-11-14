@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Medication Mention Comparison — Synthetic Prototype</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="shell" id="shell">
+  <button class="nav-toggle" id="navToggle" aria-expanded="false" aria-controls="sidebar" type="button">Menu</button>
+  <aside class="sidebar" id="sidebar" aria-label="Global navigation">
+    <div class="sidebar-inner">
+      <div class="brand">
+        <span class="brand-mark">✳</span>
+        <div class="brand-text">
+          <div class="brand-name">Clinical Diff</div>
+          <div class="brand-sub">Synthetic prototype &mdash; not clinical software</div>
+        </div>
+      </div>
+      <div class="health-card" id="healthCard">
+        <div class="health-title">Backend</div>
+        <div class="health-row"><span class="health-label">Status</span><span class="health-value" id="healthStatus">—</span></div>
+        <div class="health-row"><span class="health-label">Mode</span><span class="health-value" id="healthMode">—</span></div>
+        <button class="health-refresh" id="healthRefresh" type="button">Refresh</button>
+      </div>
+      <div class="replay-banner hidden" id="replayBanner">
+        <span class="replay-tag">SIMULATED</span>
+        <span class="replay-text">Deterministic replay &mdash; not live AI. Fixture notes only; notes locked.</span>
+      </div>
+      <div class="patient-card">
+        <div class="patient-title">Patient context</div>
+        <div class="patient-field"><span class="patient-label">Patient</span><span class="patient-value">Fictional demo patient</span></div>
+        <div class="patient-field"><span class="patient-label">Data class</span><span class="patient-value">Synthetic / demo only</span></div>
+        <div class="patient-note">No real patient records. No dates or audits are stored.</div>
+      </div>
+      <nav class="nav">
+        <a class="nav-item" id="navNotes" href="#notes">Source notes</a>
+        <a class="nav-item" id="navResults" href="#results">Comparison results</a>
+      </nav>
+      <div class="sidebar-footer">Keyboard: <kbd>Ctrl</kbd>+<kbd>Enter</kbd> compare &middot; <kbd>Tab</kbd> navigate &middot; <kbd>Esc</kbd> clear results</div>
+    </div>
+  </aside>
+  <main class="canvas" id="canvas">
+    <header class="canvas-header">
+      <div class="eyebrow">SYNTHETIC DEMONSTRATION · MEDICATIONS</div>
+      <h1>See what changed.<br><span>Keep the context.</span></h1>
+      <p class="canvas-lede">Extracts literal medication-name mentions from two fictional notes and compares exact names. A mention is not evidence of current use, clinician approval, an error, or a treatment change. Review both source notes.</p>
+      <div class="toolbar">
+        <button class="btn btn-primary" id="btnCompare" type="button">Compare notes</button>
+        <button class="btn btn-secondary" id="btnClear" type="button">Clear results</button>
+      </div>
+      <div class="status-strip" id="statusStrip"></div>
+    </header>
+    <section class="notes" id="notes" aria-label="Source notes">
+      <div class="note-panel" id="panelEarlier">
+        <div class="note-header">
+          <h2>Earlier note</h2>
+          <div class="note-meta"><span class="note-label">Source ID</span> <span class="note-source" id="srcEarlier">—</span></div>
+        </div>
+        <textarea id="txtEarlier" aria-label="Earlier note text" placeholder="Fictional note text only. No dates or real patient data."></textarea>
+        <div class="note-footer"><span class="note-count" id="countEarlier">0</span> characters</div>
+      </div>
+      <div class="note-panel" id="panelLater">
+        <div class="note-header">
+          <h2>Later note</h2>
+          <div class="note-meta"><span class="note-label">Source ID</span> <span class="note-source" id="srcLater">—</span></div>
+        </div>
+        <textarea id="txtLater" aria-label="Later note text" placeholder="Fictional note text only. No dates or real patient data."></textarea>
+        <div class="note-footer"><span class="note-count" id="countLater">0</span> characters</div>
+      </div>
+    </section>
+    <section class="results hidden" id="results" aria-label="Comparison results">
+      <header class="results-header">
+        <h2 id="resultsTitle">Comparison results</h2>
+      </header>
+      <div class="alert alert-disclaimer" id="alertDisclaimer" role="alert"></div>
+      <div class="alert alert-limitations hidden" id="alertLimitations" role="region" aria-label="Limitations"></div>
+      <div class="grid grid-2">
+        <div class="card evidence-panel" id="panelEarlierEvidence">
+          <h3>Earlier — supported mentions</h3>
+          <div class="evidence-list" id="evEarlier"></div>
+        </div>
+        <div class="card evidence-panel" id="panelLaterEvidence">
+          <h3>Later — supported mentions</h3>
+          <div class="evidence-list" id="evLater"></div>
+        </div>
+      </div>
+      <div class="card diff-panel">
+        <h3>Differences (literal name mentions)</h3>
+        <p class="diff-intro">A difference means the extractor found a name in one source and not the other. It is not an error, an omission, a discontinuation, or a treatment change.</p>
+        <div class="diff-list" id="diffList"></div>
+      </div>
+      <div class="card unsupported-panel hidden" id="panelUnsupported">
+        <h3>Unsupported model outputs</h3>
+        <p class="unsupported-intro">Outputs not found literally in their source. Listed as unsupported, not promoted to mentions.</p>
+        <div class="unsupported-list" id="unsupList"></div>
+      </div>
+      <div class="card review-panel hidden" id="panelReview">
+        <h3>Temporary review flags (this session only)</h3>
+        <p class="review-intro">Optional, temporary, in-memory only. Not an order, an audit entry, or a clinical decision. Cleared on reload.</p>
+        <div class="review-list" id="reviewList"></div>
+      </div>
+      <div class="empty hidden" id="emptyResults">
+        <h3>No differences detected</h3>
+        <p>The extractor found no literal name differences between the sources, or extraction returned no supported mentions. Review both source notes manually; extraction can miss items.</p>
+      </div>
+    </section>
+    <div class="error-banner hidden" id="errorBanner" role="alert">
+      <h3>Backend unavailable or request failed</h3>
+      <p id="errorMessage"></p>
+      <p class="error-hint">Confirm the backend is running on 127.0.0.1:8765 (see fresh-backend/README.md), then click Retry. Review the source records manually; no data is shown while the backend fails.</p>
+      <button class="btn btn-primary" id="btnRetry" type="button">Retry</button>
+    </div>
+    <footer class="canvas-footer">Synthetic prototype only. Differences are not confirmed errors or medical advice.</footer>
+  </main>
+</div>
+<script src="app.js"></script>
+</body>
+</html>
