@@ -16,7 +16,13 @@ CMED is a useful annotation-schema reference. Its controlled-access data did not
 
 ## Checks and recovery
 
-Run from the repository root:
+Run the five isolated safety checks from the repository root. They use temporary files and a dummy process and do not require MLX.
+
+```sh
+python3 -m unittest discover -s tests -p test_runner_safety.py -v
+```
+
+For the full suite and local diagnostics:
 
 ```sh
 python3 -m pytest -q tests

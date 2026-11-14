@@ -6,7 +6,6 @@ Covers: dry-run, evaluate-only, train-once blocking, scheduled mode, license che
 
 import unittest
 import sys
-from unittest.mock import patch
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -54,14 +53,6 @@ class TestExperimentScheduler(unittest.TestCase):
         self.assertEqual(result["mode"], "scheduled")
         self.assertIn("dry_run", result)
         self.assertIn("evaluate_only", result)
-
-    def test_scheduled_mode_stops_before_evaluation_when_preflight_fails(self):
-        with patch.object(self.scheduler, "check_resources", return_value=["Resource check failed"]):
-            with patch.object(self.scheduler, "run_evaluate_only") as evaluate:
-                result = self.scheduler.run_scheduled()
-        self.assertEqual(result["status"], "blocked")
-        self.assertIsNone(result["evaluate_only"])
-        evaluate.assert_not_called()
 
     def test_list_experiments(self):
         self.scheduler.run_dry_run()

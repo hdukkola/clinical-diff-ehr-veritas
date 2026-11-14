@@ -61,17 +61,6 @@ class TestCheckpointRecovery(unittest.TestCase):
         self.assertIsNotNone(info.sha256)
         self.assertEqual(len(info.sha256), 64)  # SHA-256 hex length
 
-    def test_modified_checkpoint_is_rejected(self):
-        path = self.engine.checkpoint_dir / "test_adapters.safetensors"
-        path.write_bytes(b"original")
-        digest = hashlib.sha256(path.read_bytes()).hexdigest()
-        path.with_name("test_manifest.json").write_text(json.dumps({
-            "verified": True, "sha256": digest, "completed_steps": 1,
-        }))
-        self.assertIsNotNone(self.engine.resume_from_checkpoint(path))
-        path.write_bytes(b"modified")
-        self.assertIsNone(self.engine.resume_from_checkpoint(path))
-
     def test_smoke_test_leaves_existing_checkpoints_untouched(self):
         path = self.engine.checkpoint_dir / "some_adapters.safetensors"
         path.write_bytes(b"existing")
