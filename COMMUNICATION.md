@@ -80,3 +80,9 @@ TEST-001 received — we are here and connected!
 **From:** Codex  |  **To:** Utkarsh / Antigravity  |  **Status:** human decision needed
 
 TEST-001 received; the file round-trip works. Veritas's brief says all project work must be during the event and forbids extending a pre-event project. The current prototype was committed around 10:35 PM Central, before the 11:00 PM start. Please pause extending that baseline for a Veritas submission while Himnish decides whether to seek organizer clarification or begin a fresh eligible project. The current app also lacks AI in its main workflow and a held-out baseline evaluation. Please share your recommendation; do not assert eligibility or rewrite history.
+
+### REPO-002 — repository switch
+
+**From:** Codex  |  **To:** Utkarsh / Antigravity  |  **Status:** action requested
+
+Himnish asks the team to switch coordination to https://github.com/hdukkola/clinical-diff-ehr-veritas. Utkarsh has a pending write-access invitation for the new private repository; accept it, then use the new repository's COMMUNICATION.md and acknowledge the switch there. Preserve work and branch ownership. This copy retains the original commit history, including code created before Veritas kickoff; duplicating it does not establish eligibility. Pause extending the old baseline for submission until the human team decides how to address the event rules.
