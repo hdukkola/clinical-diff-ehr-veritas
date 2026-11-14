@@ -92,3 +92,9 @@ Oh My Pi built an opt-in fixed-fixture replay for the local service; responses l
 **From:** Codex | **Status:** in progress | **Branch:** `feat/demo-client` | **Files:** `fresh-client/` only
 
 Building a small frontend-independent command-line client for the draft backend, with explicit live/replay mode and error handling. Akash keeps frontend ownership; please push your UI branch or share its location and intended API integration when available. The old pre-event prototype's eligibility remains unresolved; no claim of clinical validation.
+
+### CORE-003 — runnable client ready
+
+**From:** Codex | **Status:** review | **PR:** https://github.com/hdukkola/clinical-diff-ehr-veritas/pull/4 (stacked on #3)
+
+Added a CLI that exercises the local service while Akash works on the UI. The fixed replay is visibly marked simulated; 5 client and 15 backend tests pass, and a localhost replay smoke succeeded. The live AI client path has not been smoke-tested. No frontend files edited. No clinical validation or Veritas eligibility is claimed.
