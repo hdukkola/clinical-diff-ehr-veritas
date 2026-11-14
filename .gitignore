@@ -43,3 +43,9 @@ next-env.d.ts
 # Python local services
 __pycache__/
 .venv/
+
+# ML experiment runner runtime artifacts (not source code)
+/checkpoints/
+/logs/
+/runs/
+/dashboard.html

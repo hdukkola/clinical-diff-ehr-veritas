@@ -130,16 +130,49 @@ Before any evaluation run, verify using `docs/research/LEAKAGE_CHECKS.md`:
 6. **Produce** run manifest with leakage check results.
 7. **Compare** base vs. adapter across all metrics.
 
-## 9. Expected Constraints and Limitations
+## 9. Memory Feasibility (Complete Model, Not Active MoE Parameters)
+
+**Critical:** For MoE inference, ALL 35B expert weights must be resident in memory simultaneously — dynamic routing means any expert can be selected at any token. Active parameter count (3B) reduces compute, NOT memory residency.
+
+### Hardware
+- Apple M5 Pro, 48 GB unified memory, 18 CPU cores, 346 GB available disk
+- No GPU separate from unified memory — model weights, KV cache, and macOS all share the 48 GB
+
+### Qwen3.6-35B-A3B Memory Requirements
+
+| Component | BF16 (2 bytes/param) | 4-bit quantized (0.5 bytes/param) |
+|---|---|---|
+| Model weights (35B total) | 70.0 GB | 17.5 GB |
+| KV cache (32K context, est.) | ~0.1 GB | ~0.1 GB |
+| macOS + MLX runtime overhead | ~3-5 GB | ~3-5 GB |
+| **Total estimated** | **~73-75 GB** | **~21-23 GB** |
+| **Fits in 48 GB?** | **NO** | **YES (tight, ~25 GB headroom)** |
+
+**Conclusion:** Qwen3.6-35B-A3B at BF16 cannot fit in 48 GB unified memory. 4-bit quantization is required. Even at 4-bit, ~25 GB headroom remains for KV cache growth, activations, and system overhead — sufficient for training small LoRA adapters but tight for full fine-tuning.
+
+### Qwen2.5-7B-Instruct-4bit (Locally Available)
+
+| Component | 4-bit quantized |
+|---|---|
+| Model weights (7.6B total) | ~3.8 GB |
+| KV cache + overhead | ~1-2 GB |
+| **Total estimated** | **~5-6 GB** |
+| **Fits in 48 GB?** | **YES (ample headroom)** |
+
+**IMPORTANT:** The locally available model is Qwen2.5-7B-Instruct-4bit, NOT Qwen3.6-35B-A3B. Qwen3.6-35B-A3B weights would need to be downloaded from Hugging Face (~70 GB BF16 or ~17.5 GB 4-bit) — this is a large model download, prohibited during this assignment without explicit operator approval. Any training experiments using the local model must target Qwen2.5-7B-Instruct-4bit, not Qwen3.6-35B-A3B.
+
+## 10. Expected Constraints and Limitations
 
 | Constraint | Impact |
 |---|---|
-| No model weights may be downloaded | Base model inference requires access to `Qwen/Qwen3.6-35B-A3B` weights — must be arranged locally |
+| **Qwen3.6-35B-A3B not available locally** | Only Qwen2.5-7B-Instruct-4bit is available locally. Qwen3.6-35B-A3B weights (~17.5 GB 4-bit) would require a large model download — prohibited during this assignment without explicit operator approval. Training experiments must target Qwen2.5-7B-Instruct-4bit unless weights are arranged. |
+| No model weights may be downloaded | Base model inference requires access to model weights — must be arranged locally |
 | No paid API credits | OpenRouter usage not permitted; local inference only |
 | No training | Adapter is already saved; no new training |
 | Dev set is 2 cases / 9 events | Not statistically significant; regression check only |
 | MedTEMPO ground truth withheld | Cannot use MedTEMPO for blind scoring while batch `202610` is active |
 | Qwen3.6 is multimodal | Text-only path requires `--language-model-only`; memory estimates must account for MoE |
+| 48 GB unified memory | Qwen3.6-35B-A3B BF16 (70 GB) cannot fit; 4-bit required (~17.5 GB weights) |
 
 ## 10. Run Manifest Template
 

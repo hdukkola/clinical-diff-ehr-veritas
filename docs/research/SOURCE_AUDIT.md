@@ -71,7 +71,7 @@ flagged **REVIEW REQUIRED**.
 | **Revision observed** | `main` branch, 9 commits |
 | **Stars / forks** | 88 stars, 5 forks |
 | **License** | CC BY 4.0 |
-| **Synthetic / real** | **Real** doctor-patient conversations and associated clinical notes |
+| **Synthetic / real** | **Real** doctor-patient conversations and associated clinical notes (NOT simulated/scripted). From MEDIQA-CHAT 2023 and MEDIQA-SUM 2023 — actual clinical encounters. Speaker tags may be ASR-swapped, which is a data-quality artifact, not evidence of synthetic generation. |
 | **Contents** | Full doctor-patient conversations + clinical notes. Data hosted on figshare (not directly in GitHub repo): https://figshare.com/articles/dataset/aci-bench-corpus_zip/22494601?file=41498793 |
 | **Splits** | From MEDIQA-CHAT 2023 and MEDIQA-SUM 2023: TRAIN 67, VALID 20, TEST1 40, TEST2 40, TEST3 40 |
 | **Known issue** | Some subsets include swapped speaker tags ([patient], [doctor]) from ASR process — intentionally left uncorrected |
@@ -80,7 +80,7 @@ flagged **REVIEW REQUIRED**.
 | **Restrictions** | Data on figshare, not GitHub; requires separate download |
 | **REVIEW REQUIRED?** | **YES** — data not directly in GitHub repo; figshare link must be followed to confirm file integrity and access |
 
-**Assessment:** AVAILABLE via figshare. Real (not synthetic) doctor-patient conversations. Speaker-tag noise is a known limitation.
+**Assessment:** AVAILABLE via figshare. Real (not simulated/scripted) doctor-patient conversations. Speaker-tag noise is a known limitation.
 
 ---
 
@@ -92,15 +92,15 @@ flagged **REVIEW REQUIRED**.
 | **Revision observed** | `main` branch, 32 commits |
 | **Stars / forks** | 138 stars, 24 forks |
 | **License** | CC BY 4.0 |
-| **Synthetic / real** | **Real** short doctor-patient conversations and corresponding summaries |
+| **Synthetic / real** | **Mixed**. Main dataset: **Real** short doctor-patient conversations and corresponding summaries (NOT simulated/scripted). Augmented dataset: **Synthetic/model-generated** — 3.6k pairs created via back-translation (French/Spanish) of real conversations. The main 2,401 pairs (1,201 train + 100 validation + 400 test across two MEDIQA challenges) are real encounters; only the augmented 3.6k portion is model-generated. |
 | **Contents** | Main dataset: 1,201 train pairs, 100 validation pairs, 2 test sets of 200 each (MEDIQA-Chat 2023 Task A; MEDIQA-Sum 2023 Task A & B). Augmented dataset: 3.6k pairs via back-translation (French/Spanish). 20 normalized section headers including `medications`, `assessment`, `diagnosis`, `plan`. |
 | **Paper** | EACL 2023: "An Empirical Study of Clinical Note Generation from Doctor-Patient Encounters" (Ben Abacha, Yim, Fan, Lin) |
 | **Permitted uses** | Clinical note generation from doctor-patient encounters; summarization evaluation |
-| **Annotation quality** | Real encounters; section-header normalized |
+| **Annotation quality** | Real encounters; section-header normalized. Augmented portion has no additional human annotation. |
 | **Restrictions** | None noted beyond CC BY 4.0 attribution |
-| **REVIEW REQUIRED?** | No — fully verified from official page |
+| **REVIEW REQUIRED?** | **YES** — must confirm whether augmented (back-translated) pairs are excluded from training/evaluation to avoid model-generated contamination |
 
-**Assessment:** AVAILABLE. Real (not synthetic) doctor-patient conversations with sectioned summaries. Good for dialogue-to-note medication consistency tasks.
+**Assessment:** AVAILABLE. Main dataset is real (not simulated/scripted) doctor-patient conversations with sectioned summaries. The augmented 3.6k portion is model-generated and should be excluded from clinical evaluation to avoid contamination. Good for dialogue-to-note medication consistency tasks using only the real portion.
 
 ---
 
@@ -193,7 +193,7 @@ flagged **REVIEW REQUIRED**.
 | Synthetic Hospital | Yes | Yes (public split) | Synthetic | MIT | No |
 | MedTEMPO-Bench | Yes (item content) | **No** (truth withheld for active batch) | Synthetic | CC BY 4.0 | **Yes** |
 | ACI-Bench | Yes (via figshare) | Yes | Real | CC BY 4.0 | **Yes** |
-| MTS-Dialog | Yes | Yes | Real | CC BY 4.0 | No |
+| MTS-Dialog | Yes | Yes | **Mixed** — real main + synthetic augmented | CC BY 4.0 | **Yes** |
 | PMC Open Access | Yes | No (per-article) | Real | Varies | **Yes** |
 | CADECv2 | Yes | Yes | Real | CC BY 4.0 | No |
 | PubMedQA | Yes (via GitHub) | Yes | Real | UNCONFIRMED | **Yes** |
@@ -211,11 +211,14 @@ The following errors were identified in the external research report and are cor
 
 ### Error 2: MoE memory estimates based on active parameters only
 **Incorrect claim:** Memory footprint estimated as if all 35B parameters are active.  
-**Correction:** For inference, only ~3B parameters are activated per forward pass (plus all expert weights must be loaded in memory). Memory estimates must account for the MoE architecture: total weights stored ≈ 35B, but active compute ≈ 3B. KV cache and expert loading behavior differ from dense models.
+**Correction:** For inference, only ~3B parameters are activated per forward pass (plus all expert weights must be loaded in memory). Memory estimates must account for the MoE architecture: total weights stored ≈ 35B, but active compute ≈ 3B. KV cache and expert loading behavior differ from dense models. **Critical: all 35B parameters must be resident in memory simultaneously for inference — active parameter count does not reduce memory residency.** See Section Error 3 below for corrected memory calculations.
+
+### Error 2b: Qwen3.6-35B-A3B not available locally
+**Finding:** Qwen3.6-35B-A3B is NOT available as a local model artifact. The only local model is `/Users/himnishdukkola/Documents/tds-agent/tds-model-qwen/` — a **Qwen2.5-7B-Instruct-4bit** (mlx-community), 7.6B parameters, 4-bit quantized, ~4 GB on disk. The local adapters (`tds-agent`, `tds-agent-qwen`) are LoRA adapters trained on Qwen2.5-7B-Instruct-4bit, NOT on Qwen3.6-35B-A3B. There is no 35B adapter and no step-360 checkpoint locally. Qwen3.6-35B-A3B weights would need to be downloaded from Hugging Face (~70 GB BF16 or ~17.5 GB 4-bit) before any inference or training can occur — this requires explicit operator approval and counts as a large model download, which is prohibited during this assignment.
 
 ### Error 3: Synthetic dialogue described as real
 **Incorrect claim:** MedTEMPO-Bench (or similar) described as containing real patient conversations.  
-**Correction:** MedTEMPO-Bench is **fully synthetic** (no real patient content). Real conversational sources include ACI-Bench (doctor-patient conversations) and MTS-Dialog (doctor-patient conversations).
+**Correction:** MedTEMPO-Bench is **fully synthetic** (no real patient content). Real conversational sources include ACI-Bench (doctor-patient conversations) and MTS-Dialog main dataset (doctor-patient conversations). MTS-Dialog also has a synthetic augmented portion (3.6k back-translated pairs) which is model-generated, not real.
 
 ### Error 4: Inconsistent PubMedQA counts
 **Incorrect claim:** Inconsistent or unverified PubMedQA instance counts.  
@@ -228,6 +231,10 @@ The following errors were identified in the external research report and are cor
 ### Error 6: Claims that Synthetic Hospital or MedTEMPO are unavailable
 **Incorrect claim:** Synthetic Hospital or MedTEMPO-Bench described as unavailable.  
 **Correction:** Both are **available**. Synthetic Hospital has `benchmark_v1.3.db` (88 MB) committed directly to the GitHub repo. MedTEMPO-Bench has public item content and baseline reports on Hugging Face. MedTEMPO's **ground truth is withheld** only while batch `202610` is the active leaderboard set — it is not unavailable, just not self-contained for blind scoring yet.
+
+### Error 7: ACI-Bench and MTS-Dialog described as simulated/scripted
+**Incorrect claim:** ACI-Bench and/or MTS-Dialog dialogues described as simulated/scripted.  
+**Correction:** Both datasets contain **real** doctor-patient conversations (not simulated/scripted). ACI-Bench is sourced from MEDIQA-CHAT/MEDIQA-SUM 2023 — actual clinical encounters with ASR speaker-tag noise. MTS-Dialog's main dataset (2,401 pairs) is real doctor-patient conversations with sectioned summaries. MTS-Dialog does have a synthetic augmented portion (3.6k back-translated pairs) which is model-generated, but the core dialogues are real.
 
 ---
 

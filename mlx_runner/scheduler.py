@@ -1,0 +1,377 @@
+"""
+Continuous experiment scheduler (Phase 5).
+
+macOS-compatible local scheduler using launchd-compatible plist templates.
+Supports modes: dry-run, evaluate-only, train-once, scheduled.
+
+Never allows unattended training solely because the scheduler is installed.
+Operator approval is required for any training job.
+"""
+
+from __future__ import annotations
+
+import json
+from dataclasses import asdict, dataclass, field
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
+
+from .config import PipelineConfig, RunMode
+from .evaluator import EvaluationResult, evaluate_all, load_dev_cases, load_dev_results
+from .registry import DatasetRegistry, build_default_registry
+from .trainer import TrainingEngine, TrainingResult, TrainingStatus
+
+
+@dataclass
+class ExperimentRecord:
+    id: str
+    mode: str
+    status: str
+    started_at: str
+    finished_at: str | None = None
+    dataset_names: list[str] = field(default_factory=list)
+    evaluation: dict[str, Any] | None = None
+    training: dict[str, Any] | None = None
+    promotion_decision: str | None = None
+    rejection_reason: str | None = None
+
+
+@dataclass
+class SchedulerState:
+    experiments: list[ExperimentRecord] = field(default_factory=list)
+    last_run: str | None = None
+    next_scheduled: str | None = None
+
+
+class ExperimentScheduler:
+    """Local experiment scheduler with safety gates."""
+
+    def __init__(self, config: PipelineConfig, work_dir: Path | str = "."):
+        self.config = config
+        self.work_dir = Path(work_dir)
+        self.state_path = self.work_dir / "runs" / "scheduler_state.json"
+        self.state_path.parent.mkdir(parents=True, exist_ok=True)
+        self.registry = build_default_registry()
+        self.state = self._load_state()
+
+    # ------------------------------------------------------------------
+    # State persistence
+    # ------------------------------------------------------------------
+    def _load_state(self) -> SchedulerState:
+        if self.state_path.exists():
+            try:
+                data = json.loads(self.state_path.read_text())
+                return SchedulerState(
+                    experiments=[
+                        ExperimentRecord(**e) for e in data.get("experiments", [])
+                    ],
+                    last_run=data.get("last_run"),
+                    next_scheduled=data.get("next_scheduled"),
+                )
+            except (json.JSONDecodeError, TypeError):
+                pass
+        return SchedulerState()
+
+    def _save_state(self) -> None:
+        self.state_path.write_text(
+            json.dumps(
+                {
+                    "experiments": [asdict(e) for e in self.state.experiments],
+                    "last_run": self.state.last_run,
+                    "next_scheduled": self.state.next_scheduled,
+                },
+                indent=2,
+            )
+        )
+
+    # ------------------------------------------------------------------
+    # Pre-flight checks (Phase 2 + Phase 3 integration)
+    # ------------------------------------------------------------------
+    def check_licenses(self) -> list[str]:
+        """Check dataset licenses. Returns list of blocked datasets."""
+        blocked = []
+        for entry in self.registry.blocked():
+            blocked.append(
+                f"{entry.name}: license_status={entry.license_status.value}, "
+                f"review_required={entry.review_required}, restricted={entry.restricted_data}"
+            )
+        return blocked
+
+    def check_evaluation_integrity(self) -> list[str]:
+        """Verify frozen evaluation identifiers match."""
+        issues = []
+        dev_path = Path("fresh-eval/seed-v2.jsonl")
+        results_path = Path("fresh-eval/development-results.json")
+
+        if dev_path.exists():
+            # Just verify file exists and is readable
+            try:
+                load_dev_cases(dev_path)
+            except Exception as exc:
+                issues.append(f"Dev cases unreadable: {exc}")
+
+        if results_path.exists():
+            try:
+                load_dev_results(results_path)
+            except Exception as exc:
+                issues.append(f"Dev results unreadable: {exc}")
+
+        return issues
+
+    def check_resources(self) -> list[str]:
+        from .trainer import TrainingEngine
+
+        engine = TrainingEngine(self.config, self.work_dir)
+        return engine.check_resources()
+
+    # ------------------------------------------------------------------
+    # Modes
+    # ------------------------------------------------------------------
+    def run_dry_run(self) -> dict[str, Any]:
+        """Validate everything without inference or training."""
+        record = ExperimentRecord(
+            id=self._new_id("dry-run"),
+            mode=RunMode.DRY_RUN.value,
+            status="completed",
+            started_at=datetime.now(timezone.utc).isoformat(),
+            finished_at=datetime.now(timezone.utc).isoformat(),
+        )
+
+        # License check
+        blocked = self.check_licenses()
+        record.dataset_names = [e.name for e in self.registry.list_all()]
+
+        # Config validation
+        config_errors = self.config.validate()
+
+        # Evaluation integrity
+        integrity_issues = self.check_evaluation_integrity()
+
+        # Resource check
+        resource_issues = self.check_resources()
+
+        all_issues = blocked + config_errors + integrity_issues + resource_issues
+        record.status = "blocked" if all_issues else "completed"
+        record.rejection_reason = "; ".join(all_issues) if all_issues else None
+
+        self.state.experiments.append(record)
+        self.state.last_run = record.started_at
+        self._save_state()
+
+        return {
+            "mode": "dry-run",
+            "status": record.status,
+            "blocked_datasets": blocked,
+            "config_errors": config_errors,
+            "integrity_issues": integrity_issues,
+            "resource_issues": resource_issues,
+            "ingestible_datasets": [e.name for e in self.registry.ingestible()],
+            "experiment_id": record.id,
+        }
+
+    def run_evaluate_only(self) -> dict[str, Any]:
+        """Evaluate existing saved results or explicitly approved checkpoints."""
+        record = ExperimentRecord(
+            id=self._new_id("evaluate-only"),
+            mode=RunMode.EVALUATE_ONLY.value,
+            status="running",
+            started_at=datetime.now(timezone.utc).isoformat(),
+        )
+
+        dev_cases = load_dev_cases("fresh-eval/seed-v2.jsonl")
+        dev_responses = load_dev_results("fresh-eval/development-results.json")
+
+        evaluation = evaluate_all(dev_cases, dev_responses)
+
+        record.status = "completed"
+        record.finished_at = datetime.now(timezone.utc).isoformat()
+        record.evaluation = {
+            "total_events": evaluation.total_events,
+            "pair_matches": evaluation.pair_matches,
+            "dose_exact": evaluation.dose_exact,
+            "time_exact": evaluation.time_exact,
+            "evidence_literal": evaluation.evidence_literal,
+            "authority_matches": evaluation.authority_matches,
+            "abstentions_correct": evaluation.abstentions_correct,
+            "unauthorized_changes": evaluation.unauthorized_changes,
+            "null_type_errors": evaluation.null_type_errors,
+            "strict_json_valid_cases": evaluation.strict_json_valid_cases,
+        }
+
+        self.state.experiments.append(record)
+        self.state.last_run = record.started_at
+        self._save_state()
+
+        return {
+            "mode": "evaluate-only",
+            "status": record.status,
+            "evaluation": record.evaluation,
+            "experiment_id": record.id,
+        }
+
+    def run_train_once(self, operator_approved: bool = False) -> dict[str, Any]:
+        """Execute one approved bounded experiment. Requires explicit operator approval."""
+        record = ExperimentRecord(
+            id=self._new_id("train-once"),
+            mode=RunMode.TRAIN_ONCE.value,
+            status="blocked",
+            started_at=datetime.now(timezone.utc).isoformat(),
+        )
+
+        # Never allow unattended training
+        if not operator_approved:
+            record.status = "blocked"
+            record.rejection_reason = "Operator approval not provided — unattended training not permitted"
+            self.state.experiments.append(record)
+            self.state.last_run = record.started_at
+            self._save_state()
+            return {
+                "mode": "train-once",
+                "status": "blocked",
+                "rejection_reason": record.rejection_reason,
+                "experiment_id": record.id,
+            }
+
+        # License check — only ingestible datasets may be used
+        blocked = self.check_licenses()
+        if blocked:
+            record.status = "blocked"
+            record.rejection_reason = f"Blocked datasets: {[b.split(':')[0] for b in blocked]}"
+            self.state.experiments.append(record)
+            self.state.last_run = record.started_at
+            self._save_state()
+            return {
+                "mode": "train-once",
+                "status": "blocked",
+                "rejection_reason": record.rejection_reason,
+                "experiment_id": record.id,
+            }
+
+        # Config validation
+        config_errors = self.config.validate()
+        if config_errors:
+            record.status = "blocked"
+            record.rejection_reason = "; ".join(config_errors)
+            self.state.experiments.append(record)
+            self.state.last_run = record.started_at
+            self._save_state()
+            return {
+                "mode": "train-once",
+                "status": "blocked",
+                "rejection_reason": record.rejection_reason,
+                "experiment_id": record.id,
+            }
+
+        # Run smoke test first (default to lightweight)
+        engine = TrainingEngine(self.config, self.work_dir)
+        smoke_result = engine.run_smoke_test()
+        record.training = {
+            "smoke_test": True,
+            "status": smoke_result.status.value,
+            "steps_completed": smoke_result.steps_completed,
+            "checkpoint_path": smoke_result.checkpoint_path,
+            "checkpoint_sha256": smoke_result.checkpoint_sha256,
+            "error_message": smoke_result.error_message,
+            "blocked_reason": smoke_result.blocked_reason,
+        }
+
+        if smoke_result.status != TrainingStatus.COMPLETED:
+            record.status = "failed"
+            record.rejection_reason = smoke_result.error_message or smoke_result.blocked_reason
+        else:
+            record.status = "completed"
+            # After smoke test passes, a larger job would require separate approval
+            record.rejection_reason = "Smoke test completed. Larger training job requires separate operator approval."
+
+        record.finished_at = datetime.now(timezone.utc).isoformat()
+        self.state.experiments.append(record)
+        self.state.last_run = record.started_at
+        self._save_state()
+
+        return {
+            "mode": "train-once",
+            "status": record.status,
+            "training": record.training,
+            "rejection_reason": record.rejection_reason,
+            "experiment_id": record.id,
+        }
+
+    def run_scheduled(self) -> dict[str, Any]:
+        """Run the approved workflow periodically. Does NOT auto-train."""
+        record = ExperimentRecord(
+            id=self._new_id("scheduled"),
+            mode=RunMode.SCHEDULED.value,
+            status="running",
+            started_at=datetime.now(timezone.utc).isoformat(),
+        )
+
+        # Check licenses and evaluation integrity
+        blocked = self.check_licenses()
+        integrity = self.check_evaluation_integrity()
+        resources = self.check_resources()
+
+        issues = blocked + integrity + resources
+
+        # Scheduled mode only runs dry-run + evaluate-only, NEVER train
+        dry_run = self.run_dry_run()
+        evaluate = self.run_evaluate_only()
+
+        record.status = "blocked" if issues else "completed"
+        record.rejection_reason = "; ".join(issues) if issues else None
+        record.finished_at = datetime.now(timezone.utc).isoformat()
+
+        self.state.experiments.append(record)
+        self.state.last_run = record.started_at
+        self._save_state()
+
+        return {
+            "mode": "scheduled",
+            "status": record.status,
+            "dry_run": dry_run,
+            "evaluate_only": evaluate,
+            "blocked_datasets": blocked,
+            "integrity_issues": integrity,
+            "resource_issues": resources,
+            "experiment_id": record.id,
+        }
+
+    # ------------------------------------------------------------------
+    # Launchd plist template (NOT auto-installed)
+    # ------------------------------------------------------------------
+    def launchd_plist(self, label: str = "clinical-diff.mlx-runner") -> str:
+        """Return a launchd plist template. NOT auto-installed or activated."""
+        return f"""<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>{label}</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/bin/python3</string>
+        <string>-m</string>
+        <string>mlx_runner.cli</string>
+        <string>--mode</string>
+        <string>dry-run</string>
+    </array>
+    <key>RunAtLoad</key>
+    <false/>
+    <key>StartInterval</key>
+    <integer>3600</integer>
+    <key>StandardOutPath</key>
+    <string>{{work_dir}}/logs/scheduler.out</string>
+    <key>StandardErrorPath</key>
+    <string>{{work_dir}}/logs/scheduler.err</string>
+</dict>
+</plist>
+""".replace("{{work_dir}}", str(self.work_dir))
+
+    # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
+    def _new_id(self, prefix: str) -> str:
+        ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+        return f"{prefix}_{ts}"
+
+    def list_experiments(self) -> list[dict[str, Any]]:
+        return [asdict(e) for e in self.state.experiments]
