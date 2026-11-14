@@ -284,4 +284,37 @@ describe('Clinical Diff EHR critical workflows', () => {
       screen.getByRole('combobox', { name: 'Review decision for Aspirin' }),
     ).toHaveValue('Discuss with care team');
   });
+
+  it('surfaces read-only provenance/evidence indicators and supports switching synthetic scenarios in Clinical Diff', async () => {
+    const user = userEvent.setup();
+    render(<Home />);
+
+    const nav = screen.getByRole('navigation', { name: 'WORKSPACE' });
+    await user.click(within(nav).getByRole('button', { name: 'Clinical Diff' }));
+
+    const provenanceSummary = screen.getByRole('region', { name: 'Provenance and evidence summary' });
+    expect(provenanceSummary).toHaveTextContent('Earlier: Unverified');
+    expect(provenanceSummary).toHaveTextContent('Later: Unverified');
+    expect(provenanceSummary).toHaveTextContent('2 evidence links');
+    expect(provenanceSummary).toHaveTextContent('5 provenance gaps');
+
+    const lisinoprilProvenance = screen.getByLabelText('Provenance and evidence for Lisinopril');
+    expect(lisinoprilProvenance).toHaveTextContent('Provenance: Unverified');
+    expect(lisinoprilProvenance).toHaveTextContent('2 evidence links');
+
+    const scenarioSelect = screen.getByRole('combobox', { name: 'Synthetic scenario' });
+    await user.selectOptions(scenarioSelect, 'scenario-missing-undocumented-fields');
+
+    expect(screen.getByText('AVERY KIM · SYN-003')).toBeInTheDocument();
+    expect(screen.getByText('Timestamp not documented')).toBeInTheDocument();
+    expect(provenanceSummary).toHaveTextContent('Missing timestamp');
+    expect(provenanceSummary).toHaveTextContent('Undocumented field');
+
+    await user.selectOptions(scenarioSelect, 'scenario-empty-snapshots');
+    expect(screen.getByText('0 differences')).toBeInTheDocument();
+    expect(screen.getByText('0 of 0 reviewed')).toBeInTheDocument();
+    expect(
+      screen.getByText('No medication differences detected between these snapshots.'),
+    ).toBeInTheDocument();
+  });
 });

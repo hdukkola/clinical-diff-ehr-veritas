@@ -1,9 +1,9 @@
 'use client';
 
-import { useRef, useState, type KeyboardEvent } from 'react';
-import { compareSnapshots } from '@/lib/diff';
-import { earlier, later } from '@/lib/fixtures';
-import type { Medication } from '@/lib/types';
+import { useMemo, useRef, useState, type KeyboardEvent } from 'react';
+import { analyzeSnapshots } from '@/lib/diff';
+import { earlier, getSyntheticScenario, later, syntheticScenarios } from '@/lib/fixtures';
+import type { Medication, ProvenanceGapReason, ProvenanceStatus } from '@/lib/types';
 
 const sections = [
   'Dashboard',
@@ -17,7 +17,30 @@ const sections = [
 
 type Section = (typeof sections)[number];
 
-const changes = compareSnapshots(earlier, later);
+const baselineChangesCount = analyzeSnapshots(earlier, later).changes.length;
+
+const PROVENANCE_STATUS_LABELS: Record<ProvenanceStatus, string> = {
+  documented: 'Documented',
+  patient_reported: 'Patient-reported',
+  unverified: 'Unverified',
+  unknown: 'Unknown',
+};
+
+const GAP_REASON_LABELS: Record<ProvenanceGapReason, string> = {
+  missing_source_attribution: 'Missing source',
+  blank_source_attribution: 'Blank source',
+  ambiguous_source_attribution: 'Ambiguous source',
+  explicit_unknown_provenance: 'Unknown provenance',
+  unverified_source: 'Unverified source',
+  patient_reported_unverified: 'Patient-reported only',
+  conflicting_evidence_provenance: 'Conflicting provenance',
+  missing_timestamp: 'Missing timestamp',
+  blank_field_value: 'Blank field value',
+  undocumented_field: 'Undocumented field',
+  missing_supporting_evidence: 'No supporting note',
+  unresolved_evidence_link: 'Unresolved evidence',
+  invalid_evidence_span: 'Invalid span',
+};
 
 const encounters = [
   {
@@ -33,17 +56,30 @@ const encounters = [
 export default function Home() {
   const [section, setSection] = useState<Section>('Dashboard');
   const [query, setQuery] = useState('');
+  const [selectedScenarioId, setSelectedScenarioId] = useState(syntheticScenarios[0].id);
   const [decisions, setDecisions] = useState<Record<string, string>>({});
   const [announcement, setAnnouncement] = useState('');
 
   const headingRef = useRef<HTMLHeadingElement>(null);
   const navButtonRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
+  const activeScenario = useMemo(
+    () => getSyntheticScenario(selectedScenarioId) ?? syntheticScenarios[0],
+    [selectedScenarioId],
+  );
+  const activeReport = useMemo(
+    () => analyzeSnapshots(activeScenario.earlier, activeScenario.later),
+    [activeScenario],
+  );
+  const changes = activeReport.changes;
+
   const normalizedQuery = query.trim().toLowerCase();
   const matchesMorgan =
     normalizedQuery === '' ||
     'morgan lee demo-001'.includes(normalizedQuery);
-  const reviewedCount = changes.filter((c) => Boolean(decisions[c.medicationId])).length;
+  const reviewedCount = changes.filter((c) =>
+    Boolean(decisions[`${activeScenario.id}:${c.medicationId}`]),
+  ).length;
 
   function selectSection(nextSection: Section, moveFocusToHeading = false) {
     setSection(nextSection);
@@ -158,7 +194,7 @@ export default function Home() {
               </article>
               <article className="card">
                 <span>RECORD COMPARISON</span>
-                <strong>{changes.length}</strong>
+                <strong>{baselineChangesCount}</strong>
                 <p>Differences to review</p>
               </article>
               <article className="card">
@@ -271,7 +307,7 @@ export default function Home() {
             <p>Snapshot contents are shown as recorded; absence does not establish discontinuation.</p>
 
             <div className="snapshots-grid">
-              {[earlier, later].map((s) => (
+              {[activeScenario.earlier, activeScenario.later].map((s) => (
                 <section className="snapshot-card" key={s.id} aria-labelledby={`snapshot-heading-${s.id}`}>
                   <h3 id={`snapshot-heading-${s.id}`}>{s.source}</h3>
                   <p className="snapshot-meta">
@@ -333,12 +369,17 @@ export default function Home() {
           <section aria-labelledby="diff-heading">
             <div className="diff-head">
               <div>
-                <p className="eyebrow">MORGAN LEE · DEMO-001</p>
+                <p className="eyebrow">
+                  {activeScenario.patientLabel.replace(/\s*\(Synthetic\)$/i, '').toUpperCase()} ·{' '}
+                  {activeScenario.patientId}
+                </p>
                 <h2 id="diff-heading">Medication comparison</h2>
                 <p>Compare source snapshots and document a review decision.</p>
               </div>
               <div className="badge-group">
-                <span className="badge">{changes.length} differences</span>
+                <span className="badge">
+                  {changes.length} {changes.length === 1 ? 'difference' : 'differences'}
+                </span>
                 <span className="badge badge-neutral" aria-live="polite">
                   {reviewedCount} of {changes.length} reviewed
                 </span>
@@ -353,6 +394,21 @@ export default function Home() {
               >
                 View source snapshots <span aria-hidden="true">→</span>
               </button>
+
+              <div className="scenario-control">
+                <label htmlFor="scenario-select">Synthetic scenario</label>
+                <select
+                  id="scenario-select"
+                  value={activeScenario.id}
+                  onChange={(e) => setSelectedScenarioId(e.target.value)}
+                >
+                  {syntheticScenarios.map((scenario) => (
+                    <option key={scenario.id} value={scenario.id}>
+                      {scenario.patientLabel} — {scenario.title}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
 
             <section aria-label="Source snapshots">
@@ -360,10 +416,12 @@ export default function Home() {
                 <dl className="source-item">
                   <dt>EARLIER SOURCE</dt>
                   <dd>
-                    <strong>{earlier.source}</strong>
+                    <strong>{activeScenario.earlier.source}</strong>
                     <span>
-                      {earlier.recordedAt ? (
-                        <time dateTime={earlier.recordedAt}>{earlier.recordedAt}</time>
+                      {activeScenario.earlier.recordedAt ? (
+                        <time dateTime={activeScenario.earlier.recordedAt}>
+                          {activeScenario.earlier.recordedAt}
+                        </time>
                       ) : (
                         'Timestamp not documented'
                       )}
@@ -376,10 +434,12 @@ export default function Home() {
                 <dl className="source-item">
                   <dt>LATER SOURCE</dt>
                   <dd>
-                    <strong>{later.source}</strong>
+                    <strong>{activeScenario.later.source}</strong>
                     <span>
-                      {later.recordedAt ? (
-                        <time dateTime={later.recordedAt}>{later.recordedAt}</time>
+                      {activeScenario.later.recordedAt ? (
+                        <time dateTime={activeScenario.later.recordedAt}>
+                          {activeScenario.later.recordedAt}
+                        </time>
                       ) : (
                         'Timestamp not documented'
                       )}
@@ -394,93 +454,182 @@ export default function Home() {
               does not establish an error.
             </div>
 
-            <section className="diff-list" aria-label="Medication differences">
-              {changes.map((c) => {
-                const selectId = `decision-${c.medicationId}`;
-                const headingId = `diff-med-${c.medicationId}`;
-                const snapshotMed =
-                  c.fields.length === 0
-                    ? (c.kind === 'added' ? later : earlier).medications.find(
-                        (item) => item.id === c.medicationId,
-                      )
-                    : undefined;
-
-                return (
-                  <article
-                    className={`diff-card diff-card-${c.kind}`}
-                    key={c.medicationId}
-                    aria-labelledby={headingId}
+            <section className="panel provenance-overview" aria-label="Provenance and evidence summary">
+              <div className="provenance-overview-head">
+                <span className="eyebrow">PROVENANCE &amp; EVIDENCE (READ-ONLY)</span>
+                <div className="badge-group">
+                  <span
+                    className={`badge provenance-badge-${activeReport.earlierProvenance.status}`}
                   >
-                    <div className="diff-title">
-                      <div className="diff-title-main">
-                        <span className={`tag tag-${c.kind}`}>{c.kind.toUpperCase()}</span>
-                        <h3 id={headingId}>{c.name}</h3>
+                    Earlier: {PROVENANCE_STATUS_LABELS[activeReport.earlierProvenance.status]}
+                  </span>
+                  <span
+                    className={`badge provenance-badge-${activeReport.laterProvenance.status}`}
+                  >
+                    Later: {PROVENANCE_STATUS_LABELS[activeReport.laterProvenance.status]}
+                  </span>
+                  <span className="badge badge-neutral">
+                    {activeReport.evidenceLinks.length}{' '}
+                    {activeReport.evidenceLinks.length === 1 ? 'evidence link' : 'evidence links'}
+                  </span>
+                  <span className="badge badge-warning">
+                    {activeReport.provenanceGaps.length}{' '}
+                    {activeReport.provenanceGaps.length === 1 ? 'provenance gap' : 'provenance gaps'}
+                  </span>
+                </div>
+              </div>
+              {activeReport.provenanceGaps.length > 0 && (
+                <div className="gap-pills" aria-label="Snapshot provenance gaps">
+                  {[...new Set(activeReport.provenanceGaps.map((gap) => gap.reason))].map(
+                    (reason) => (
+                      <span className="gap-pill" key={reason}>
+                        {GAP_REASON_LABELS[reason]}
+                      </span>
+                    ),
+                  )}
+                </div>
+              )}
+            </section>
+
+            <section className="diff-list" aria-label="Medication differences">
+              {changes.length === 0 ? (
+                <div className="empty-state" role="status">
+                  No medication differences detected between these snapshots.
+                </div>
+              ) : (
+                changes.map((c) => {
+                  const decisionKey = `${activeScenario.id}:${c.medicationId}`;
+                  const selectId = `decision-${c.medicationId}`;
+                  const headingId = `diff-med-${c.medicationId}`;
+                  const snapshotMed =
+                    c.fields.length === 0
+                      ? (c.kind === 'added'
+                          ? activeScenario.later
+                          : activeScenario.earlier
+                        ).medications.find((item) => item.id === c.medicationId)
+                      : undefined;
+                  const evidenceLinks = c.evidenceLinks ?? [];
+                  const gaps = c.provenanceGaps ?? [];
+                  const uniqueGapReasons = [...new Set(gaps.map((g) => g.reason))];
+                  const excerpts = evidenceLinks
+                    .map((link) => link.excerpt?.trim())
+                    .filter((excerpt): excerpt is string => Boolean(excerpt));
+                  const overallStatus = c.provenance?.overallStatus ?? 'unknown';
+
+                  return (
+                    <article
+                      className={`diff-card diff-card-${c.kind}`}
+                      key={c.medicationId}
+                      aria-labelledby={headingId}
+                    >
+                      <div className="diff-title">
+                        <div className="diff-title-main">
+                          <span className={`tag tag-${c.kind}`}>{c.kind.toUpperCase()}</span>
+                          <h3 id={headingId}>{c.name}</h3>
+                        </div>
+
+                        <div className="decision-control">
+                          <label htmlFor={selectId}>Review decision</label>
+                          <select
+                            id={selectId}
+                            aria-label={`Review decision for ${c.name}`}
+                            value={decisions[decisionKey] ?? ''}
+                            onChange={(e) =>
+                              setDecisions((prev) => ({
+                                ...prev,
+                                [decisionKey]: e.target.value,
+                              }))
+                            }
+                          >
+                            <option value="">Not reviewed</option>
+                            <option>Reviewed — no conclusion</option>
+                            <option>Needs more evidence</option>
+                            <option>Discuss with care team</option>
+                          </select>
+                        </div>
                       </div>
 
-                      <div className="decision-control">
-                        <label htmlFor={selectId}>Review decision</label>
-                        <select
-                          id={selectId}
-                          aria-label={`Review decision for ${c.name}`}
-                          value={decisions[c.medicationId] ?? ''}
-                          onChange={(e) =>
-                            setDecisions((prev) => ({
-                              ...prev,
-                              [c.medicationId]: e.target.value,
-                            }))
-                          }
-                        >
-                          <option value="">Not reviewed</option>
-                          <option>Reviewed — no conclusion</option>
-                          <option>Needs more evidence</option>
-                          <option>Discuss with care team</option>
-                        </select>
-                      </div>
-                    </div>
-
-                    {c.fields.length > 0 ? (
-                      <table className="diff-table" aria-label={`Field changes for ${c.name}`}>
-                        <thead>
-                          <tr>
-                            <th scope="col">Field</th>
-                            <th scope="col">Earlier snapshot</th>
-                            <th scope="col">Later snapshot</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {c.fields.map((f) => (
-                            <tr key={f.field}>
-                              <td className="field-name" data-label="Field">
-                                {f.field}
-                              </td>
-                              <td data-label="Earlier snapshot">
-                                {f.before ?? <span className="missing">Not documented</span>}
-                              </td>
-                              <td data-label="Later snapshot">
-                                {f.after ?? <span className="missing">Not documented</span>}
-                              </td>
+                      {c.fields.length > 0 ? (
+                        <table className="diff-table" aria-label={`Field changes for ${c.name}`}>
+                          <thead>
+                            <tr>
+                              <th scope="col">Field</th>
+                              <th scope="col">Earlier snapshot</th>
+                              <th scope="col">Later snapshot</th>
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    ) : (
-                      <div>
-                        <p>
-                          {c.kind === 'added'
-                            ? 'Absent from the earlier snapshot; present in the later snapshot.'
-                            : 'Present in the earlier snapshot; absent from the later snapshot.'}{' '}
-                          This does not establish when or why the record changed.
-                        </p>
-                        {snapshotMed && <MedicationAttributes medication={snapshotMed} />}
-                      </div>
-                    )}
+                          </thead>
+                          <tbody>
+                            {c.fields.map((f) => (
+                              <tr key={f.field}>
+                                <td className="field-name" data-label="Field">
+                                  {f.field}
+                                </td>
+                                <td data-label="Earlier snapshot">
+                                  {f.before ?? <span className="missing">Not documented</span>}
+                                </td>
+                                <td data-label="Later snapshot">
+                                  {f.after ?? <span className="missing">Not documented</span>}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      ) : (
+                        <div>
+                          <p>
+                            {c.kind === 'added'
+                              ? 'Absent from the earlier snapshot; present in the later snapshot.'
+                              : 'Present in the earlier snapshot; absent from the later snapshot.'}{' '}
+                            This does not establish when or why the record changed.
+                          </p>
+                          {snapshotMed && <MedicationAttributes medication={snapshotMed} />}
+                        </div>
+                      )}
 
-                    <small className="diff-sources">
-                      Sources: {earlier.source}; {later.source}. No further evidence provided.
-                    </small>
-                  </article>
-                );
-              })}
+                      <div
+                        className="diff-provenance"
+                        aria-label={`Provenance and evidence for ${c.name}`}
+                      >
+                        <div className="badge-group">
+                          <span className={`tag provenance-badge-${overallStatus}`}>
+                            Provenance: {PROVENANCE_STATUS_LABELS[overallStatus]}
+                          </span>
+                          <span className="tag tag-neutral">
+                            {evidenceLinks.length}{' '}
+                            {evidenceLinks.length === 1 ? 'evidence link' : 'evidence links'}
+                          </span>
+                          {gaps.length > 0 && (
+                            <span className="tag tag-gap">
+                              {gaps.length} {gaps.length === 1 ? 'gap' : 'gaps'}
+                            </span>
+                          )}
+                          {uniqueGapReasons.map((reason) => (
+                            <span className="gap-pill" key={reason}>
+                              {GAP_REASON_LABELS[reason]}
+                            </span>
+                          ))}
+                        </div>
+                        {excerpts.length > 0 && (
+                          <ul className="evidence-excerpts">
+                            {excerpts.map((excerpt, index) => (
+                              <li key={`${c.medicationId}-excerpt-${index}`}>
+                                &ldquo;{excerpt}&rdquo;
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+
+                      <small className="diff-sources">
+                        Sources: {activeScenario.earlier.source}; {activeScenario.later.source}.{' '}
+                        {excerpts.length === 0
+                          ? 'No supporting note excerpts provided.'
+                          : `${excerpts.length} supporting ${excerpts.length === 1 ? 'excerpt' : 'excerpts'} linked.`}
+                      </small>
+                    </article>
+                  );
+                })
+              )}
             </section>
 
             <p className="footnote">

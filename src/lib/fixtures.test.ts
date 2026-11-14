@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { compareSnapshots } from './diff';
+import { analyzeSnapshots, compareSnapshots } from './diff';
 import { earlier, getSyntheticScenario, later, syntheticScenarios } from './fixtures';
 
 function isValidIsoCalendarDate(value: string): boolean {
@@ -27,7 +27,9 @@ describe('synthetic fixture scenarios', () => {
     expect(later.recordedAt).toBe('2026-10-15');
     expect(later.medications.map((m) => m.id)).toEqual(['m1', 'm2', 'm4']);
 
-    expect(compareSnapshots(earlier, later)).toEqual([
+    const baselineChanges = compareSnapshots(earlier, later);
+
+    expect(baselineChanges).toMatchObject([
       {
         medicationId: 'm1',
         name: 'Lisinopril',
@@ -43,6 +45,16 @@ describe('synthetic fixture scenarios', () => {
       { medicationId: 'm3', name: 'Aspirin', kind: 'removed', fields: [] },
       { medicationId: 'm4', name: 'Atorvastatin', kind: 'added', fields: [] },
     ]);
+
+    for (const change of baselineChanges) {
+      expect(change.provenance?.overallStatus).toBe('unverified');
+      expect(change.evidenceLinks?.length).toBeGreaterThanOrEqual(1);
+      expect(change.provenanceFlags).toEqual(
+        expect.arrayContaining(['unverified_provenance', 'missing_supporting_evidence']),
+      );
+      expect(change.provenanceGaps?.length).toBeGreaterThanOrEqual(1);
+    }
+    expect(baselineChanges[1].provenanceFlags).toContain('undocumented_field');
   });
 
   it('enforces unique scenario/snapshot/medication IDs, valid ISO dates, and synthetic labeling', () => {
@@ -193,5 +205,64 @@ describe('synthetic fixture scenarios', () => {
       ['addonly-m1', 'added'],
       ['addonly-m2', 'added'],
     ]);
+  });
+
+  it('surfaces CD-02 provenance, gap, and evidence link metadata across synthetic scenarios', () => {
+    for (const scenario of syntheticScenarios) {
+      const report = analyzeSnapshots(scenario.earlier, scenario.later);
+      expect(report.earlierProvenance.status).toBe('unverified');
+      expect(report.laterProvenance.status).toBe('unverified');
+      expect(report.provenanceFlags).toContain('unverified_provenance');
+
+      for (const change of report.changes) {
+        expect(change.provenance).toBeDefined();
+        expect(change.provenance?.overallStatus).toBe('unverified');
+        expect(change.evidenceLinks?.length).toBeGreaterThanOrEqual(1);
+        expect(change.provenanceFlags).toEqual(
+          expect.arrayContaining(['unverified_provenance', 'missing_supporting_evidence']),
+        );
+        expect(change.provenanceGaps?.length).toBeGreaterThanOrEqual(1);
+      }
+    }
+
+    const missing = getSyntheticScenario('scenario-missing-undocumented-fields')!;
+    const missingReport = analyzeSnapshots(missing.earlier, missing.later);
+    expect(missingReport.earlierProvenance.flags).toContain('missing_timestamp');
+    expect(missingReport.provenanceFlags).toEqual(
+      expect.arrayContaining(['missing_timestamp', 'undocumented_field']),
+    );
+    expect(missingReport.provenanceGaps).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ side: 'earlier', reason: 'missing_timestamp' }),
+        expect.objectContaining({ reason: 'undocumented_field' }),
+      ]),
+    );
+
+    const emptyPair = getSyntheticScenario('scenario-empty-snapshots')!;
+    const emptyReport = analyzeSnapshots(emptyPair.earlier, emptyPair.later);
+    expect(emptyReport.changes).toEqual([]);
+    expect(emptyReport.evidenceLinks).toEqual([]);
+    expect(emptyReport.earlierProvenance.status).toBe('unverified');
+    expect(emptyReport.laterProvenance.status).toBe('unverified');
+
+    const identicalPair = getSyntheticScenario('scenario-no-change-identical')!;
+    const identicalReport = analyzeSnapshots(identicalPair.earlier, identicalPair.later);
+    expect(identicalReport.changes).toEqual([]);
+    expect(identicalReport.evidenceLinks).toEqual([]);
+    expect(identicalReport.provenanceFlags).toContain('unverified_provenance');
+
+    const emptyToPopulated = getSyntheticScenario('scenario-empty-to-populated')!;
+    const addedReport = analyzeSnapshots(emptyToPopulated.earlier, emptyToPopulated.later);
+    expect(addedReport.changes).toHaveLength(2);
+    for (const change of addedReport.changes) {
+      expect(change.provenance?.earlier.present).toBe(false);
+      expect(change.provenance?.later.present).toBe(true);
+      expect(change.evidenceLinks).toHaveLength(1);
+      expect(change.evidenceLinks?.[0]).toMatchObject({
+        side: 'later',
+        resolutionStatus: 'partial',
+        provenanceStatus: 'unverified',
+      });
+    }
   });
 });
