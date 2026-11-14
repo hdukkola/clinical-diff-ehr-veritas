@@ -1,55 +1,87 @@
 "use strict";
 
-function createNoteWorkspace() {
+function createNoteWorkspace({ onService, onComparison }) {
   const workspace = document.createElement("section");
   workspace.className = "extract-workspace";
   workspace.innerHTML = `
-    <h1 class="h1" tabindex="-1">Note extraction</h1>
-    <p class="lede">Compare medication names in two fictional notes. Use synthetic text only.</p>
-    <div class="bar extract-status">
-      <p id="extraction-status" role="status">Checking the local service…</p>
-      <button type="button" class="btn quiet" id="extraction-retry">Check service</button>
+    <header class="extract-hero">
+      <h1 class="h1" tabindex="-1">Compare notes</h1>
+      <p class="lede">See which medication names appear in each fictional note, with the original wording alongside every difference.</p>
+    </header>
+    <div class="extract-shell">
+      <div class="extract-status">
+        <p id="extraction-status" role="status">Checking the local service…</p>
+        <button type="button" class="btn quiet" id="extraction-retry">Check service</button>
+      </div>
+      <form id="extraction-form" aria-describedby="extraction-status">
+        <div class="extract-note-grid">
+          <div class="extract-note">
+            <label for="earlier-note">Earlier note</label>
+            <textarea id="earlier-note" rows="5" placeholder="Enter fictional note text" aria-describedby="earlier-count" required disabled></textarea>
+            <small id="earlier-count"></small>
+          </div>
+          <div class="extract-note">
+            <label for="later-note">Later note</label>
+            <textarea id="later-note" rows="5" placeholder="Enter fictional note text" aria-describedby="later-count" required disabled></textarea>
+            <small id="later-count"></small>
+          </div>
+        </div>
+        <div class="extract-actions">
+          <button class="btn primary" type="submit" disabled>Compare notes</button>
+          <button class="btn quiet" type="button" id="extraction-example" hidden>Load example</button>
+          <button class="btn quiet" type="button" id="extraction-reset" hidden>Clear notes</button>
+        </div>
+      </form>
+      <p id="extraction-error" role="alert"></p>
     </div>
-    <form id="extraction-form" aria-describedby="extraction-status">
-      <div class="form">
-        <div class="field">
-          <label for="earlier-note">Earlier note</label>
-          <textarea id="earlier-note" rows="7" required disabled></textarea>
-        </div>
-        <div class="field">
-          <label for="later-note">Later note</label>
-          <textarea id="later-note" rows="7" required disabled></textarea>
-        </div>
-      </div>
-      <div class="bar extract-actions">
-        <button class="btn primary" type="submit" disabled>Compare notes</button>
-      </div>
-    </form>
-    <p id="extraction-error" role="alert"></p>
     <section id="extraction-result" aria-labelledby="extraction-result-title" hidden></section>
-    <p class="extract-scope">Medication mentions can be missed. Review both source notes. Differences do not establish treatment changes, clinical errors or medical advice.</p>`;
+    <p class="extract-scope">Use fictional notes only. A mention difference can reflect missed text and does not establish a change in treatment. Review both notes.</p>`;
 
   const form = workspace.querySelector("form");
   const fields = [...form.querySelectorAll("textarea")];
   const submit = form.querySelector("button");
   const retry = workspace.querySelector("#extraction-retry");
+  const example = workspace.querySelector("#extraction-example");
+  const reset = workspace.querySelector("#extraction-reset");
+  const counts = [...form.querySelectorAll("small")];
   const status = workspace.querySelector("#extraction-status");
   const error = workspace.querySelector("#extraction-error");
   const result = workspace.querySelector("#extraction-result");
-  const liveDraft = [
+  const sample = [
     "Fictional outpatient note. The medication list includes Lisinopril and Aspirin.",
     "Fictional discharge note. The medication list includes Lisinopril and Atorvastatin."
   ];
+  const liveDraft = [...sample];
   let health = null;
   let busy = false;
 
   function refreshControls() {
     retry.disabled = busy;
     submit.disabled = busy || !health;
+    example.hidden = reset.hidden = !health || health.simulated;
+    example.disabled = reset.disabled = busy;
     for (const input of fields) {
       input.disabled = busy || !health;
       input.readOnly = health?.simulated === true;
     }
+  }
+
+  function setStatus(message, state) {
+    status.textContent = message;
+    status.dataset.state = state;
+  }
+
+  function showNotes(texts) {
+    fields.forEach((input, index) => {
+      input.value = texts[index];
+      updateCount(input, index);
+    });
+  }
+
+  function updateCount(input, index) {
+    const length = Array.from(input.value).length;
+    counts[index].textContent = health?.simulated ? "Fictional example · read only" :
+      `${length.toLocaleString()} / 12,000 characters`;
   }
 
   async function request(path, options, timeout) {
@@ -84,7 +116,7 @@ function createNoteWorkspace() {
     busy = true;
     refreshControls();
     clearResult();
-    status.textContent = "Checking the local service…";
+    setStatus("Checking the local service…", "checking");
     try {
       const next = await request("/health", {}, 5000);
       if (next.status !== "ready" || !hasValidMode(next) ||
@@ -96,12 +128,14 @@ function createNoteWorkspace() {
         throw new Error("The local service sent an unsupported mode or fixture.");
       }
       health = next;
+      onService(next.mode);
       const texts = next.simulated ? [next.fixture.earlier.text, next.fixture.later.text] : liveDraft;
-      fields.forEach((input, index) => { input.value = texts[index]; });
-      status.textContent = modeLabel(next.mode);
+      showNotes(texts);
+      setStatus(modeLabel(next.mode), next.simulated ? "replay" : "live");
     } catch (failure) {
       health = null;
-      status.textContent = "Service unavailable";
+      onService("unavailable");
+      setStatus("Service unavailable", "error");
       error.textContent = failure.message;
     } finally {
       busy = false;
@@ -111,8 +145,9 @@ function createNoteWorkspace() {
 
   fields.forEach((input, index) => input.addEventListener("input", () => {
     liveDraft[index] = input.value;
+    updateCount(input, index);
     clearResult();
-    if (health) status.textContent = modeLabel(health.mode);
+    if (health) setStatus(modeLabel(health.mode), "live");
   }));
 
   form.addEventListener("submit", async event => {
@@ -130,9 +165,8 @@ function createNoteWorkspace() {
     }
     busy = true;
     refreshControls();
-    status.textContent = health.simulated
-      ? "Running simulated replay…"
-      : "Comparing with the local model… The first run may take longer.";
+    setStatus(health.simulated ? "Running simulated replay…" :
+      "Comparing with the local model… The first run may take longer.", "checking");
     try {
       const data = await request("/compare", {
         method: "POST",
@@ -143,16 +177,26 @@ function createNoteWorkspace() {
         throw new Error("The service mode changed. Use Check service before comparing again.");
       }
       renderExtractionResult(result, data, payload);
-      status.textContent = `${modeLabel(data.mode)} · comparison complete`;
+      setStatus(`${modeLabel(data.mode)} · comparison complete`, data.simulated ? "replay" : "live");
+      onComparison(data.mode, data.differences.length);
       if (workspace.isConnected) result.querySelector("h2").focus();
     } catch (failure) {
-      status.textContent = `${modeLabel(health.mode)} · comparison failed`;
+      setStatus(`${modeLabel(health.mode)} · comparison failed`, "error");
       error.textContent = failure.message;
     } finally {
       busy = false;
       refreshControls();
     }
   });
+  function replaceDraft(texts) {
+    liveDraft.splice(0, liveDraft.length, ...texts);
+    showNotes(liveDraft);
+    clearResult();
+    setStatus(modeLabel(health.mode), "live");
+    fields[0].focus();
+  }
+  example.addEventListener("click", () => replaceDraft(sample));
+  reset.addEventListener("click", () => replaceDraft(["", ""]));
   retry.addEventListener("click", checkService);
   checkService();
   return workspace;
@@ -233,7 +277,12 @@ function renderExtractionResult(result, data, payload) {
     }
     detail.append(group);
   }
-  result.replaceChildren(heading, data.differences.length
+  const header = extractionElement("div", undefined, "extract-result-header");
+  heading.classList.remove("h2");
+  const count = data.differences.length;
+  header.append(heading, extractionElement("span",
+    `${count} ${count === 1 ? "difference" : "differences"}`, "extract-metrics"));
+  result.replaceChildren(header, data.differences.length
     ? list
     : extractionElement("p", "No differences in extracted mentions. Review both notes.", "empty"), detail);
   result.hidden = false;

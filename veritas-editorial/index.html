@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-palette="dimmed">
+<html lang="en" data-palette="void">
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -245,44 +245,118 @@ pre.code .k{color:var(--accent-ink)} pre.code .c{color:var(--faint)}
 @media (max-width:780px){.frame{grid-template-columns:1fr}.rail-l{display:none}.col{padding:28px 18px 80px}.form{grid-template-columns:1fr}.entry{grid-template-columns:22px 1fr}.entry .seg{grid-column:2;margin-top:10px}.crumbs{display:none}}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}.canvas{scroll-behavior:auto}}
 
-/* Note extraction */
-.mobile-extract { display: none; }
-.extract-workspace .lede { color:var(--text); }
-.extract-status { margin-top:22px; color:var(--strong); gap:8px; }
-.extract-actions { margin-top:14px; }
-.extract-workspace .field { min-width:0; }
-.extract-workspace .field label { color:var(--text); }
-.extract-workspace .field textarea { font:inherit; min-height:128px; }
-.extract-workspace textarea[readonly] { background:var(--raised); }
-.extract-workspace textarea:focus-visible { outline:2px solid var(--accent); }
-#extraction-error { color:var(--del); margin-top:12px; }
-#extraction-result { margin-top:26px; }
+/* Editorial workspace */
+[data-palette="void"] {
+  --canvas:#111113; --rail:#141416; --raised:#1a1a1d; --sunk:#141416;
+  --line:#29292e; --line-2:#3b3b42; --hover:#222226; --sel:#29292f;
+  --text:#c8c8ce; --strong:#f2f2f4; --muted:#a5a5af; --faint:#93939d;
+  --accent:#dedee4; --accent-ink:#f0f0f2;
+  --add:#a4c7ac; --del:#e1a29f; --chg:#e0be82;
+}
+body { color-scheme:dark; grid-template-rows:56px minmax(0,1fr); }
+.top { padding-inline:22px; }
+.wordmark { display:inline-flex; align-items:center; gap:9px; font:600 15px var(--sans); color:var(--strong); text-decoration:none; }
+.wordmark .brand-symbol { display:inline-grid; place-items:center; width:25px; height:25px; margin:0; border:1px solid var(--line-2); border-radius:7px; background:var(--raised); font:500 15px var(--mono); color:var(--strong); }
+.rail-l { padding:18px 14px; }
+.grp-h { font-weight:500; }
+.item { min-height:34px; height:auto; padding-block:6px; }
+.h1 { font:600 clamp(26px,4vw,36px)/1.13 var(--sans); letter-spacing:-.045em; margin-top:0; }
+.eyebrow + .h1 { margin-top:9px; }
+.lede { color:var(--text); line-height:1.55; }
+.col { max-width:960px; }
+.canvas { min-width:0; }
+.entry { margin-inline:0; }
+.row .r-acts { flex-wrap:wrap; }
+.table-scroll { overflow-x:auto; }
+.table-scroll table { min-width:420px; }
+.mobile-menu { display:none; }
+.extract-workspace [hidden] { display:none; }
+.service-card, .review-stats > div { border:1px solid var(--line); border-radius:11px; background:var(--raised); padding:13px 15px; }
+.service-card { display:flex; justify-content:space-between; gap:12px; align-items:center; flex-wrap:wrap; margin-bottom:18px; }
+.service-card h2 { font:600 14px var(--sans); color:var(--strong); }
+.service-card p { font-size:12px; margin-top:4px; }
+.review-stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(126px,1fr)); gap:8px; }
+.review-stats dt { color:var(--muted); font-size:12px; }
+.review-stats dd { color:var(--strong); font-size:21px; font-weight:600; }
+.review-stats small { font-size:12px; font-weight:400; color:var(--muted); }
+
+body[data-view="extract"] .frame { grid-template-columns:232px minmax(0,1fr); }
+body[data-view="extract"] .rail-r { display:none; }
+.extract-hero { margin-bottom:24px; }
+.extract-hero .lede { max-width:50ch; }
+.extract-shell, #extraction-result { background:var(--raised); border:1px solid var(--line); border-radius:13px; }
+.extract-shell { padding:18px; }
+.extract-status { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+#extraction-status { font-size:12px; color:var(--strong); overflow-wrap:anywhere; }
+#extraction-status::before {
+  content:""; display:inline-block; width:7px; height:7px; border-radius:50%;
+  background:var(--chg); margin-right:7px; vertical-align:1px;
+}
+#extraction-status[data-state="live"]::before { background:var(--add); }
+#extraction-status[data-state="error"]::before { background:var(--del); }
+.extract-note-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; margin-top:12px; }
+.extract-note { display:flex; flex-direction:column; min-width:0; gap:6px; }
+.extract-note label { font-size:13px; font-weight:500; color:var(--strong); }
+.extract-note textarea {
+  width:100%; min-height:164px; resize:vertical; padding:11px 12px; border:1px solid var(--line-2);
+  border-radius:8px; color:var(--strong); background:var(--sunk); font:inherit; line-height:1.55;
+}
+.extract-note textarea[readonly] { color:var(--text); }
+.extract-note textarea:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+.extract-note small { color:var(--muted); font:11px var(--mono); }
+.extract-actions { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:14px; }
+.extract-actions .btn { height:37px; }
+.extract-actions .primary { background:var(--strong); color:var(--canvas); border-color:transparent; }
+.extract-actions .primary:hover { background:var(--accent); }
+#extraction-error:not(:empty) { color:var(--del); border:1px solid var(--del); border-radius:8px; padding:9px 11px; margin-top:12px; }
+#extraction-result { margin-top:16px; padding:18px; }
+.extract-result-header { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px; margin-bottom:10px; }
+.extract-result-header h2 { font:600 18px var(--sans); color:var(--strong); }
+.extract-metrics { color:var(--muted); font-size:12px; }
 .extract-rows { list-style:none; }
-.extract-rows li { padding:12px 0; border-bottom:1px solid var(--line); }
-.extract-row-title { display:flex; flex-wrap:wrap; gap:10px; align-items:baseline; color:var(--text); }
+.extract-rows li { padding:11px 0; border-top:1px solid var(--line); }
+.extract-row-title { display:flex; flex-wrap:wrap; gap:9px; align-items:baseline; }
 .extract-row-title strong, .extract-detail strong { color:var(--strong); }
-.extract-workspace blockquote { border-left:2px solid var(--line-2); padding-left:10px; margin-top:5px; overflow-wrap:anywhere; white-space:pre-wrap; }
+.extract-row-title span { border:1px solid var(--line-2); border-radius:999px; padding:0 8px; font-size:11px; color:var(--text); }
+.extract-workspace blockquote { font-size:13px; border-left:2px solid var(--line-2); padding-left:10px; margin-top:5px; overflow-wrap:anywhere; white-space:pre-wrap; }
 .extract-workspace mark { color:var(--strong); background:var(--sel); border-bottom:1px solid var(--accent); }
 .extract-workspace details, .extract-detail { margin-top:12px; }
-.extract-workspace summary { cursor:pointer; }
-.extract-scope { color:var(--text); margin-top:20px; font-size:12px; }
+.extract-workspace summary { cursor:pointer; color:var(--text); font-size:13px; }
+.extract-scope { color:var(--muted); margin-top:16px; font-size:12px; max-width:70ch; }
+@media (max-width:950px) {
+  .extract-note-grid { grid-template-columns:1fr; }
+}
 @media (max-width:780px) {
-  .mobile-extract { display:inline-flex; }
-  .top { padding:0 8px; }
-  .top-r { gap:2px; }
-  .top-r .ghost { padding:0 5px; }
-  .top-r #health, .wordmark span { display:none; }
+  .mobile-menu { display:inline-flex; }
+  .top { padding:0 12px; }
+  .top-r { gap:1px; }
+  .top-r .ghost { padding:0 6px; }
+  .top-r #health { display:none; }
+  body[data-view="extract"] .frame { grid-template-columns:minmax(0,1fr); }
+  .rail-l.nav-open { display:flex; position:fixed; left:0; top:56px; bottom:0; width:min(312px,90vw); z-index:30; box-shadow:12px 0 32px #0006; }
+  .entry .detail { grid-column:1 / -1; }
+  .row.conn { grid-template-columns:12px minmax(0,1fr); }
+  .row.conn .r-acts { grid-column:2; margin-top:4px; }
+  .row.audit { grid-template-columns:56px 62px minmax(0,1fr) minmax(0,.8fr); gap:0 6px; }
+  .tabs { flex-wrap:wrap; gap:10px 14px; }
+  .sec { margin-bottom:24px; }
+}
+@media (max-width:440px) {
+  .wordmark { font-size:13px; }
+  .top-r .ghost { font-size:11px; }
+  .extract-shell, #extraction-result { padding:12px; }
+  .extract-note textarea { min-height:125px; }
 }
 </style>
 </head>
 <body>
 <header class="top">
   <div class="top-l">
-    <div class="wordmark">Clinical Diff<span>Veritas</span></div>
+    <a class="wordmark" href="#extract" data-action="nav" data-value="extract"><span class="brand-symbol" aria-hidden="true">±</span> Clinical Diff</a>
     <div class="crumbs" id="crumbs"></div>
   </div>
   <div class="top-r">
-    <button class="ghost mobile-extract" data-action="nav" data-value="extract" data-nav="extract">Note extraction</button>
+    <button class="ghost mobile-menu" id="mobile-menu" data-action="menu" aria-controls="app-navigation" aria-expanded="false">Menu</button>
     <button class="ghost" id="health" data-action="nav" data-value="models" title="Connection health"></button>
     <div class="menu-wrap">
       <button class="ghost" id="pal-btn" data-action="pal-toggle" aria-haspopup="menu" aria-expanded="false">Palette</button>
@@ -293,7 +367,7 @@ pre.code .k{color:var(--accent-ink)} pre.code .c{color:var(--faint)}
 </header>
 
 <div class="frame">
-  <aside class="rail-l" aria-label="Navigation">
+  <aside class="rail-l" id="app-navigation" aria-label="Navigation">
     <input class="search" id="rail-search" type="search" placeholder="Filter…" aria-label="Filter navigation" />
     <div class="grp">
       <div class="grp-h">Patients · synthetic</div>
@@ -301,17 +375,17 @@ pre.code .k{color:var(--accent-ink)} pre.code .c{color:var(--faint)}
     </div>
     <div class="grp">
       <div class="grp-h">Workspace</div>
-      <button class="item" data-action="nav" data-value="extract" data-nav="extract">Note extraction <small>local service</small></button>
-      <button class="item" data-action="nav" data-value="diff" data-nav="diff">Medication diff <small id="nav-diff-n"></small></button>
-      <button class="item" data-action="nav" data-value="triage" data-nav="triage">AI triage <small id="nav-tri-n"></small></button>
+      <button class="item" data-action="nav" data-value="extract" data-nav="extract">Compare notes</button>
+      <button class="item" data-action="nav" data-value="diff" data-nav="diff">Snapshot review <small id="nav-diff-n"></small></button>
+      <button class="item" data-action="nav" data-value="triage" data-nav="triage">Review suggestions <small id="nav-tri-n"></small></button>
       <button class="item" data-action="nav" data-value="eval" data-nav="eval">Evaluations <small>held-out</small></button>
-      <button class="item" data-action="nav" data-value="audit" data-nav="audit">Audit log <small id="nav-aud-n"></small></button>
+      <button class="item" data-action="nav" data-value="audit" data-nav="audit">Session activity <small id="nav-aud-n"></small></button>
     </div>
     <div class="grp">
       <div class="grp-h">System</div>
       <button class="item" data-action="nav" data-value="models" data-nav="models">Models &amp; data <small id="nav-con-n"></small></button>
     </div>
-    <div class="rail-foot">Fictional data only. Not a medical device. Differences describe documentation, not clinical intent.</div>
+    <div class="rail-foot">Synthetic workspace · session only</div>
   </aside>
 
   <main class="canvas" id="canvas"><div class="col" id="view"></div></main>
@@ -349,8 +423,8 @@ function toast(msg) {
    Palettes
    ================================================================ */
 const PALETTES = [
-  { id: "dimmed", name: "Dark Dimmed", rec: true, note: "Soft slate, lowest glare. Best for long review sessions.", sw: ["#1c2128", "#22272e", "#adbac7", "#6cb6ff"] },
-  { id: "void", name: "Linear Void", note: "Near-black and quiet. Highest focus, slightly more contrast.", sw: ["#0e0f11", "#151619", "#b4b8c2", "#9aa4ff"] },
+  { id: "dimmed", name: "Dark Dimmed", note: "Soft slate, lowest glare. Best for long review sessions.", sw: ["#1c2128", "#22272e", "#adbac7", "#6cb6ff"] },
+  { id: "void", name: "Graphite", rec: true, note: "Neutral, high contrast dark theme.", sw: ["#111113", "#1a1a1d", "#c8c8cc", "#ececee"] },
   { id: "obsidian", name: "Primer Obsidian", note: "Neutral carbon with a clinical cyan signal.", sw: ["#131517", "#191c1f", "#c2c9d0", "#56c8d0"] },
   { id: "forest", name: "Nordic Forest", note: "Green-grey and warm. Gentlest on tired eyes.", sw: ["#141a17", "#1a221e", "#bccac1", "#8fcfa8"] }
 ];
@@ -478,11 +552,11 @@ registerDriver({ id: "openai-compatible", kind: "model", label: "OpenAI-compatib
 registerDriver({ id: "hf-inference", kind: "model", label: "Hugging Face Inference", defaultEndpoint: "https://api-inference.huggingface.co", defaultModel: "emilyalsentzer/Bio_ClinicalBERT" });
 
 const S = {
-  view: "diff", tabs: { diff: "diff", models: "connections" },
+  view: "extract", tabs: { diff: "diff", models: "connections" },
   patient: "morgan", filter: "all", selected: null,
   reviews: {}, notes: {}, triage: {}, triageBusy: false,
-  evalRun: null, auditFilter: "all", palette: "dimmed",
-  conns: [], connLog: [], audit: [], formError: "", addKind: "db"
+  evalRun: null, auditFilter: "all", palette: "void",
+  extractionMode: null, conns: [], connLog: [], audit: [], formError: "", addKind: "db"
 };
 try { const p = localStorage.getItem("cd-palette"); if (PALETTES.some(x => x.id === p)) S.palette = p; } catch (e) {}
 
@@ -507,7 +581,8 @@ async function testConn(id, quiet) {
   catch (e) { r = { state: "error", detail: e.message }; }
   Object.assign(c, { state: r.state, latency: r.latency ?? null, detail: r.detail || "", checkedAt: now() });
   if (!quiet) logConn(`${c.name}: ${r.state}${r.latency != null ? " · " + r.latency + " ms" : ""}`, c.kind);
-  render();
+  if (!quiet && S.view === "models" && S.tabs.models === "connections") render();
+  else { renderChrome(); renderRight(); }
   return c;
 }
 function setActive(id) {
@@ -578,7 +653,17 @@ const VIEWS = {};
 const OUTLINE = {};
 let noteWorkspace;
 VIEWS.extract = () => {
-  noteWorkspace ??= createNoteWorkspace();
+  noteWorkspace ??= createNoteWorkspace({
+    onService(mode) {
+      S.extractionMode = mode;
+      renderChrome();
+    },
+    onComparison(mode, count) {
+      const label = mode === "deterministic_replay" ? "Simulated replay" : "Local model";
+      addAudit("Comparison", label, `${count} mention ${count === 1 ? "difference" : "differences"}`);
+      renderChrome();
+    }
+  });
   return noteWorkspace;
 };
 
@@ -593,7 +678,12 @@ VIEWS.diff = () => {
     const f = (id, label, n) => `<button class="flt" aria-pressed="${S.filter === id}" data-action="filter" data-value="${id}">${label}<span class="n">${n}</span></button>`;
     body = `
       <section class="sec" id="o-summary">
-        <p class="summary">${esc(p.name)} has <b>${rows.length}</b> medication statements across the two snapshots: <b>${c("changed")}</b> changed, <b>${c("onlyA")}</b> only in A, <b>${c("onlyB")}</b> only in B, and ${c("same")} unchanged. <b>${reviewed} of ${diffs.length}</b> differences reviewed.</p>
+        <dl class="review-stats">
+          <div><dt>With changes</dt><dd>${c("changed")} <small>medications</small></dd></div>
+          <div><dt>Earlier only</dt><dd>${c("onlyA")}</dd></div>
+          <div><dt>Later only</dt><dd>${c("onlyB")}</dd></div>
+          <div><dt>Reviewed</dt><dd>${reviewed} <small>of ${diffs.length}</small></dd></div>
+        </dl>
         <div class="filters">${f("all", "All", rows.length)}${f("changed", "Changed", c("changed"))}${f("onlyA", "Only in A", c("onlyA"))}${f("onlyB", "Only in B", c("onlyB"))}${f("same", "Unchanged", c("same"))}</div>
       </section>
       <section class="sec" id="o-statements">
@@ -604,9 +694,9 @@ VIEWS.diff = () => {
     OUTLINE.diff = [["o-summary", "Summary"], ["o-statements", "Statements"]];
   } else if (tab === "snapshots") {
     const tbl = (s, id, letter) => `<section class="sec" id="${id}"><h2 class="h2">Snapshot ${letter} · ${esc(s.label)} <span>${esc(s.date)}</span></h2>
-      <table class="snap"><thead><tr><th>Medication</th><th>Dose</th><th>Route</th><th>Frequency</th><th>ID</th></tr></thead><tbody>
+      <div class="table-scroll" tabindex="0" aria-label="Snapshot medication table"><table class="snap"><thead><tr><th>Medication</th><th>Dose</th><th>Route</th><th>Frequency</th><th>ID</th></tr></thead><tbody>
       ${s.meds.map(m => `<tr><td>${esc(m.name)}</td><td>${showVal(norm(m.dose))}</td><td>${showVal(norm(m.route))}</td><td>${showVal(norm(m.frequency))}</td><td class="mono" style="color:var(--faint)">${esc(m.id)}</td></tr>`).join("")}
-      </tbody></table></section>`;
+      </tbody></table></div></section>`;
     body = tbl(p.a, "o-snapA", "A") + tbl(p.b, "o-snapB", "B");
     OUTLINE.diff = [["o-snapA", "Snapshot A"], ["o-snapB", "Snapshot B"]];
   } else {
@@ -622,9 +712,9 @@ VIEWS.diff = () => {
     </div>`;
     OUTLINE.diff = [["o-scope", "Scope"], ["o-rules", "Comparison rules"], ["o-limits", "Limits"]];
   }
-  return head(`Medication reconciliation · ${p.name}`, "What changed between the two snapshots",
+  return head("Fictional snapshots", p.name,
     `Comparing <b style="color:var(--text);font-weight:500">${esc(p.a.label)}</b> (${esc(p.a.date)}) with <b style="color:var(--text);font-weight:500">${esc(p.b.label)}</b> (${esc(p.b.date)}).`) +
-    tabs("diff", [["diff", "Diff"], ["snapshots", "Snapshots"], ["method", "Method & limits"]]) + body;
+    tabs("diff", [["diff", "Differences"], ["snapshots", "Source snapshots"], ["method", "Method & limits"]]) + body;
 };
 
 function entryHtml(r) {
@@ -697,8 +787,13 @@ VIEWS.models = () => {
           <div class="r-sub">${esc(c.state === "checking" ? "Checking…" : c.detail)}${c.latency != null ? ` · ${c.latency} ms` : ""}${c.checkedAt ? ` · ${c.checkedAt.slice(11, 19)}Z` : ""}</div></div>
         <div class="r-acts"><button class="btn quiet" data-action="conn-test" data-value="${c.id}">Test</button>
           ${c.active ? "" : `<button class="btn quiet" data-action="conn-active" data-value="${c.id}">Use</button><button class="btn quiet" data-action="conn-remove" data-value="${c.id}" aria-label="Remove ${esc(c.name)}">Remove</button>`}</div></li>`).join("");
+    const [modeLabel, state] = extractionServiceStatus();
     body = `
-      <div class="bar" style="margin-bottom:18px"><div class="bar-l">Live connections are re-checked every 20 seconds.</div>
+      <section class="service-card">
+        <div><h2>Note comparison service</h2><p><span class="dot ${state}"></span> ${modeLabel}</p></div>
+        <button class="btn" data-action="nav" data-value="extract">Open comparison</button>
+      </section>
+      <div class="bar" style="margin-bottom:18px"><div class="bar-l">Snapshot and suggestion connectors</div>
         <div style="display:flex;gap:6px"><button class="btn quiet" data-action="conn-testall">Test all</button><button class="btn primary" data-action="tab" data-group="models" data-value="add">New connection</button></div></div>
       <section class="sec" id="o-db"><h2 class="h2">Databases <span>source of snapshots</span></h2><ul class="rows">${list("db")}</ul></section>
       <section class="sec" id="o-ml"><h2 class="h2">Models <span>used by AI triage</span></h2><ul class="rows">${list("model")}</ul></section>
@@ -765,11 +860,11 @@ window.ClinicalDiff.registerDriver({
   confidence: number;       <span class="c">// 0..1, shown as a number, never as a verdict</span>
   evidence: string[];       <span class="c">// source references</span>
 }</pre></section>
-      <section class="sec" id="o-fhir"><h2 class="h2">Live FHIR R4 preview <span>${esc(P().name)}</span></h2>
+      <section class="sec" id="o-fhir"><h2 class="h2">Synthetic FHIR R4 preview <span>${esc(P().name)}</span></h2>
       <pre class="code">${esc(JSON.stringify(fhirBundle(), null, 2))}</pre></section>`;
     OUTLINE.models = [["o-ts", "Interfaces"], ["o-fhir", "FHIR preview"]];
   }
-  return head("System · integrations", "Models and data", "Where snapshots come from and which model reads them. Connectors are swappable; the interface does not change when you add one.") +
+  return head("System · integrations", "Models and data", "Check the note comparison service and the drivers used by the fictional snapshot demo.") +
     tabs("models", [["connections", "Connections"], ["add", "New connection"], ["contracts", "Contracts"]]) + body;
 };
 
@@ -792,7 +887,7 @@ VIEWS.eval = () => {
   const allTri = Object.values(S.triage).flat();
   const acc = allTri.filter(s => s.decision === "accepted").length, ov = allTri.filter(s => s.decision === "overridden").length;
   const revs = Object.values(S.reviews);
-  return head("Evaluation · held-out", "How the comparison holds up",
+  return head("Synthetic evaluation", "Evaluation results",
     "A small labelled set kept apart from the workspace fixtures. Results here are a smoke test, not clinical validation.") + `
     <section class="sec" id="o-about" style="margin-top:28px"><h2 class="h2">About this set</h2>
       <div class="prose"><p><b>${HELDOUT.length} synthetic cases</b>, ${HELDOUT.reduce((n, c) => n + Object.keys(c.gold).length, 0)} labelled statements. Labels mark each statement as changed, only in A, only in B, or unchanged, including one case where a field is missing rather than changed in value.</p></div></section>
@@ -800,7 +895,6 @@ VIEWS.eval = () => {
       <ul class="rows">
         <li class="row eval head"><span>Method</span><span>Cases</span><span>Precision</span><span>Recall</span><span>Exact match</span></li>
         <li class="row eval"><span style="color:var(--strong)">Deterministic diff <span style="color:var(--faint)">baseline</span></span><span class="mono">${r ? r.n : "—"}</span><span class="mono">${r ? r.p.toFixed(2) : "—"}</span><span class="mono">${r ? r.r.toFixed(2) : "—"}</span><span class="mono">${r ? r.em.toFixed(2) : "—"}</span></li>
-        <li class="row eval"><span style="color:var(--strong)">Model-assisted triage <span style="color:var(--faint)">needs labels</span></span><span class="mono">—</span><span class="mono">—</span><span class="mono">—</span><span class="mono">—</span></li>
       </ul>
       <div style="margin-top:14px"><button class="btn primary" data-action="eval-run">${r ? "Run again" : "Run held-out set"}</button></div>
     </section>
@@ -813,7 +907,7 @@ VIEWS.audit = () => {
   OUTLINE.audit = [["o-trail", "Trail"]];
   const actors = ["all", ...new Set(S.audit.map(a => a.actor))];
   const list = S.audit.filter(a => S.auditFilter === "all" || a.actor === S.auditFilter);
-  return head("Session · audit", "Audit log", "Every review decision, model run and connector change in this session, newest first. It resets on reload and is not a production audit trail.") + `
+  return head("Fictional workspace", "Session activity", "Comparisons, review decisions and connector changes from this session. Export the log before refreshing to keep a copy.") + `
     <section class="sec" id="o-trail" style="margin-top:28px">
       <div class="bar" style="margin-bottom:10px">
         <div class="filters" style="margin:0">${actors.map(a => `<button class="flt" aria-pressed="${S.auditFilter === a}" data-action="audit-filter" data-value="${esc(a)}">${a === "all" ? "Everyone" : esc(a)}</button>`).join("")}</div>
@@ -828,14 +922,20 @@ VIEWS.audit = () => {
 /* ================================================================
    Chrome rendering
    ================================================================ */
-const VIEW_NAMES = { extract: "Note extraction", diff: "Medication diff", triage: "AI triage", models: "Models & data", eval: "Evaluations", audit: "Audit log" };
+const VIEW_NAMES = { extract: "Compare notes", diff: "Snapshot review", triage: "Review suggestions", models: "Models & data", eval: "Evaluations", audit: "Session activity" };
+
+function extractionServiceStatus() {
+  if (S.extractionMode === "deterministic_replay") return ["Simulated replay", "degraded"];
+  if (S.extractionMode === "local_mlx") return ["Local model", "ok"];
+  if (S.extractionMode === "unavailable") return ["Comparison unavailable", "error"];
+  return ["Local service", ""];
+}
 
 function renderChrome() {
   document.documentElement.dataset.palette = S.palette;
   $("#crumbs").innerHTML = ["diff", "triage"].includes(S.view) ? `${esc(P().name)} &nbsp;/&nbsp; <b>${VIEW_NAMES[S.view]}</b>` : `<b>${VIEW_NAMES[S.view]}</b>`;
-  const live = S.conns.filter(c => c.state !== "idle");
-  const worst = live.some(c => c.state === "error") ? "error" : live.some(c => c.state === "degraded") ? "degraded" : live.some(c => c.state === "checking") ? "checking" : live.length ? "ok" : "";
-  $("#health").innerHTML = `<span class="dot ${worst}"></span>${S.conns.length} connections · ${S.conns.filter(c => c.state === "ok" || c.state === "degraded").length} ready`;
+  const [label, state] = extractionServiceStatus();
+  $("#health").innerHTML = `<span class="dot ${state}"></span>${label}`;
   $("#pal-btn").textContent = "Palette · " + PALETTES.find(p => p.id === S.palette).name;
   $("#pal-menu").innerHTML = PALETTES.map(p => `<button class="pal-opt" role="menuitemradio" aria-checked="${S.palette === p.id}" data-action="palette" data-value="${p.id}">
       <span class="sw">${p.sw.map(c => `<i style="background:${c}"></i>`).join("")}</span>
@@ -858,10 +958,9 @@ function renderRight() {
   const dbc = activeConn("db"), mc = activeConn("model");
   const diffs = diffFor(S.patient).filter(r => r.kind !== "same");
   $("#rail-r").innerHTML = `
-    <div class="rr-h">On this page</div>
-    <div class="toc">${outline.map(([id, label], i) => `<button data-action="jump" data-value="${id}" class="${i === 0 ? "on" : ""}">${esc(label)}</button>`).join("")}</div>
+    ${outline.length ? `<div class="rr-h">On this page</div><div class="toc">${outline.map(([id, label], i) => `<button data-action="jump" data-value="${id}" class="${i === 0 ? "on" : ""}">${esc(label)}</button>`).join("")}</div>` : ""}
     ${["diff", "triage"].includes(S.view) ? `<div class="rr-h">Patient</div>
-    <dl class="kv"><dt>Name</dt><dd>${esc(p.name)}</dd><dt>Born</dt><dd>${esc(p.born)}</dd>
+    <dl class="kv"><dt>Name</dt><dd>${esc(p.name)}</dd>
       <dt>A</dt><dd title="${esc(p.a.label)}">${esc(p.a.date)}</dd><dt>B</dt><dd title="${esc(p.b.label)}">${esc(p.b.date)}</dd>
       <dt>Reviewed</dt><dd>${diffs.filter(r => S.reviews[rk(r.id)]).length} / ${diffs.length}</dd></dl>` : ""}
     <div class="rr-h">Connections</div>
@@ -876,6 +975,7 @@ function render() {
   const container = $("#view");
   if (typeof view === "string") container.innerHTML = view;
   else if (container.firstElementChild !== view) container.replaceChildren(view);
+  document.body.dataset.view = S.view;
   renderChrome(); renderRight();
 }
 
@@ -889,11 +989,13 @@ function applyRailFilter() {
    ================================================================ */
 function go(view) {
   S.view = view;
-  history.replaceState(null, "", view === "extract" ? "#extract" : location.pathname + location.search);
+  history.replaceState(null, "", "#" + view);
+  closeMobileMenu();
   S.selected = null;
   $("#canvas").scrollTop = 0;
   render();
-  if (view === "extract") noteWorkspace.querySelector("h1").focus();
+  const heading = $("#view h1");
+  if (heading) { heading.tabIndex = -1; heading.focus(); }
 }
 async function runTriage() {
   const m = activeConn("model"); if (!m || S.triageBusy) return;
@@ -948,11 +1050,20 @@ function setReview(id, val) {
   addAudit("Clinician", prev === val ? `Cleared ${val}` : `Marked ${val}`, `${P().name} · ${r ? r.name : id}`);
   render();
 }
+function closeMobileMenu() {
+  $("#app-navigation").classList.remove("nav-open");
+  $("#mobile-menu").setAttribute("aria-expanded", "false");
+}
 function closeMenus() { $("#pal-menu").classList.remove("open"); $("#pal-btn").setAttribute("aria-expanded", "false"); }
 
 const ACTIONS = {
-  nav: v => { closeMenus(); go(v); },
-  patient: v => { S.patient = v; S.filter = "all"; if (!["diff", "triage"].includes(S.view)) S.view = "diff"; S.selected = null; render(); },
+  nav: (v, el, e) => { e.preventDefault(); closeMenus(); go(v); },
+  menu: () => {
+    const open = $("#app-navigation").classList.toggle("nav-open");
+    $("#mobile-menu").setAttribute("aria-expanded", String(open));
+    if (open) $("#rail-search").focus();
+  },
+  patient: v => { S.patient = v; S.filter = "all"; go(["diff", "triage"].includes(S.view) ? S.view : "diff"); },
   tab: (v, el) => { S.tabs[el.dataset.group] = v; S.formError = ""; render(); },
   filter: v => { S.filter = v; render(); },
   select: (v, el, e) => { if (e.target.closest(".detail")) return; S.selected = S.selected === v ? null : v; render(); },
@@ -1024,7 +1135,7 @@ document.addEventListener("submit", e => {
 document.addEventListener("keydown", e => {
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") { e.preventDefault(); openCmd(); return; }
   if ($("#cmd").classList.contains("open")) return;
-  if (e.key === "Escape") { closeMenus(); if (S.selected) { S.selected = null; render(); } return; }
+  if (e.key === "Escape") { closeMenus(); if ($("#app-navigation").classList.contains("nav-open")) { closeMobileMenu(); $("#mobile-menu").focus(); } if (S.selected) { S.selected = null; render(); } return; }
   if (/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName) || e.metaKey || e.ctrlKey || e.altKey) return;
   if (S.view !== "diff" || S.tabs.diff !== "diff") return;
   const rows = diffFor(S.patient).filter(r => S.filter === "all" || r.kind === S.filter);
@@ -1080,7 +1191,8 @@ $("#cmd").addEventListener("click", e => { if (e.target.id === "cmd") closeCmd()
    Boot + heartbeat for live connections
    ================================================================ */
 booted = true;
-if (location.hash === "#extract") S.view = "extract";
+const initialView = location.hash.slice(1);
+if (Object.hasOwn(VIEWS, initialView)) S.view = initialView;
 render();
 S.conns.filter(c => c.active).forEach(c => testConn(c.id, true));
 setInterval(() => { S.conns.filter(c => c.state === "ok" || c.state === "degraded").forEach(c => testConn(c.id, true)); }, 20000);
