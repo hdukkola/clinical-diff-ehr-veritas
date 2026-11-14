@@ -45,5 +45,32 @@ class ClientTests(unittest.TestCase):
             demo.execute('replay', demo.FIXTURE_PAYLOAD, self.server.server_port)
         self.server = ThreadingHTTPServer(('127.0.0.1', 0), service.Handler)
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True); self.thread.start()
+    def test_replay_rejects_response_without_simulated_label(self):
+        def compare(url, payload=None, timeout=120):
+            if url.endswith('/health'):
+                return {'mode': 'deterministic_replay'}
+            return {'mode': 'deterministic_replay', 'differences': []}
+        with patch.object(demo, 'request_json', side_effect=compare):
+            with self.assertRaises(demo.ClientError) as caught:
+                demo.execute('replay', demo.FIXTURE_PAYLOAD, self.server.server_port)
+        self.assertIn('simulated', str(caught.exception))
+    def test_replay_rejects_response_marked_live_ai(self):
+        def compare(url, payload=None, timeout=120):
+            if url.endswith('/health'):
+                return {'mode': 'deterministic_replay'}
+            return {'mode': 'deterministic_replay', 'simulated': True, 'live_ai': True, 'differences': []}
+        with patch.object(demo, 'request_json', side_effect=compare):
+            with self.assertRaises(demo.ClientError) as caught:
+                demo.execute('replay', demo.FIXTURE_PAYLOAD, self.server.server_port)
+        self.assertIn('simulated', str(caught.exception))
+    def test_http_service_error_reports_failure_without_comparison(self):
+        def compare(url, payload=None, timeout=120):
+            if url.endswith('/health'):
+                return {'mode': 'deterministic_replay'}
+            raise demo.ClientError('Service returned 503: Local model unavailable; review the source records manually.')
+        with patch.object(demo, 'request_json', side_effect=compare):
+            with self.assertRaises(demo.ClientError) as caught:
+                demo.execute('replay', demo.FIXTURE_PAYLOAD, self.server.server_port)
+        self.assertIn('503', str(caught.exception))
 
 if __name__ == '__main__': unittest.main()
