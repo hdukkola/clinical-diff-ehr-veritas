@@ -296,12 +296,12 @@ body[data-view="extract"] .crumbs, body[data-view="extract"] #health { display:n
 #extraction-status[data-state="error"]::before { background:var(--del); }
 .extract-note-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; margin-top:12px; }
 .extract-note { display:flex; flex-direction:column; min-width:0; gap:6px; }
-.extract-note label { font-size:13px; font-weight:500; color:var(--strong); }
+.extract-note > div { font-size:13px; font-weight:500; color:var(--strong); }
 .extract-note textarea {
   width:100%; min-height:164px; resize:vertical; padding:11px 12px; border:1px solid var(--line-2);
   border-radius:8px; color:var(--strong); background:var(--sunk); font:inherit; line-height:1.55;
 }
-.extract-note textarea[readonly] { color:var(--text); background:var(--raised); resize:none; min-height:108px; height:108px; }
+.extract-note-text { padding:11px 12px; border-left:2px solid var(--line-2); background:var(--raised); white-space:pre-wrap; overflow-wrap:anywhere; }
 .extract-note textarea:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
 .extract-note small { color:var(--muted); font:11px var(--mono); }
 .extract-actions { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:14px; }
@@ -346,7 +346,6 @@ body[data-view="extract"] .crumbs, body[data-view="extract"] #health { display:n
   .wordmark { font-size:13px; }
   .top-r .ghost { font-size:11px; }
   .extract-note textarea { min-height:125px; }
-  .extract-note textarea[readonly] { min-height:94px; height:94px; }
 }
 </style>
 </head>

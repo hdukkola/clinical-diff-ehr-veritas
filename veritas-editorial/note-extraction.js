@@ -15,13 +15,15 @@ function createNoteWorkspace({ onService, onComparison }) {
       <form id="extraction-form" aria-describedby="extraction-status">
         <div class="extract-note-grid">
           <div class="extract-note">
-            <label for="earlier-note">Earlier note</label>
-            <textarea id="earlier-note" rows="5" placeholder="Enter fictional note text" aria-describedby="earlier-count" required disabled></textarea>
+            <div id="earlier-label">Earlier note</div>
+            <p class="extract-note-text" aria-labelledby="earlier-label" role="group" hidden></p>
+            <textarea id="earlier-note" aria-labelledby="earlier-label" rows="5" placeholder="Enter fictional note text" aria-describedby="earlier-count" required disabled></textarea>
             <small id="earlier-count"></small>
           </div>
           <div class="extract-note">
-            <label for="later-note">Later note</label>
-            <textarea id="later-note" rows="5" placeholder="Enter fictional note text" aria-describedby="later-count" required disabled></textarea>
+            <div id="later-label">Later note</div>
+            <p class="extract-note-text" aria-labelledby="later-label" role="group" hidden></p>
+            <textarea id="later-note" aria-labelledby="later-label" rows="5" placeholder="Enter fictional note text" aria-describedby="later-count" required disabled></textarea>
             <small id="later-count"></small>
           </div>
         </div>
@@ -42,6 +44,7 @@ function createNoteWorkspace({ onService, onComparison }) {
   const retry = workspace.querySelector("#extraction-retry");
   const example = workspace.querySelector("#extraction-example");
   const reset = workspace.querySelector("#extraction-reset");
+  const documents = [...form.querySelectorAll(".extract-note-text")];
   const counts = [...form.querySelectorAll("small")];
   const status = workspace.querySelector("#extraction-status");
   const error = workspace.querySelector("#extraction-error");
@@ -59,10 +62,12 @@ function createNoteWorkspace({ onService, onComparison }) {
     submit.disabled = busy || !health;
     example.hidden = reset.hidden = !health || health.simulated;
     example.disabled = reset.disabled = busy;
-    for (const input of fields) {
-      input.disabled = busy || !health;
-      input.readOnly = health?.simulated === true;
-    }
+    const replay = health?.simulated === true;
+    fields.forEach((input, index) => {
+      input.hidden = replay;
+      input.disabled = busy || !health || replay;
+      documents[index].hidden = !replay;
+    });
   }
 
   function setStatus(message, state) {
@@ -73,6 +78,7 @@ function createNoteWorkspace({ onService, onComparison }) {
   function showNotes(texts) {
     fields.forEach((input, index) => {
       input.value = texts[index];
+      documents[index].textContent = health?.simulated ? texts[index] : "";
       updateCount(input, index);
     });
   }
@@ -158,7 +164,7 @@ function createNoteWorkspace({ onService, onComparison }) {
       earlier: { source_id: "earlier-note", text: fields[0].value },
       later: { source_id: "later-note", text: fields[1].value }
     };
-    if (fields.some(input => !input.value.trim() || Array.from(input.value).length > 12000)) {
+    if (!health.simulated && fields.some(input => !input.value.trim() || Array.from(input.value).length > 12000)) {
       error.textContent = "Each note needs between 1 and 12,000 characters of fictional text.";
       return;
     }
