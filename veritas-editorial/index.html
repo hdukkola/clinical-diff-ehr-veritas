@@ -796,14 +796,14 @@ VIEWS.audit = () => {
 /* ================================================================
    Chrome rendering
    ================================================================ */
-const VIEW_NAMES = { diff: "Medication diff", triage: "AI triage", models: "Models & data", eval: "Evaluations", audit: "Audit log" };
+const VIEW_NAMES = { extract: "Note extraction", diff: "Medication diff", triage: "AI triage", models: "Models & data", eval: "Evaluations", audit: "Audit log" };
 
 function renderChrome() {
   document.documentElement.dataset.palette = S.palette;
   $("#crumbs").innerHTML = ["diff", "triage"].includes(S.view) ? `${esc(P().name)} &nbsp;/&nbsp; <b>${VIEW_NAMES[S.view]}</b>` : `<b>${VIEW_NAMES[S.view]}</b>`;
   const live = S.conns.filter(c => c.state !== "idle");
   const worst = live.some(c => c.state === "error") ? "error" : live.some(c => c.state === "degraded") ? "degraded" : live.some(c => c.state === "checking") ? "checking" : live.length ? "ok" : "";
-  $("#health").innerHTML = `<span class="dot ${worst}"></span>${S.conns.length} connections · ${S.conns.filter(c => c.state === "ok" || c.state === "degraded").length} live`;
+  $("#health").innerHTML = `<span class="dot ${worst}"></span>${S.conns.length} connections · ${S.conns.filter(c => c.state === "ok" || c.state === "degraded").length} ready`;
   $("#pal-btn").textContent = "Palette · " + PALETTES.find(p => p.id === S.palette).name;
   $("#pal-menu").innerHTML = PALETTES.map(p => `<button class="pal-opt" role="menuitemradio" aria-checked="${S.palette === p.id}" data-action="palette" data-value="${p.id}">
       <span class="sw">${p.sw.map(c => `<i style="background:${c}"></i>`).join("")}</span>
