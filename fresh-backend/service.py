@@ -19,6 +19,9 @@ SYSTEM = ('Extract medication names explicitly written in this fictional note. '
 class ExtractionError(Exception):
     pass
 
+class InferenceError(Exception):
+    pass
+
 def validate_payload(payload):
     if not isinstance(payload, dict) or payload.get('synthetic_only') is not True:
         raise ValueError('Set synthetic_only to true; use fictional records only.')
@@ -53,11 +56,9 @@ def validate_model_output(raw, source):
     accepted, unsupported, seen = [], [], set()
     for name in names:
         name = name.strip()
-        match = re.search(re.escape(name), source['text'], flags=re.IGNORECASE)
-        # A word boundary prevents accepting a short string inside a longer word.
-        if match and ((match.start() and source['text'][match.start()-1].isalnum()) or
-                      (match.end() < len(source['text']) and source['text'][match.end()].isalnum())):
-            match = None
+        match = next((m for m in re.finditer(re.escape(name), source['text'], flags=re.IGNORECASE)
+                      if not (m.start() and source['text'][m.start()-1].isalnum())
+                      and not (m.end() < len(source['text']) and source['text'][m.end()].isalnum())), None)
         if not match:
             unsupported.append(name)
             continue
@@ -72,8 +73,13 @@ def validate_model_output(raw, source):
 def compare(payload, extractor):
     earlier, later = validate_payload(payload)
     # A parse or inference failure aborts the whole comparison, rather than showing false removals.
-    old, old_unsupported = validate_model_output(extractor(earlier['text']), earlier)
-    new, new_unsupported = validate_model_output(extractor(later['text']), later)
+    try:
+        old_raw = extractor(earlier['text'])
+        new_raw = extractor(later['text'])
+    except Exception as exc:
+        raise InferenceError('Local model unavailable; review source records manually.') from exc
+    old, old_unsupported = validate_model_output(old_raw, earlier)
+    new, new_unsupported = validate_model_output(new_raw, later)
     old_map = {x['name'].casefold(): x for x in old}
     new_map = {x['name'].casefold(): x for x in new}
     changes = []
@@ -153,6 +159,8 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json(400, {'error':str(exc)})
         except ExtractionError as exc:
             self.send_json(502, {'error':str(exc), 'review_required':True})
+        except InferenceError as exc:
+            self.send_json(503, {'error':str(exc), 'review_required':True})
         except Exception:
             self.send_json(503, {'error':'Local model unavailable; review the source records manually.', 'review_required':True})
 
