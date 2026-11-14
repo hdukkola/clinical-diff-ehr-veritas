@@ -7,6 +7,13 @@ import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse
 
+from replay import (
+    ReplayExtractor,
+    label_replay_response,
+    replay_enabled,
+    validate_replay_payload,
+)
+
 MAX_BODY = 40000
 MAX_NOTE = 12000
 ALLOWED_ORIGINS = {'http://localhost:3000', 'http://127.0.0.1:3000'}
@@ -15,6 +22,7 @@ MODEL_REVISION = '0e7ffd5c629ef7719d4cbc04069232580bfa9d9c'
 DISCLAIMER = 'Synthetic prototype only; differences are not confirmed errors or medical advice.'
 SYSTEM = ('Extract medication names explicitly written in this fictional note. '
           'Return only JSON with a medications array of strings. Do not infer or recommend medications.')
+replay_extract = ReplayExtractor()
 
 class ExtractionError(Exception):
     pass
@@ -93,10 +101,18 @@ def compare(payload, extractor):
                             'Absence from an extraction does not establish absence from a source; review both notes.',
                             'Exact-name comparison does not match brand names, synonyms or misspellings.',
                             'Text matches establish only a literal mention, not its meaning, patient, or current status.',
-                            'Offsets are Python Unicode code-point indices, end exclusive.'],
+                            'Offsets are Python Unicode code-point indices, end exclusive.',
+                            'A difference is not a confirmed error, omission, or treatment change; review both sources.'],
             'earlier': {'source_id': earlier['source_id'], 'mentions': old, 'unsupported_outputs': old_unsupported},
             'later': {'source_id': later['source_id'], 'mentions': new, 'unsupported_outputs': new_unsupported},
             'differences': changes}
+
+def run_compare(payload):
+    """Default path is local MLX; replay only when CLINICAL_DIFF_REPLAY is explicitly enabled."""
+    if replay_enabled():
+        validate_replay_payload(payload)
+        return label_replay_response(compare(payload, replay_extract))
+    return compare(payload, extract)
 
 class LocalModel:
     def __init__(self):
@@ -121,6 +137,8 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, *args):
         pass  # Never log request bodies or note text.
     def send_json(self, status, payload):
+        if replay_enabled() and isinstance(payload, dict):
+            payload = label_replay_response(payload)
         raw = json.dumps(payload).encode('utf-8')
         self.send_response(status)
         self.send_header('Content-Type', 'application/json; charset=utf-8')
@@ -143,7 +161,23 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
     def do_GET(self):
         if self.path != '/health': return self.send_json(404, {'error':'Not found.'})
-        self.send_json(200, {'status':'ready', 'model_loaded':extract.model is not None, 'disclaimer':DISCLAIMER})
+        if replay_enabled():
+            return self.send_json(200, {
+                'status': 'ready',
+                'model_loaded': False,
+                'mode': 'deterministic_replay',
+                'simulated': True,
+                'live_ai': False,
+                'disclaimer': DISCLAIMER,
+            })
+        self.send_json(200, {
+            'status': 'ready',
+            'model_loaded': extract.model is not None,
+            'mode': 'local_mlx',
+            'simulated': False,
+            'live_ai': True,
+            'disclaimer': DISCLAIMER,
+        })
     def do_POST(self):
         if self.path != '/compare': return self.send_json(404, {'error':'Not found.'})
         origin = self.headers.get('Origin')
@@ -154,7 +188,7 @@ class Handler(BaseHTTPRequestHandler):
             if length <= 0 or length > MAX_BODY: raise ValueError('Invalid request size.')
             if self.headers.get_content_type() != 'application/json': raise ValueError('Use application/json.')
             payload = json.loads(self.rfile.read(length))
-            self.send_json(200, compare(payload, extract))
+            self.send_json(200, run_compare(payload))
         except (ValueError, UnicodeDecodeError, json.JSONDecodeError) as exc:
             self.send_json(400, {'error':str(exc)})
         except ExtractionError as exc:
@@ -166,5 +200,6 @@ class Handler(BaseHTTPRequestHandler):
 
 if __name__ == '__main__':
     port = int(os.environ.get('CLINICAL_DIFF_PORT', '8765'))
-    print(f'Synthetic-only service listening on 127.0.0.1:{port}', flush=True)
+    mode = 'deterministic_replay' if replay_enabled() else 'local_mlx'
+    print(f'Synthetic-only service listening on 127.0.0.1:{port} mode={mode}', flush=True)
     ThreadingHTTPServer(('127.0.0.1', port), Handler).serve_forever()
