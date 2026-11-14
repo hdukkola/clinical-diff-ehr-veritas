@@ -1,21 +1,107 @@
 'use client';
 import { useState } from 'react';
-import { compareSnapshots } from '@/lib/diff';
-import { earlier, later } from '@/lib/fixtures';
-const sections = ['Dashboard','Patients','Patient chart','Medication history','Encounter timeline','Clinical notes','Clinical Diff'] as const;
-type Section = typeof sections[number];
-const changes = compareSnapshots(earlier, later);
+import { useWorkspace } from '@/lib/use-workspace';
+import PatientBriefView from './_components/PatientBriefView';
+import EncounterWorkspaceView from './_components/EncounterWorkspaceView';
+import ReviewDiffView from './_components/ReviewDiffView';
+import CommitPreviewView from './_components/CommitPreviewView';
+import MedicationHistoryView from './_components/MedicationHistoryView';
+
+const sections = [
+  'Dashboard',
+  'Patient Brief',
+  'Encounter Workspace',
+  'Review & Clinical Diff',
+  'Commit / Aftercare',
+  'Medication history',
+] as const;
+type Section = (typeof sections)[number];
+
 export default function Home() {
+  const ws = useWorkspace();
   const [section, setSection] = useState<Section>('Dashboard');
-  const [query,setQuery] = useState('');
-  const [decisions,setDecisions] = useState<Record<string,string>>({});
-  return <div className="shell"><aside><div className="brand"><span>✳</span> Clinical Diff</div><p className="side-label">WORKSPACE</p><nav>{sections.map(s=><button key={s} className={section===s?'active':''} onClick={()=>setSection(s)}>{s}</button>)}</nav><div className="sidebar-note">SYNTHETIC DEMO<br/><small>Retrospective review only</small></div></aside><main><header><div><div className="eyebrow">CLINICAL WORKSPACE / {section.toUpperCase()}</div><h1>{section}</h1></div><div className="badge">Fictional patient data</div></header><div className="notice">Prototype only · Differences are observations, not confirmed errors or treatment recommendations.</div>
-  {section==='Dashboard' && <><div className="intro"><div><p className="eyebrow">WELCOME TO CLINICAL DIFF</p><h2>A clearer view of the clinical story.</h2><p>Review the record in context, then inspect medication differences alongside their sources.</p><button className="primary" onClick={()=>setSection('Patients')}>Explore patients →</button></div><div className="intro-mark">✳</div></div><div className="cards"><div className="card"><span>DEMO PATIENTS</span><strong>1</strong><p>Fictional chart available</p></div><div className="card"><span>RECORD COMPARISON</span><strong>{changes.length}</strong><p>Differences to review</p></div><div className="card"><span>WORKFLOW</span><strong>Review</strong><p>Clinician interpretation required</p></div></div></>}
-  {section==='Patients' && <div className="panel"><h2>Patient directory</h2><p>Search the fictional demonstration record.</p><input aria-label="Search patients" placeholder="Search by name or ID" value={query} onChange={e=>setQuery(e.target.value)}/>{'morgan lee demo-001'.includes(query.toLowerCase()) && <button className="patient-row" onClick={()=>setSection('Patient chart')}><span className="avatar">ML</span><span><b>Morgan Lee</b><br/><small>DEMO-001 · Fictional patient</small></span><span>Open chart →</span></button>}</div>}
-  {section==='Patient chart' && <div className="panel"><div className="patient-heading"><span className="avatar">ML</span><div><h2>Morgan Lee</h2><p>DEMO-001 · Fictional patient</p></div></div><p>This demonstration chart contains synthetic medication snapshots and illustrative encounter context.</p><div className="actions"><button onClick={()=>setSection('Medication history')}>Medication history →</button><button onClick={()=>setSection('Encounter timeline')}>Encounter timeline →</button><button onClick={()=>setSection('Clinical notes')}>Clinical notes →</button><button className="primary" onClick={()=>setSection('Clinical Diff')}>Review Clinical Diff →</button></div></div>}
-  {section==='Medication history' && <div className="panel"><h2>Medication history</h2><p>Snapshot contents are shown as recorded; absence does not establish discontinuation.</p>{[earlier,later].map(s=><div className="record" key={s.id}><h3>{s.source}</h3><small>Recorded: {s.recordedAt ?? 'Not documented'}</small>{s.medications.map(m=><p key={m.id}><b>{m.name}</b> · {m.dose ?? 'Dose not documented'} · {m.route ?? 'Route not documented'} · {m.frequency ?? 'Frequency not documented'}</p>)}</div>)}<button className="primary" onClick={()=>setSection('Clinical Diff')}>Compare snapshots →</button></div>}
-  {section==='Encounter timeline' && <div className="panel"><h2>Encounter timeline</h2><div className="record"><b>2026-10-15</b><p>Fictional discharge record · medication list available</p></div><div className="record"><b>2026-10-01</b><p>Fictional outpatient record · medication list available</p></div></div>}
-  {section==='Clinical notes' && <div className="panel"><h2>Clinical notes</h2><p>No supporting clinical note is available in this synthetic fixture. The reason for the differences is unknown.</p></div>}
-  {section==='Clinical Diff' && <><div className="diff-head"><div><p className="eyebrow">MORGAN LEE · DEMO-001</p><h2>Medication comparison</h2><p>Compare source snapshots and document a review decision.</p></div><span className="badge">{changes.length} differences</span></div><button className="primary" onClick={()=>setSection('Medication history')}>View source snapshots →</button><div className="sources"><div><small>EARLIER SOURCE</small><b>{earlier.source}</b><span>{earlier.recordedAt ?? 'Timestamp not documented'}</span></div><span className="arrow">→</span><div><small>LATER SOURCE</small><b>{later.source}</b><span>{later.recordedAt ?? 'Timestamp not documented'}</span></div></div><div className="notice warning">Evidence is incomplete: no authorization or rationale is included in these fixtures. A difference alone does not establish an error.</div>{changes.map(c=><article className="diff-card" key={c.medicationId}><div className="diff-title"><div><span className="tag">{c.kind.toUpperCase()}</span><h3>{c.name}</h3></div><label>Review decision <select aria-label={`Review decision for ${c.name}`} value={decisions[c.medicationId] ?? ''} onChange={e=>setDecisions({...decisions,[c.medicationId]:e.target.value})}><option value="">Not reviewed</option><option>Reviewed — no conclusion</option><option>Needs more evidence</option><option>Discuss with care team</option></select></label></div>{c.fields.length ? c.fields.map(f=><div className="change" key={f.field}><b>{f.field}</b><span>{f.before ?? 'Not documented'}</span><span>→</span><span>{f.after ?? 'Not documented'}</span></div>) : <div><p>{c.kind==='added'?'Absent from the earlier snapshot; present in the later snapshot.':'Present in the earlier snapshot; absent from the later snapshot.'} This does not establish when or why the record changed.</p>{(() => { const m = (c.kind === 'added' ? later : earlier).medications.find(item => item.id === c.medicationId)!; return <p>Recorded attributes: {m.dose ?? 'Dose not documented'} · {m.route ?? 'Route not documented'} · {m.frequency ?? 'Frequency not documented'}</p>; })()}</div>}<small>Sources: {earlier.source}; {later.source}. No further evidence provided.</small></article>)}<p className="footnote">Review selections are temporary and reset when the page is reloaded. They are not an audit trail.</p></>}
-  </main></div>
+  return (
+    <div className="shell">
+      <aside>
+        <div className="brand">
+          <span>✳</span> Clinical Diff
+        </div>
+        <p className="side-label">WORKSPACE</p>
+        <nav>
+          {sections.map((s) => (
+            <button
+              key={s}
+              className={section === s ? 'active' : ''}
+              onClick={() => setSection(s)}
+            >
+              {s}
+            </button>
+          ))}
+        </nav>
+        <div className="sidebar-note">
+          AI PROPOSES · HUMANS COMMIT
+          <br />
+          <small>Synthetic demonstration only</small>
+        </div>
+      </aside>
+      <main>
+        <header>
+          <div>
+            <div className="eyebrow">CLINICAL WORKSPACE / {section.toUpperCase()}</div>
+            <h1>{section}</h1>
+          </div>
+          <div className="badge">Fictional patient data</div>
+        </header>
+        <div className="notice">
+          Prototype only. AI proposals are not orders. Differences are observations, not confirmed errors or
+          treatment recommendations.
+        </div>
+
+        {section === 'Dashboard' && <Dashboard onNavigate={setSection} />}
+        {section === 'Patient Brief' && <PatientBriefView />}
+        {section === 'Encounter Workspace' && <EncounterWorkspaceView ws={ws} />}
+        {section === 'Review & Clinical Diff' && <ReviewDiffView ws={ws} />}
+        {section === 'Commit / Aftercare' && <CommitPreviewView ws={ws} />}
+        {section === 'Medication history' && <MedicationHistoryView />}
+      </main>
+    </div>
+  );
+}
+
+function Dashboard({ onNavigate }: { onNavigate: (s: Section) => void }) {
+  return (
+    <>
+      <div className="intro">
+        <div>
+          <p className="eyebrow">AI-ASSISTED MEDICATION REVIEW</p>
+          <h2>A clearer view of the clinical story.</h2>
+          <p>
+            Review the longitudinal brief, work the encounter, inspect structured proposals with evidence, and
+            preview auditable decisions. The existing EHR stays the system of record; nothing here writes to it.
+          </p>
+          <button className="primary" onClick={() => onNavigate('Patient Brief')}>
+            Start with the patient brief →
+          </button>
+        </div>
+        <div className="intro-mark">✳</div>
+      </div>
+      <div className="cards">
+        <div className="card">
+          <span>WORKFLOW</span>
+          <strong>4 surfaces</strong>
+          <p>Brief → Encounter → Review → Commit</p>
+        </div>
+        <div className="card">
+          <span>SAFETY MODEL</span>
+          <strong>Propose / Commit</strong>
+          <p>Humans accept, edit, or reject</p>
+        </div>
+        <div className="card">
+          <span>DATA</span>
+          <strong>Synthetic</strong>
+          <p>Fictional patient and notes</p>
+        </div>
+      </div>
+    </>
+  );
 }
