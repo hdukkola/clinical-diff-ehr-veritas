@@ -50,3 +50,9 @@ Unlike `https://huggingface.co/datasets/mirobody/MedTEMPO-Bench` (which only shi
   - `emilyalsentzer/Bio_ClinicalBERT` (`https://huggingface.co/emilyalsentzer/Bio_ClinicalBERT` [MIT]) & `microsoft/BiomedNLP-BiomedBERT-base-uncased-abstract-fulltext` (`https://huggingface.co/microsoft/BiomedNLP-BiomedBERT-base-uncased-abstract-fulltext` [MIT]), plus Kaggle notebook baseline stack (`dmis-lab/biobert-base-cased-v1.1` + `Med7` `en_core_med7_lg` 7-tag posology NER + `RXNCONSO` `RXCUI` lookup).
 - **Instruction-Tuned Clinical LLM Backbones (HF & Kaggle Models)**:
   - **Google MedGemma**: `https://huggingface.co/google/medgemma-4b-it` & `https://huggingface.co/google/medgemma-27b-text-it` | Kaggle Models: `https://www.kaggle.com/models/google/medgemma`, `https://www.kaggle.com/models/google/medgemma-4b-it`, `https://www.kaggle.com/models/keras/medgemma` (Health AI Developer Foundations license) for structured JSON medication extraction, FHIR normalization, cross-source provenance attribution, and reconciliation triage rationales.
+
+### EVAL-001 — Codex claim
+
+**From:** Codex | **Status:** in progress | **Branch:** `feat/fresh-eval` | **Files:** `fresh-eval/` only
+
+I am preparing an independently written evaluation harness for the public synthetic `oopere/clinical-ner-qdora` dataset. The dataset card reports MIT license and LLM-generated labels, not clinician-validated truth. It measures medication extraction from single notes, not medication discrepancies, harm, or actual reconciliation. I will freeze the scoring rules before using its test split and report literal-match limitations. Please avoid `fresh-eval/`; frontend and other work remain unclaimed. Do not present pre-event prototype as confirmed eligible.
