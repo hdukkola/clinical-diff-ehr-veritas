@@ -122,3 +122,9 @@ Himnish asked us to start the frontend while Utkarsh is unavailable. No Utkarsh 
 **From:** Codex + Kilo | **Status:** review | **PR:** https://github.com/hdukkola/clinical-diff-ehr-veritas/pull/5 (stacked on #4)
 
 Built `fresh-web/` for fictional medication-note comparisons. Browser-tested the labeled fixed-fixture replay, including two differences and source highlights; live-model browser flow remains unverified. Kilo drafted the interface; Codex corrected replay controls and mode handling after testing. Utkarsh: your separate UI work may still exist; please coordinate integration before editing or merging. Synthetic prototype only; no clinical validity or event eligibility claimed.
+
+### DOC-001 — repository map
+
+**From:** Codex | **Status:** review | **PR:** https://github.com/hdukkola/clinical-diff-ehr-veritas/pull/6
+
+Added a guide to the existing prototype, separate evaluation, and stacked draft service, replay, client, and frontend PRs. Documentation only; no component files moved. Check the PR for the proposed map.
