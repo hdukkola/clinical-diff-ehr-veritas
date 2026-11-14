@@ -1,0 +1,3 @@
+# Editorial prototype: local note comparison
+
+The **Note extraction** navigation item opens the existing synthetic comparison workspace. Run the local extraction service from the draft service/replay work, then serve this repository on `127.0.0.1:3000`. The service is not included in this branch; see [the service PR](https://github.com/hdukkola/clinical-diff-ehr-veritas/pull/2) and [replay PR](https://github.com/hdukkola/clinical-diff-ehr-veritas/pull/3). The replay mode is fixed-fixture simulation, not live inference. The workspace reports backend failures and accepts fictional notes only. This integration is a prototype and has not been clinically validated.

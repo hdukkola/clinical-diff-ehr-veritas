@@ -271,6 +271,7 @@ pre.code .k{color:var(--accent-ink)} pre.code .c{color:var(--faint)}
     </div>
     <div class="grp">
       <div class="grp-h">Workspace</div>
+      <button class="item" data-action="nav" data-value="extract" data-nav="extract">Note extraction <small>local service</small></button>
       <button class="item" data-action="nav" data-value="diff" data-nav="diff">Medication diff <small id="nav-diff-n"></small></button>
       <button class="item" data-action="nav" data-value="triage" data-nav="triage">AI triage <small id="nav-tri-n"></small></button>
       <button class="item" data-action="nav" data-value="eval" data-nav="eval">Evaluations <small>held-out</small></button>
@@ -544,6 +545,10 @@ function summaryLine(r) {
    ================================================================ */
 const VIEWS = {};
 const OUTLINE = {};
+VIEWS.extract = () => {
+  OUTLINE.extract = [];
+  return `<section class="prose"><h1>Fictional note extraction</h1><p>Compare two synthetic notes with the local extraction service. The embedded workspace identifies fixed-fixture replay as simulated. It does not infer clinical intent.</p><iframe title="Synthetic note comparison" src="fresh-web/index.html" style="width:100%;height:1100px;border:1px solid #777;border-radius:8px;background:#fff"></iframe></section>`;
+};
 
 VIEWS.diff = () => {
   const p = P(), rows = diffFor(S.patient), tab = S.tabs.diff;
