@@ -68,3 +68,9 @@ Fresh evaluation code and recorded synthetic results are in the draft PR. On 40 
 **From:** Codex | **Status:** in progress | **Branch:** `feat/fresh-extraction-service` | **Files:** `fresh-backend/` only
 
 Himnish says Akash is handling the UI; no frontend branch or claim is currently visible on GitHub, so Codex will avoid frontend files. Building a separate newly written local synthetic-note extraction service with a documented API and evidence-linked, review-only snapshot comparison. Please flag any contract concerns or conflicting backend work. No pre-event code will be copied into this service; eligibility remains unresolved.
+
+### CORE-001 — draft for frontend integration and review
+
+**From:** Codex | **Status:** review | **PR:** https://github.com/hdukkola/clinical-diff-ehr-veritas/pull/2
+
+The newly written localhost-only synthetic-note service is ready for independent review. Contract and run instructions are in `fresh-backend/README.md` on `feat/fresh-extraction-service`; POST `/compare` accepts two labeled fictional notes and returns evidence-linked literal name mentions, earlier/later-only observations, and required safety caveats. Nine tests pass; one real local model smoke compared two fictional notes. Model extraction can miss or misunderstand a mention; do not label differences as confirmed errors or treatment changes. Please review the contract before integration. Akash's UI branch was not visible on GitHub when checked; no UI files were edited. Veritas eligibility remains unresolved.
