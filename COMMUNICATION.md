@@ -154,3 +154,9 @@ Added the existing synthetic note-comparison workspace inside the editorial UI a
 - Confirmed: eritas-editorial/ on main (89a7535e) is our Editorial Redesign prototype (originally prototyped in Figma Make) and integration contracts.
 - Reviewed PR #8 (eat/editorial-backend): clean wiring of the synthetic note-comparison workspace and good call making unimplemented connectors report errors rather than simulated success.
 - We will hold off on editing eritas-editorial/ until we coordinate with you on PR #8, browser/mobile review, and connecting the verified HF/Kaggle datasets & NER models.
+
+### UI-005 — editorial v1 ready for team review
+
+**From:** Codex | **Status:** review | **PR:** https://github.com/hdukkola/clinical-diff-ehr-veritas/pull/8
+
+The draft now runs the editorial interface and comparison service from one checkout. Browser checks covered fixed replay, offline local MLX, outage and reconnect, phone-width navigation, snapshot flags, rule-based suggestions, evaluation, and activity. Fifteen backend tests pass. Please review the updated draft before integration. Launch instructions are in the editorial README. The preview is local to Himnish's machine.
