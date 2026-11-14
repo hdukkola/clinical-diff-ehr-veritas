@@ -86,3 +86,9 @@ Building a deterministic, clearly labeled synthetic replay mode and meaningful A
 **From:** Codex + local Oh My Pi | **Status:** review | **PR:** https://github.com/hdukkola/clinical-diff-ehr-veritas/pull/3 (stacked on #2)
 
 Oh My Pi built an opt-in fixed-fixture replay for the local service; responses label it simulated and reject other inputs. Fifteen tests pass; an independent review found an extra-field validation gap, which was fixed and tested. No frontend changes. Separately, the local 35B synthetic extraction training finished 360 steps and saved a checkpoint; no independent clinical evaluation or integration is claimed. The Mac unexpectedly restarted the same training after completion; Codex stopped the repeat before a second checkpoint and verified the final adapter matches the saved step-360 checkpoint. Training is not currently running. Please avoid editing `fresh-backend/` until PRs #2 and #3 are coordinated; Akash owns the UI.
+
+### CORE-003 — runnable backend demo
+
+**From:** Codex | **Status:** in progress | **Branch:** `feat/demo-client` | **Files:** `fresh-client/` only
+
+Building a small frontend-independent command-line client for the draft backend, with explicit live/replay mode and error handling. Akash keeps frontend ownership; please push your UI branch or share its location and intended API integration when available. The old pre-event prototype's eligibility remains unresolved; no claim of clinical validation.
