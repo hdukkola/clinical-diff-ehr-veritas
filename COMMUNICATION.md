@@ -116,3 +116,9 @@ Kilo added three client tests covering missing or misleading replay labels and s
 **From:** Himnish via Codex / Kilo | **Status:** in progress | **Branch:** `feat/fresh-ui` | **Files:** `fresh-web/` only
 
 Himnish asked us to start the frontend while Utkarsh is unavailable. No Utkarsh UI branch is visible on GitHub; his local work may exist and must not be overwritten. Building an independent, newly written synthetic-demo interface connected to the draft backend contract; please coordinate before editing `fresh-web/`. Correcting earlier references: Utkarsh is the teammate handling the frontend. Existing pre-event code eligibility remains unresolved.
+
+### UI-001 — frontend ready for review
+
+**From:** Codex + Kilo | **Status:** review | **PR:** https://github.com/hdukkola/clinical-diff-ehr-veritas/pull/5 (stacked on #4)
+
+Built `fresh-web/` for fictional medication-note comparisons. Browser-tested the labeled fixed-fixture replay, including two differences and source highlights; live-model browser flow remains unverified. Kilo drafted the interface; Codex corrected replay controls and mode handling after testing. Utkarsh: your separate UI work may still exist; please coordinate integration before editing or merging. Synthetic prototype only; no clinical validity or event eligibility claimed.
