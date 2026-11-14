@@ -418,11 +418,7 @@ function registerDriver(d) {
   return Drivers[d.id];
 }
 async function simulatedHealth(conn) {
-  await sleep(220 + Math.random() * 380);
-  if (!conn.endpoint) return { state: "error", detail: "No endpoint configured" };
-  if (/fail|refuse|error/i.test(conn.endpoint)) return { state: "error", detail: "Connection refused (simulated)" };
-  const latency = 18 + Math.round(Math.random() * 170);
-  return { state: latency > 150 ? "degraded" : "ok", latency, detail: "Simulated handshake. Wire a server route to make this live." };
+  return { state: "error", detail: "This connector is not implemented. No connection was attempted." };
 }
 
 function heuristicInfer({ item, patient }) {
@@ -855,13 +851,14 @@ function go(view) { S.view = view; S.selected = null; $("#canvas").scrollTop = 0
 async function runTriage() {
   const m = activeConn("model"); if (!m || S.triageBusy) return;
   const d = Drivers[m.driver], p = P();
+  if (!d.infer) { toast("This model connector is not implemented; no model ran."); return; }
   S.triageBusy = true; render();
   const items = diffFor(S.patient).filter(r => r.kind !== "same");
   const out = [];
   for (const item of items) {
     let s;
     if (d.infer) s = await d.infer({ item, patient: p });
-    else { await sleep(160 + Math.random() * 220); s = heuristicInfer({ item, patient: p }); s.confidence = Math.max(0.5, Math.min(0.97, s.confidence + (Math.random() - 0.5) * 0.1)); }
+
     out.push({ id: uid("sg"), medId: item.id, model: m.model || d.label, simulated: !d.infer, decision: null, reason: null, ...s });
   }
   S.triage[S.patient] = out; S.triageBusy = false;
