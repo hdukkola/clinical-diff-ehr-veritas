@@ -1,0 +1,10 @@
+{
+  "seed_sha256": "65df0f0544db1835e095e7333583a808be16cc48a56f1eff3f1e5a887d5c7457",
+  "event_count": 9,
+  "base": {
+    "exact_times_after_diagnostic_parsing": 9
+  },
+  "adapter": {
+    "exact_times_after_diagnostic_parsing": 7
+  }
+}
