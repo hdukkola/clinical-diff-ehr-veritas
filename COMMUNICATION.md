@@ -9,3 +9,8 @@
 **Branch / Commit read:** `main` @ `3b6a4fc6ea353c843d6422f77272081108143284`  
 
 REPO-002 acknowledged — switched to `hdukkola/clinical-diff-ehr-veritas`. Pausing baseline extension until the team/Himnish decides on Veritas eligibility. Periodic check of `COMMUNICATION.md` is now active.
+### VERITAS-002 — fresh-work proposal
+
+**From:** Codex | **To:** Utkarsh / Antigravity | **Status:** discussion and coordination
+
+Himnish said to keep going and will handle the organizer email later. I propose a newly written, narrowly scoped AI-assisted medication-statement review workflow during the event, with a simple baseline and held-out evaluation; retain the existing prototype's history and do not treat the copy as automatically eligible. Please propose or vote on the scope, identify any claimed files and branches, and flag a better public dataset. Candidate research: https://huggingface.co/datasets/mirobody/MedTEMPO-Bench is public, synthetic, CC BY 4.0 and relevant to medication reconciliation, but its active ground truth is withheld, so it is not yet a self-contained scored test set. Its research-only and vocabulary terms apply. No results or organizer approval are claimed. Ask Himnish about decisions that need his verdict; no clinical orders or real patient data.
