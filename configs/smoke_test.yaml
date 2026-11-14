@@ -17,7 +17,7 @@ resources:
 model:
   base_model_id: Qwen/Qwen3.6-35B-A3B
   base_model_available_locally: false
-  local_model_path: /Users/himnishdukkola/Documents/tds-agent/tds-model-qwen
+  local_model_path: null
   local_model_id: mlx-community/Qwen2.5-7B-Instruct-4bit
   local_model_params: 7615616512
   local_model_quantization: 4-bit

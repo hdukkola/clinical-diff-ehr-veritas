@@ -4,7 +4,7 @@ CLI entry point for the Safe ML Experiment Runner.
 Modes:
 - dry-run: validate everything without inference or training
 - evaluate-only: evaluate existing saved results or explicitly approved checkpoints
-- train-once: execute one approved bounded experiment (requires --approve-training)
+- train-once: reserved training entry point (currently blocked)
 - scheduled: run the approved workflow periodically (dry-run + evaluate-only only)
 """
 
@@ -34,7 +34,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--approve-training",
         action="store_true",
-        help="Explicitly approve a bounded training experiment (required for train-once)",
+        help="Declare operator approval. Real training remains blocked in this version.",
     )
     parser.add_argument(
         "--work-dir",
@@ -84,7 +84,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         if result["status"] == "blocked":
             print("\nDRY RUN BLOCKED — issues must be resolved before training/evaluation.")
             return 1
-        print("\nDRY RUN PASSED — safe to proceed to evaluate-only or train-once.")
+        print("\nDRY RUN PASSED — preflight checks completed.")
         return 0
 
     elif args.mode == RunMode.EVALUATE_ONLY.value:

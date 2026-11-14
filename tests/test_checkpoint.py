@@ -4,6 +4,7 @@ Tests for checkpoint recovery and management (Phase 4).
 Covers: checkpoint listing, verification, recovery, cleanup, atomic saves.
 """
 
+import hashlib
 import unittest
 import sys
 import json
@@ -47,6 +48,7 @@ class TestCheckpointRecovery(unittest.TestCase):
         ckpt_path.write_bytes(b"checkpoint-data-12345")
         manifest = ckpt_dir / "test_manifest.json"
         manifest.write_text(json.dumps({
+            "sha256": hashlib.sha256(ckpt_path.read_bytes()).hexdigest(),
             "completed_steps": 500,
             "timestamp": "2026-11-14T20:00:00Z",
             "verified": True,
@@ -58,6 +60,26 @@ class TestCheckpointRecovery(unittest.TestCase):
         self.assertEqual(info.step, 500)
         self.assertIsNotNone(info.sha256)
         self.assertEqual(len(info.sha256), 64)  # SHA-256 hex length
+
+    def test_modified_checkpoint_is_rejected(self):
+        path = self.engine.checkpoint_dir / "test_adapters.safetensors"
+        path.write_bytes(b"original")
+        digest = hashlib.sha256(path.read_bytes()).hexdigest()
+        path.with_name("test_manifest.json").write_text(json.dumps({
+            "verified": True, "sha256": digest, "completed_steps": 1,
+        }))
+        self.assertIsNotNone(self.engine.resume_from_checkpoint(path))
+        path.write_bytes(b"modified")
+        self.assertIsNone(self.engine.resume_from_checkpoint(path))
+
+    def test_smoke_test_leaves_existing_checkpoints_untouched(self):
+        path = self.engine.checkpoint_dir / "some_adapters.safetensors"
+        path.write_bytes(b"existing")
+        result = self.engine.run_smoke_test()
+        self.assertTrue(result.smoke_test)
+        self.assertIsNone(result.checkpoint_path)
+        self.assertEqual(list(self.engine.checkpoint_dir.iterdir()), [path])
+        self.assertEqual(path.read_bytes(), b"existing")
 
     def test_resume_from_unverified_checkpoint_returns_none(self):
         ckpt_dir = Path(self.tmpdir) / "checkpoints"

@@ -31,7 +31,7 @@ class TestConfig(unittest.TestCase):
     def test_config_validation_35b_training_blocked(self):
         config = PipelineConfig(mode=RunMode.TRAIN_ONCE)
         errors = config.validate()
-        self.assertIn("Qwen3.6-35B-A3B training not available locally", errors[0])
+        self.assertIn("35B training is disabled", errors[0])
 
 
 class TestDashboard(unittest.TestCase):

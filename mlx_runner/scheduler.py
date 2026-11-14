@@ -15,6 +15,8 @@ Automatic comparison (Phase 5):
 from __future__ import annotations
 
 import json
+import plistlib
+import sys
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -30,7 +32,7 @@ from .evaluator import (
     load_dev_results,
 )
 from .registry import DatasetRegistry, build_default_registry
-from .trainer import TrainingEngine, TrainingResult, TrainingStatus
+from .trainer import TrainingEngine
 
 
 @dataclass
@@ -115,13 +117,17 @@ class ExperimentScheduler:
         dev_path = Path("fresh-eval/seed-v2.jsonl")
         results_path = Path("fresh-eval/development-results.json")
 
-        if dev_path.exists():
+        if not dev_path.is_file():
+            issues.append("Development evaluation cases are missing")
+        else:
             try:
                 load_dev_cases(dev_path)
             except Exception as exc:
                 issues.append(f"Dev cases unreadable: {exc}")
 
-        if results_path.exists():
+        if not results_path.is_file():
+            issues.append("Saved development results are missing")
+        else:
             try:
                 load_dev_results(results_path)
             except Exception as exc:
@@ -131,22 +137,20 @@ class ExperimentScheduler:
 
     def check_evaluation_leakage(self) -> list[str]:
         """Check for article/patient ID leakage between training and eval sets."""
-        issues = []
         # The dev set is development data only; no training data is present locally.
         # Verify that evaluation data does not contain training IDs.
         from .evaluator import check_evaluation_leakage
 
-        dev_cases = load_dev_cases("fresh-eval/seed-v2.jsonl")
+        try:
+            dev_cases = load_dev_cases("fresh-eval/seed-v2.jsonl")
+        except (OSError, ValueError):
+            return ["Cannot check leakage without readable development cases"]
         result = check_evaluation_leakage(
             training_data=None,  # No local training data
             evaluation_data=dev_cases,
             config=self.config.leakage,
         )
-        if not result.passed:
-            issues.extend(result.reasons)
-        else:
-            issues.extend(result.reasons)  # Informational
-        return issues
+        return result.reasons if not result.passed else []
 
     def check_resources(self) -> list[str]:
         from .trainer import TrainingEngine
@@ -285,90 +289,27 @@ class ExperimentScheduler:
         }
 
     def run_train_once(self, operator_approved: bool = False) -> dict[str, Any]:
-        """Execute one approved bounded experiment. Requires explicit operator approval."""
+        """Keep the real training entry point blocked until a trainer exists."""
+        timestamp = datetime.now(timezone.utc).isoformat()
+        reason = (
+            "Real training is not implemented. Run the infrastructure checks instead."
+            if operator_approved else "Operator approval required for training."
+        )
         record = ExperimentRecord(
             id=self._new_id("train-once"),
             mode=RunMode.TRAIN_ONCE.value,
             status="blocked",
-            started_at=datetime.now(timezone.utc).isoformat(),
+            started_at=timestamp,
+            finished_at=timestamp,
+            rejection_reason=reason,
         )
-
-        # Never allow unattended training
-        if not operator_approved:
-            record.status = "blocked"
-            record.rejection_reason = "Operator approval not provided — unattended training not permitted"
-            self.state.experiments.append(record)
-            self.state.last_run = record.started_at
-            self._save_state()
-            return {
-                "mode": "train-once",
-                "status": "blocked",
-                "rejection_reason": record.rejection_reason,
-                "experiment_id": record.id,
-            }
-
-        # License check — only ingestible datasets may be used
-        blocked = self.check_licenses()
-        if blocked:
-            record.status = "blocked"
-            record.rejection_reason = f"Blocked datasets: {[b.split(':')[0] for b in blocked]}"
-            self.state.experiments.append(record)
-            self.state.last_run = record.started_at
-            self._save_state()
-            return {
-                "mode": "train-once",
-                "status": "blocked",
-                "rejection_reason": record.rejection_reason,
-                "experiment_id": record.id,
-            }
-
-        # Config validation
-        config_errors = self.config.validate()
-        if config_errors:
-            record.status = "blocked"
-            record.rejection_reason = "; ".join(config_errors)
-            self.state.experiments.append(record)
-            self.state.last_run = record.started_at
-            self._save_state()
-            return {
-                "mode": "train-once",
-                "status": "blocked",
-                "rejection_reason": record.rejection_reason,
-                "experiment_id": record.id,
-            }
-
-        # Run smoke test first (default to lightweight)
-        engine = TrainingEngine(self.config, self.work_dir)
-        smoke_result = engine.run_smoke_test()
-        record.training = {
-            "smoke_test": True,
-            "status": smoke_result.status.value,
-            "steps_completed": smoke_result.steps_completed,
-            "checkpoint_path": smoke_result.checkpoint_path,
-            "checkpoint_sha256": smoke_result.checkpoint_sha256,
-            "error_message": smoke_result.error_message,
-            "blocked_reason": smoke_result.blocked_reason,
-            "recovered_from_checkpoint": smoke_result.recovered_from_checkpoint,
-        }
-
-        if smoke_result.status != TrainingStatus.COMPLETED:
-            record.status = "failed"
-            record.rejection_reason = smoke_result.error_message or smoke_result.blocked_reason
-        else:
-            record.status = "completed"
-            # After smoke test passes, a larger job would require separate approval
-            record.rejection_reason = "Smoke test completed. Larger training job requires separate operator approval."
-
-        record.finished_at = datetime.now(timezone.utc).isoformat()
         self.state.experiments.append(record)
-        self.state.last_run = record.started_at
+        self.state.last_run = timestamp
         self._save_state()
-
         return {
             "mode": "train-once",
-            "status": record.status,
-            "training": record.training,
-            "rejection_reason": record.rejection_reason,
+            "status": "blocked",
+            "rejection_reason": reason,
             "experiment_id": record.id,
         }
 
@@ -391,7 +332,9 @@ class ExperimentScheduler:
 
         # Scheduled mode only runs dry-run + evaluate-only, NEVER train
         dry_run = self.run_dry_run()
-        evaluate = self.run_evaluate_only()
+        evaluate = self.run_evaluate_only() if dry_run["status"] == "completed" else None
+        if evaluate is None and not issues:
+            issues = ["Dry-run preflight failed"]
 
         record.status = "blocked" if issues else "completed"
         record.rejection_reason = "; ".join(issues) if issues else None
@@ -418,31 +361,17 @@ class ExperimentScheduler:
     # ------------------------------------------------------------------
     def launchd_plist(self, label: str = "clinical-diff.mlx-runner") -> str:
         """Return a launchd plist template. NOT auto-installed or activated."""
-        return f"""<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>Label</key>
-    <string>{label}</string>
-    <key>ProgramArguments</key>
-    <array>
-        <string>/usr/bin/python3</string>
-        <string>-m</string>
-        <string>mlx_runner.cli</string>
-        <string>--mode</string>
-        <string>dry-run</string>
-    </array>
-    <key>RunAtLoad</key>
-    <false/>
-    <key>StartInterval</key>
-    <integer>3600</integer>
-    <key>StandardOutPath</key>
-    <string>{{work_dir}}/logs/scheduler.out</string>
-    <key>StandardErrorPath</key>
-    <string>{{work_dir}}/logs/scheduler.err</string>
-</dict>
-</plist>
-""".replace("{{work_dir}}", str(self.work_dir))
+        root = self.work_dir.resolve()
+        return plistlib.dumps({
+            "Label": label,
+            "ProgramArguments": [sys.executable, "-m", "mlx_runner.cli", "--mode", "dry-run"],
+            "WorkingDirectory": str(root),
+            "Disabled": True,
+            "RunAtLoad": False,
+            "StartInterval": 3600,
+            "StandardOutPath": str(root / "logs" / "scheduler.out"),
+            "StandardErrorPath": str(root / "logs" / "scheduler.err"),
+        }).decode("utf-8")
 
     # ------------------------------------------------------------------
     # Helpers
