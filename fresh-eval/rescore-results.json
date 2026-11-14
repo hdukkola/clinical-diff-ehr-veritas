@@ -1,0 +1,344 @@
+{
+  "description": "Offline rescore of saved 35B base/adapter predictions against seed-v2 labels. No model inference or training performed.",
+  "inputs": {
+    "development_results": "development-results.json",
+    "development_results_sha256": "28ec40911e3337df5ea722224358ee127a96d3b6b7fb38d3b78e4f14db57e068",
+    "seed_v2": "seed-v2.jsonl",
+    "seed_v2_sha256": "65df0f0544db1835e095e7333583a808be16cc48a56f1eff3f1e5a887d5c7457",
+    "model_revision": "38740b847e4cb78f352aba30aa41c76e08e6eb46",
+    "adapter_sha256": "88509363f9205cfcfa4b2ac4941cbeb3cde67879afe0a7635b74df4341004b57"
+  },
+  "expected_event_total": 9,
+  "scoring_notes": {
+    "strict_json": "Original single-value parse of the raw response (fenced JSON is not strict).",
+    "parse_mode": "Lenient recovery (diagnostic only) of concatenated/fenced objects; never overrides strict flag.",
+    "dose": "Amount + unit only; frequency/route excluded (RUBRIC.md line 3).",
+    "time": "Trimmed + case-insensitive compare; explicit relative times preserved (RUBRIC.md line 5).",
+    "missing_values": "JSON null is correct; the string 'null' is flagged.",
+    "evidence": "Literal substring AND resolvable action reference (does the span name the event's own action, not a background clause)."
+  },
+  "per_case": {
+    "base": [
+      {
+        "id": "PMC13402246",
+        "parse": {
+          "strict_json_valid": false,
+          "parse_mode": "fenced_json",
+          "recovered_events": 6,
+          "schema_valid": true,
+          "strict_schema": false
+        },
+        "pairs": {
+          "expected": 6,
+          "predicted": 6,
+          "matched": 6,
+          "missed": 0,
+          "extra": 0,
+          "pair_f1": 1.0
+        },
+        "dose": {
+          "exact": 6,
+          "amount_unit_agree_with_frequency": 0,
+          "errors": []
+        },
+        "time": {
+          "exact": 6,
+          "strict_vs_label": 6,
+          "errors": []
+        },
+        "missing_values": {
+          "string_null_fields": 0,
+          "details": []
+        },
+        "evidence": {
+          "literal": 6,
+          "resolvable_action": 2,
+          "nonliteral": 0,
+          "errors": [
+            {
+              "medication": "methylprednisolone",
+              "expected_span": "The team initiated methylprednisolone at 0.5 mg/kg for GVHD prophylaxis.",
+              "predicted": "The team initiated methylprednisolone at 0.5 mg/kg",
+              "literal": true
+            },
+            {
+              "medication": "tacrolimus",
+              "expected_span": "They started oral tacrolimus while tapering methylprednisolone.",
+              "predicted": "They started oral tacrolimus",
+              "literal": true
+            },
+            {
+              "medication": "methylprednisolone",
+              "expected_span": "They started oral tacrolimus while tapering methylprednisolone.",
+              "predicted": "tapering methylprednisolone",
+              "literal": true
+            },
+            {
+              "medication": "Tacrolimus",
+              "expected_span": "Tacrolimus was stopped on day +100 and restarted on day +230.",
+              "predicted": "restarted on day +230",
+              "literal": true
+            }
+          ]
+        },
+        "event_order_matches_draft": true
+      },
+      {
+        "id": "PMC8025526",
+        "parse": {
+          "strict_json_valid": false,
+          "parse_mode": "fenced_json",
+          "recovered_events": 3,
+          "schema_valid": true,
+          "strict_schema": false
+        },
+        "pairs": {
+          "expected": 3,
+          "predicted": 3,
+          "matched": 3,
+          "missed": 0,
+          "extra": 0,
+          "pair_f1": 1.0
+        },
+        "dose": {
+          "exact": 1,
+          "amount_unit_agree_with_frequency": 1,
+          "errors": [
+            {
+              "medication": "agomelatine",
+              "expected": "25 mg",
+              "predicted": "25 mg nightly",
+              "kind": "amount_unit_plus_frequency"
+            },
+            {
+              "medication": "escitalopram",
+              "expected": null,
+              "predicted": "10 mg daily",
+              "kind": "mismatch"
+            }
+          ]
+        },
+        "time": {
+          "exact": 3,
+          "strict_vs_label": 3,
+          "errors": []
+        },
+        "missing_values": {
+          "string_null_fields": 0,
+          "details": []
+        },
+        "evidence": {
+          "literal": 3,
+          "resolvable_action": 2,
+          "nonliteral": 0,
+          "errors": [
+            {
+              "medication": "escitalopram",
+              "expected_span": "leaving escitalopram in place",
+              "predicted": "The patient was already taking escitalopram 10 mg daily.",
+              "literal": true
+            }
+          ]
+        },
+        "event_order_matches_draft": false
+      }
+    ],
+    "adapter": [
+      {
+        "id": "PMC13402246",
+        "parse": {
+          "strict_json_valid": false,
+          "parse_mode": "concatenated_objects",
+          "recovered_events": 6,
+          "schema_valid": true,
+          "strict_schema": false
+        },
+        "pairs": {
+          "expected": 6,
+          "predicted": 6,
+          "matched": 6,
+          "missed": 0,
+          "extra": 0,
+          "pair_f1": 1.0
+        },
+        "dose": {
+          "exact": 5,
+          "amount_unit_agree_with_frequency": 0,
+          "errors": [
+            {
+              "medication": "tacrolimus",
+              "expected": null,
+              "predicted": "oral",
+              "kind": "mismatch"
+            }
+          ]
+        },
+        "time": {
+          "exact": 6,
+          "strict_vs_label": 6,
+          "errors": []
+        },
+        "missing_values": {
+          "string_null_fields": 0,
+          "details": []
+        },
+        "evidence": {
+          "literal": 6,
+          "resolvable_action": 5,
+          "nonliteral": 0,
+          "errors": [
+            {
+              "medication": "tacrolimus",
+              "expected_span": "Tacrolimus was stopped on day +100 and restarted on day +230.",
+              "predicted": "and restarted on day +230.",
+              "literal": true
+            }
+          ]
+        },
+        "event_order_matches_draft": true
+      },
+      {
+        "id": "PMC8025526",
+        "parse": {
+          "strict_json_valid": false,
+          "parse_mode": "concatenated_objects",
+          "recovered_events": 3,
+          "schema_valid": true,
+          "strict_schema": false
+        },
+        "pairs": {
+          "expected": 3,
+          "predicted": 3,
+          "matched": 3,
+          "missed": 0,
+          "extra": 0,
+          "pair_f1": 1.0
+        },
+        "dose": {
+          "exact": 0,
+          "amount_unit_agree_with_frequency": 1,
+          "errors": [
+            {
+              "medication": "Agomelatine",
+              "expected": "25 mg",
+              "predicted": "25 mg nightly",
+              "kind": "amount_unit_plus_frequency"
+            },
+            {
+              "medication": "Agomelatine",
+              "expected": null,
+              "predicted": "null",
+              "kind": "mismatch"
+            },
+            {
+              "medication": "escitalopram",
+              "expected": null,
+              "predicted": "10 mg daily",
+              "kind": "mismatch"
+            }
+          ]
+        },
+        "time": {
+          "exact": 3,
+          "strict_vs_label": 1,
+          "errors": [
+            {
+              "medication": "Agomelatine",
+              "expected": null,
+              "predicted": "null",
+              "kind": "extra_time",
+              "label_view": "under_resolved_relative_time"
+            },
+            {
+              "medication": "escitalopram",
+              "expected": null,
+              "predicted": "null",
+              "kind": "extra_time",
+              "label_view": "under_resolved_relative_time"
+            }
+          ]
+        },
+        "missing_values": {
+          "string_null_fields": 3,
+          "details": [
+            {
+              "medication": "Agomelatine",
+              "field": "time",
+              "value": "null"
+            },
+            {
+              "medication": "Agomelatine",
+              "field": "dose",
+              "value": "null"
+            },
+            {
+              "medication": "escitalopram",
+              "field": "time",
+              "value": "null"
+            }
+          ]
+        },
+        "evidence": {
+          "literal": 3,
+          "resolvable_action": 1,
+          "nonliteral": 0,
+          "errors": [
+            {
+              "medication": "Agomelatine",
+              "expected_span": "Agomelatine 25 mg nightly was added.",
+              "predicted": "Agomelatine 25 mg nightly was added",
+              "literal": true
+            },
+            {
+              "medication": "Agomelatine",
+              "expected_span": "At a later consultation the team stopped agomelatine",
+              "predicted": "the team stopped agomelatine",
+              "literal": true
+            }
+          ]
+        },
+        "event_order_matches_draft": true
+      }
+    ]
+  },
+  "variant_totals": {
+    "base": {
+      "cases": 2,
+      "strict_json_valid": 0,
+      "parseable_schema": 2,
+      "strict_schema": 0,
+      "event_pairs_matched": 9,
+      "event_pairs_expected": 9,
+      "event_pairs_missed": 0,
+      "event_pairs_extra": 0,
+      "dose_exact": 7,
+      "dose_amount_unit_agree_with_frequency": 1,
+      "time_exact": 9,
+      "time_exact_strict_vs_label": 9,
+      "evidence_literal": 9,
+      "evidence_resolvable_action": 4,
+      "evidence_nonliteral": 0,
+      "string_null_fields": 0,
+      "pair_f1": 1.0
+    },
+    "adapter": {
+      "cases": 2,
+      "strict_json_valid": 0,
+      "parseable_schema": 2,
+      "strict_schema": 0,
+      "event_pairs_matched": 9,
+      "event_pairs_expected": 9,
+      "event_pairs_missed": 0,
+      "event_pairs_extra": 0,
+      "dose_exact": 5,
+      "dose_amount_unit_agree_with_frequency": 1,
+      "time_exact": 9,
+      "time_exact_strict_vs_label": 7,
+      "evidence_literal": 9,
+      "evidence_resolvable_action": 6,
+      "evidence_nonliteral": 0,
+      "string_null_fields": 3,
+      "pair_f1": 1.0
+    }
+  }
+}
