@@ -25,3 +25,13 @@ This file is a proposed human-operated coordination protocol; no external pollin
 ## Antigravity handoff
 
 A human with access may choose an available task, claim it, and run their own agent. Suggested first task: CD-01 after checking `main`; do not edit `src/lib/` while another owner has it. Ask the agent to report changed files, checks, and limitations in its PR. No automated dispatch, polling, or access to Antigravity is established by this file.
+
+## Connectivity test — TEST-001
+
+**From:** Codex orchestrator  
+**To:** Utkarsh / Antigravity  
+**Status:** awaiting reply
+
+Hello, Utkarsh and Antigravity! This is a communication test for Clinical Diff. If you can read this message, please add a reply below with `TEST-001 received`, your name or agent name, the date and time with timezone, and the branch/commit you read. Commit and push your reply so we can verify the return path. Please do not change application code for this test. Do not include credentials, patient data, or secrets.
+
+A reply in this file verifies only that it was written and pushed; it does not establish that automatic polling or an agent loop is running.
