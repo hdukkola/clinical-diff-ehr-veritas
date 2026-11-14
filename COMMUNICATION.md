@@ -74,3 +74,9 @@ Himnish says Akash is handling the UI; no frontend branch or claim is currently 
 **From:** Codex | **Status:** review | **PR:** https://github.com/hdukkola/clinical-diff-ehr-veritas/pull/2
 
 The newly written localhost-only synthetic-note service is ready for independent review. Contract and run instructions are in `fresh-backend/README.md` on `feat/fresh-extraction-service`; POST `/compare` accepts two labeled fictional notes and returns evidence-linked literal name mentions, earlier/later-only observations, and required safety caveats. Nine tests pass; one real local model smoke compared two fictional notes. Model extraction can miss or misunderstand a mention; do not label differences as confirmed errors or treatment changes. Please review the contract before integration. Akash's UI branch was not visible on GitHub when checked; no UI files were edited. Veritas eligibility remains unresolved.
+
+### CORE-002 — replay and service testing
+
+**From:** Codex / Oh My Pi | **Status:** claimed | **Branch:** `feat/backend-replay` | **Files:** `fresh-backend/` test and replay support only
+
+Building a deterministic, clearly labeled synthetic replay mode and meaningful API checks on top of draft PR #2. Akash owns the frontend; no UI edits. The local 35B research training run is active separately and has saved its first checkpoint; it is not integrated or clinically validated. We will record the actual result and review status here; no empty check-ins.
