@@ -37,19 +37,27 @@ RELOAD_SCRIPT = b"""
 class EditorialHandler(Handler):
     watch = False
 
+    def _allowed_origins(self):
+        if 'allowed_origins' in type(self).__dict__:
+            return type(self).allowed_origins
+        return {f'http://127.0.0.1:{self.server.server_port}'}
+
     def parse_request(self):
         if not super().parse_request():
             return False
         if self.headers.get('Host') != f'127.0.0.1:{self.server.server_port}':
-            self.send_error(403, 'Use the printed loopback address.')
+            self.close_connection = True
+            self._drain_body()
+            self.send_json(403, {'error': 'Use the printed loopback address.'})
             return False
         return True
 
     def do_GET(self):
-        if self.watch and self.path == '/__preview_version':
+        path = self._request_path()
+        if self.watch and path == '/__preview_version':
             stamps = [str((WEB_ROOT / name).stat().st_mtime_ns) for name, _ in set(ASSETS.values())]
             return self.send_asset(','.join(sorted(stamps)).encode(), 'text/plain')
-        asset = ASSETS.get(self.path)
+        asset = ASSETS.get(path)
         if asset is None:
             return super().do_GET()
         name, content_type = asset

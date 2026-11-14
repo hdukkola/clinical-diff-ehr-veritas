@@ -47,8 +47,12 @@ def replay_enabled(environ=None):
 
 def validate_replay_payload(payload):
     """Accept only the fixed fictional fixture pair; reject all other inputs."""
-    earlier = payload.get('earlier') if isinstance(payload, dict) else None
-    later = payload.get('later') if isinstance(payload, dict) else None
+    if not isinstance(payload, dict) or payload.get('synthetic_only') is not True:
+        raise ValueError(
+            'Replay mode accepts only the fixed fictional fixture notes documented in the README.'
+        )
+    earlier = payload.get('earlier')
+    later = payload.get('later')
     if not isinstance(earlier, dict) or not isinstance(later, dict):
         raise ValueError(
             'Replay mode accepts only the fixed fictional fixture notes documented in the README.'

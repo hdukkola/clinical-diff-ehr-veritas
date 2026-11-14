@@ -118,12 +118,7 @@ function createNoteWorkspace({ onService, onComparison }) {
     setStatus("Checking the local service…", "checking");
     try {
       const next = await request("/health", {}, 5000);
-      if (next.status !== "ready" || !hasValidMode(next) ||
-          (next.simulated && (next.fixture?.synthetic_only !== true ||
-            !["earlier", "later"].every(side =>
-              typeof next.fixture[side]?.text === "string" &&
-              typeof next.fixture[side].source_id === "string"
-            )))) {
+      if (!isValidHealth(next)) {
         throw new Error("The local service sent an unsupported mode or fixture.");
       }
       health = next;
@@ -143,10 +138,10 @@ function createNoteWorkspace({ onService, onComparison }) {
   }
 
   fields.forEach((input, index) => input.addEventListener("input", () => {
-    liveDraft[index] = input.value;
+    if (!health?.simulated) liveDraft[index] = input.value;
     updateCount(input, index);
     clearResult();
-    if (health) setStatus(modeLabel(health.mode), "live");
+    if (health) setStatus(modeLabel(health.mode), health.simulated ? "replay" : "live");
   }));
 
   form.addEventListener("submit", async event => {
@@ -158,7 +153,7 @@ function createNoteWorkspace({ onService, onComparison }) {
       earlier: { source_id: "earlier-note", text: fields[0].value },
       later: { source_id: "later-note", text: fields[1].value }
     };
-    if (fields.some(input => !input.value.trim() || Array.from(input.value).length > 12000)) {
+    if (fields.some(input => !hasVisibleText(input.value) || Array.from(input.value).length > 12000)) {
       error.textContent = "Each note needs between 1 and 12,000 characters of fictional text.";
       return;
     }
@@ -175,9 +170,9 @@ function createNoteWorkspace({ onService, onComparison }) {
       if (!hasValidMode(data) || data.mode !== health.mode) {
         throw new Error("The service mode changed. Use Check service before comparing again.");
       }
-      renderExtractionResult(result, data, payload);
+      const diffCount = renderExtractionResult(result, data, payload);
       setStatus(modeLabel(data.mode), data.simulated ? "replay" : "live");
-      onComparison(data.mode, data.differences.length);
+      onComparison(data.mode, diffCount);
       if (workspace.isConnected) result.querySelector("h2").focus();
     } catch (failure) {
       setStatus(`${modeLabel(health.mode)} · comparison failed`, "error");
@@ -188,6 +183,7 @@ function createNoteWorkspace({ onService, onComparison }) {
     }
   });
   function replaceDraft(texts) {
+    if (!health || health.simulated) return;
     liveDraft.splice(0, liveDraft.length, ...texts);
     showNotes(liveDraft);
     clearResult();
@@ -201,7 +197,51 @@ function createNoteWorkspace({ onService, onComparison }) {
   return workspace;
 }
 
+const WORD_CHAR_RE = /[\p{L}\p{N}\p{M}_\-\u2010\u2011]/u;
+const CONCAT_DOSE_RE = /^\d+(?:\.\d+)?(?:mg|mcg|ug|g|ml|iu|meq|mmol|units?|u)(?![a-zA-Z0-9_-])/i;
+
+function stripInvisible(text) {
+  return text.replace(/^[\s\p{Cf}]+|[\s\p{Cf}]+$/gu, "");
+}
+
+function hasVisibleText(text) {
+  return typeof text === "string" && text.replace(/[\s\p{Cf}]/gu, "").length > 0;
+}
+
+function normalizeName(name) {
+  return stripInvisible(name)
+    .normalize("NFC")
+    .replace(/\s+/gu, " ")
+    .replace(/[\u0130\u0131]/g, "i")
+    .toLowerCase();
+}
+
+function normalizeSourceId(sourceId) {
+  return stripInvisible(sourceId).normalize("NFC");
+}
+
+function isValidHealth(next) {
+  if (!next || typeof next !== "object" || next.status !== "ready" || !hasValidMode(next)) {
+    return false;
+  }
+  if (!next.simulated) return true;
+  if (!next.fixture || typeof next.fixture !== "object" || next.fixture.synthetic_only !== true) {
+    return false;
+  }
+  const validSides = ["earlier", "later"].every(side => {
+    const entry = next.fixture[side];
+    return entry && typeof entry === "object" &&
+      typeof entry.text === "string" && hasVisibleText(entry.text) &&
+      Array.from(entry.text).length <= 12000 &&
+      typeof entry.source_id === "string" && hasVisibleText(entry.source_id) &&
+      Array.from(entry.source_id).length <= 100;
+  });
+  if (!validSides) return false;
+  return normalizeSourceId(next.fixture.earlier.source_id) !== normalizeSourceId(next.fixture.later.source_id);
+}
+
 function hasValidMode(data) {
+  if (!data || typeof data !== "object") return false;
   return (data.mode === "deterministic_replay" && data.simulated === true && data.live_ai === false) ||
     (data.mode === "local_mlx" && data.simulated === false && data.live_ai === true);
 }
@@ -213,16 +253,34 @@ function extractionElement(tag, text, className) {
   return element;
 }
 
+function hasValidWordBoundary(chars, start, end) {
+  if (start > 0 && WORD_CHAR_RE.test(chars[start - 1])) return false;
+  if (end < chars.length) {
+    const nextCh = chars[end];
+    if (WORD_CHAR_RE.test(nextCh)) {
+      if (!(/\p{N}/u.test(nextCh) && /\p{L}/u.test(chars[end - 1]) &&
+            CONCAT_DOSE_RE.test(chars.slice(end).join("")))) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
 function extractionQuote(evidence, source) {
+  if (!source || typeof source !== "object" || typeof source.source_id !== "string" ||
+      typeof source.text !== "string" || !evidence || typeof evidence !== "object" ||
+      evidence.source_id !== source.source_id || typeof evidence.name !== "string" ||
+      !Number.isInteger(evidence.start) || !Number.isInteger(evidence.end) ||
+      evidence.start < 0 || evidence.end <= evidence.start) {
+    throw new Error("A result had invalid source evidence. Review both notes manually.");
+  }
   const chars = Array.from(source.text);
-  if (!evidence || evidence.source_id !== source.source_id ||
-      typeof evidence.name !== "string" || !Number.isInteger(evidence.start) ||
-      !Number.isInteger(evidence.end) || evidence.start < 0 ||
-      evidence.end <= evidence.start || evidence.end > chars.length) {
+  if (evidence.end > chars.length) {
     throw new Error("A result had invalid source evidence. Review both notes manually.");
   }
   const { start, end, name } = evidence;
-  if (chars.slice(start, end).join("") !== name) {
+  if (chars.slice(start, end).join("") !== name || !hasValidWordBoundary(chars, start, end)) {
     throw new Error("A result did not match the source text. Review both notes manually.");
   }
   let first = Math.max(0, start - 85);
@@ -236,55 +294,144 @@ function extractionQuote(evidence, source) {
 }
 
 function renderExtractionResult(result, data, payload) {
-  if (!Array.isArray(data.differences) || ![data.earlier, data.later].every(source =>
-    Array.isArray(source?.mentions) && Array.isArray(source.unsupported_outputs))) {
+  if (!result || typeof result.replaceChildren !== "function") {
+    throw new Error("Cannot render comparison result.");
+  }
+  if (!data || typeof data !== "object" || !Array.isArray(data.differences) ||
+      ![data.earlier, data.later].every(source =>
+        source && typeof source === "object" &&
+        Array.isArray(source.mentions) && Array.isArray(source.unsupported_outputs))) {
     throw new Error("The comparison response is incomplete. Review both notes manually.");
   }
-  const heading = extractionElement("h2", "Mention differences");
-  heading.id = "extraction-result-title";
-  heading.tabIndex = -1;
-  const list = extractionElement("ul", undefined, "extract-rows");
-  const sources = { earlier_only: ["Earlier note", payload.earlier], later_only: ["Later note", payload.later] };
-  for (const item of data.differences) {
-    if (!item || !Object.hasOwn(sources, item.kind) || typeof item.name !== "string" ||
-        !Array.isArray(item.evidence) || !item.evidence.length) {
-      throw new Error("A comparison row is incomplete. Review both notes manually.");
-    }
-    const [label, source] = sources[item.kind];
-    const row = extractionElement("li");
-    const title = extractionElement("div", undefined, "extract-row-title");
-    title.append(extractionElement("strong", item.name), extractionElement("span", `${label} only`));
-    row.append(title);
-    for (const evidence of item.evidence) {
-      if (evidence?.name !== item.name) throw new Error("A comparison row did not match its evidence.");
-      row.append(extractionQuote(evidence, source));
-    }
-    list.append(row);
+  if (!payload || typeof payload !== "object" ||
+      !payload.earlier || typeof payload.earlier !== "object" ||
+      !payload.later || typeof payload.later !== "object" ||
+      typeof payload.earlier.source_id !== "string" || typeof payload.later.source_id !== "string" ||
+      !hasVisibleText(payload.earlier.source_id) || !hasVisibleText(payload.later.source_id) ||
+      normalizeSourceId(payload.earlier.source_id) === normalizeSourceId(payload.later.source_id)) {
+    throw new Error("Source metadata did not match the submitted notes.");
   }
-  const detail = extractionElement("details");
-  detail.append(extractionElement("summary", "All extracted mentions by note"));
-  for (const [side, label] of [["earlier", "Earlier note"], ["later", "Later note"]]) {
+  for (const side of ["earlier", "later"]) {
     const bucket = data[side];
     if (bucket.source_id !== payload[side].source_id ||
         bucket.unsupported_outputs.some(name => typeof name !== "string")) {
       throw new Error("Source metadata did not match the submitted notes.");
     }
+  }
+
+  const sources = { earlier_only: ["Earlier note", payload.earlier], later_only: ["Later note", payload.later] };
+  const dedupedDifferences = [];
+  const diffIndexByKey = new Map();
+  for (const item of data.differences) {
+    if (!item || typeof item !== "object" || !Object.hasOwn(sources, item.kind) ||
+        typeof item.name !== "string" || !hasVisibleText(item.name) ||
+        !Array.isArray(item.evidence) || !item.evidence.length) {
+      throw new Error("A comparison row is incomplete. Review both notes manually.");
+    }
+    const [label, source] = sources[item.kind];
+    const normName = normalizeName(item.name);
+    const itemKey = `${item.kind}\0${normName}`;
+    let entry = diffIndexByKey.get(itemKey);
+    if (!entry) {
+      entry = {
+        kind: item.kind,
+        name: item.name,
+        normName,
+        label,
+        quotes: [],
+        seenSpans: new Set()
+      };
+      diffIndexByKey.set(itemKey, entry);
+      dedupedDifferences.push(entry);
+    }
+    for (const evidence of item.evidence) {
+      if (typeof evidence?.name !== "string" || normalizeName(evidence.name) !== entry.normName) {
+        throw new Error("A comparison row did not match its evidence.");
+      }
+      const quote = extractionQuote(evidence, source);
+      const spanKey = `${evidence.source_id}\0${evidence.start}\0${evidence.end}`;
+      if (!entry.seenSpans.has(spanKey)) {
+        entry.seenSpans.add(spanKey);
+        entry.quotes.push(quote);
+      }
+    }
+  }
+
+  const sideDetails = {};
+  const mentionNamesBySide = { earlier: new Set(), later: new Set() };
+  for (const [side, label] of [["earlier", "Earlier note"], ["later", "Later note"]]) {
+    const bucket = data[side];
+    const seenSpans = new Set();
+    const quotes = [];
+    for (const mention of bucket.mentions) {
+      const quote = extractionQuote(mention, payload[side]);
+      mentionNamesBySide[side].add(normalizeName(mention.name));
+      const spanKey = `${mention.source_id}\0${mention.start}\0${mention.end}`;
+      if (!seenSpans.has(spanKey)) {
+        seenSpans.add(spanKey);
+        quotes.push(quote);
+      }
+    }
+    sideDetails[side] = { label, quotes, unsupported: [...new Set(bucket.unsupported_outputs)] };
+  }
+
+  const expectedEarlierOnly = new Set(
+    [...mentionNamesBySide.earlier].filter(name => !mentionNamesBySide.later.has(name))
+  );
+  const expectedLaterOnly = new Set(
+    [...mentionNamesBySide.later].filter(name => !mentionNamesBySide.earlier.has(name))
+  );
+  const actualEarlierOnly = new Set();
+  const actualLaterOnly = new Set();
+  for (const diff of dedupedDifferences) {
+    if (diff.kind === "earlier_only") {
+      if (!expectedEarlierOnly.has(diff.normName)) {
+        throw new Error("Comparison differences did not match the extracted mentions. Review both notes manually.");
+      }
+      actualEarlierOnly.add(diff.normName);
+    } else {
+      if (!expectedLaterOnly.has(diff.normName)) {
+        throw new Error("Comparison differences did not match the extracted mentions. Review both notes manually.");
+      }
+      actualLaterOnly.add(diff.normName);
+    }
+  }
+  if (actualEarlierOnly.size !== expectedEarlierOnly.size || actualLaterOnly.size !== expectedLaterOnly.size) {
+    throw new Error("Comparison differences did not match the extracted mentions. Review both notes manually.");
+  }
+
+  const heading = extractionElement("h2", "Mention differences");
+  heading.id = "extraction-result-title";
+  heading.tabIndex = -1;
+  const list = extractionElement("ul", undefined, "extract-rows");
+  for (const entry of dedupedDifferences) {
+    const row = extractionElement("li");
+    const title = extractionElement("div", undefined, "extract-row-title");
+    title.append(extractionElement("strong", entry.name), extractionElement("span", `${entry.label} only`));
+    row.append(title, ...entry.quotes);
+    list.append(row);
+  }
+  const detail = extractionElement("details");
+  detail.append(extractionElement("summary", "All extracted mentions by note"));
+  for (const side of ["earlier", "later"]) {
+    const info = sideDetails[side];
     const group = extractionElement("div", undefined, "extract-detail");
-    group.append(extractionElement("strong", label));
-    if (!bucket.mentions.length) group.append(extractionElement("p", "No supported mentions returned."));
-    for (const mention of bucket.mentions) group.append(extractionQuote(mention, payload[side]));
-    if (bucket.unsupported_outputs.length) {
-      group.append(extractionElement("p", `Unverified outputs excluded: ${bucket.unsupported_outputs.join(", ")}`));
+    group.append(extractionElement("strong", info.label));
+    if (!info.quotes.length) group.append(extractionElement("p", "No supported mentions returned."));
+    else group.append(...info.quotes);
+    if (info.unsupported.length) {
+      group.append(extractionElement("p", `Unverified outputs excluded: ${info.unsupported.join(", ")}`));
     }
     detail.append(group);
   }
   const header = extractionElement("div", undefined, "extract-result-header");
-  const count = data.differences.length;
+  const count = dedupedDifferences.length;
   header.append(heading, extractionElement("span",
     `${count} ${count === 1 ? "difference" : "differences"}`, "extract-metrics"));
-  result.replaceChildren(header, data.differences.length
+  result.replaceChildren(header, count
     ? list
     : extractionElement("p", "No differences in extracted mentions. Review both notes.", "empty"), detail,
     extractionElement("p", "Extracted mentions can be missed. Compare the source text before drawing conclusions.", "extract-result-note"));
   result.hidden = false;
+  return count;
 }
