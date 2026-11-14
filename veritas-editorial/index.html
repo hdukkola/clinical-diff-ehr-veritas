@@ -1,0 +1,1040 @@
+<!DOCTYPE html>
+<html lang="en" data-palette="dimmed">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Clinical Diff · Veritas</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Newsreader:opsz,wght@6..72,400;6..72,500&display=swap" rel="stylesheet" />
+<style>
+/* ------------------------------------------------------------------
+   Palettes. No pure black anywhere. One accent per palette, used as
+   punctuation only. Semantic hues are desaturated for long sessions.
+   ------------------------------------------------------------------ */
+[data-palette="dimmed"]{
+  --canvas:#1c2128; --rail:#181c22; --raised:#22272e; --sunk:#161a1f;
+  --line:rgba(205,217,229,.09); --line-2:rgba(205,217,229,.17);
+  --hover:rgba(205,217,229,.045); --sel:rgba(108,182,255,.07);
+  --text:#adbac7; --strong:#dde5ec; --muted:#768390; --faint:#545d68;
+  --accent:#6cb6ff; --accent-ink:#9ccdff;
+  --add:#6bc46d; --del:#ef7b72; --chg:#d4a72c; --unk:#8b949e;
+}
+[data-palette="void"]{
+  --canvas:#0e0f11; --rail:#0b0c0e; --raised:#151619; --sunk:#090a0b;
+  --line:rgba(255,255,255,.065); --line-2:rgba(255,255,255,.14);
+  --hover:rgba(255,255,255,.035); --sel:rgba(154,164,255,.07);
+  --text:#b4b8c2; --strong:#eef0f3; --muted:#70747e; --faint:#4b4e55;
+  --accent:#9aa4ff; --accent-ink:#c1c7ff;
+  --add:#5fc08a; --del:#f0857d; --chg:#d9a441; --unk:#80848c;
+}
+[data-palette="obsidian"]{
+  --canvas:#131517; --rail:#0f1113; --raised:#191c1f; --sunk:#0d0e10;
+  --line:rgba(240,246,252,.075); --line-2:rgba(240,246,252,.15);
+  --hover:rgba(240,246,252,.04); --sel:rgba(86,200,208,.07);
+  --text:#c2c9d0; --strong:#f0f3f6; --muted:#7d858d; --faint:#525960;
+  --accent:#56c8d0; --accent-ink:#8fdde2;
+  --add:#56b866; --del:#f2766c; --chg:#d29f2e; --unk:#858c93;
+}
+[data-palette="forest"]{
+  --canvas:#141a17; --rail:#101512; --raised:#1a221e; --sunk:#0e1210;
+  --line:rgba(214,232,220,.08); --line-2:rgba(214,232,220,.16);
+  --hover:rgba(214,232,220,.04); --sel:rgba(143,207,168,.08);
+  --text:#bccac1; --strong:#e9f0eb; --muted:#76877d; --faint:#4f5d55;
+  --accent:#8fcfa8; --accent-ink:#b7e3c7;
+  --add:#7cc58f; --del:#e8877c; --chg:#d6ad4f; --unk:#86948b;
+}
+:root{
+  --serif:"Newsreader","Source Serif 4","Iowan Old Style",Georgia,serif;
+  --sans:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{background:var(--canvas);color:var(--text);font:14px/1.6 var(--sans);-webkit-font-smoothing:antialiased;display:grid;grid-template-rows:48px 1fr;overflow:hidden}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer;background:none;border:0}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
+.mono{font-family:var(--mono)}
+kbd{font:500 10.5px var(--mono);color:var(--muted);border:1px solid var(--line-2);border-bottom-width:2px;border-radius:4px;padding:0 4px;background:var(--sunk)}
+
+/* ---------- Top bar ---------- */
+.top{display:flex;align-items:center;justify-content:space-between;padding:0 16px 0 20px;border-bottom:1px solid var(--line);background:var(--rail)}
+.top-l{display:flex;align-items:center;gap:18px;min-width:0}
+.wordmark{font:500 17px/1 var(--serif);color:var(--strong);letter-spacing:-.01em;white-space:nowrap}
+.wordmark span{font:400 12px var(--sans);color:var(--muted);margin-left:6px;letter-spacing:0}
+.crumbs{font-size:12.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.crumbs b{color:var(--text);font-weight:500}
+.top-r{display:flex;align-items:center;gap:6px}
+.ghost{height:28px;padding:0 10px;border-radius:6px;font-size:12.5px;color:var(--text);display:inline-flex;align-items:center;gap:7px}
+.ghost:hover{background:var(--hover);color:var(--strong)}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--faint);flex-shrink:0;display:inline-block}
+.dot.ok{background:var(--add)} .dot.degraded{background:var(--chg)} .dot.error{background:var(--del)} .dot.checking{background:var(--accent);animation:pulse 1s infinite}
+@keyframes pulse{50%{opacity:.35}}
+.menu-wrap{position:relative}
+.menu{display:none;position:absolute;right:0;top:34px;width:300px;background:var(--raised);border:1px solid var(--line-2);border-radius:8px;padding:6px;z-index:40;box-shadow:0 16px 40px rgba(0,0,0,.35)}
+.menu.open{display:block}
+.pal-opt{width:100%;display:grid;grid-template-columns:46px 1fr;gap:10px;align-items:center;padding:8px;border-radius:6px;text-align:left}
+.pal-opt:hover{background:var(--hover)}
+.pal-opt[aria-checked="true"]{background:var(--sel)}
+.sw{display:flex;height:22px;border-radius:4px;overflow:hidden;border:1px solid var(--line-2)}
+.sw i{flex:1}
+.pal-name{font-size:13px;color:var(--strong);font-weight:500}
+.pal-name em{font-style:normal;font-size:11px;color:var(--accent-ink);margin-left:6px;font-weight:400}
+.pal-note{font-size:11.5px;color:var(--muted);line-height:1.4}
+
+/* ---------- Frame ---------- */
+.frame{display:grid;grid-template-columns:248px minmax(0,1fr) 244px;min-height:0}
+.rail-l{background:var(--rail);border-right:1px solid var(--line);overflow-y:auto;padding:14px 12px 20px;display:flex;flex-direction:column}
+.search{width:100%;height:30px;background:var(--sunk);border:1px solid var(--line);border-radius:6px;padding:0 10px;font-size:12.5px;color:var(--strong);margin-bottom:18px}
+.search::placeholder{color:var(--faint)}
+.search:focus{outline:none;border-color:var(--line-2)}
+.grp{margin-bottom:18px}
+.grp-h{font-size:11px;color:var(--faint);padding:0 8px 4px;letter-spacing:.02em}
+.item{width:100%;display:flex;align-items:center;justify-content:space-between;gap:8px;height:30px;padding:0 8px;border-radius:6px;font-size:13px;color:var(--text);text-align:left}
+.item:hover{background:var(--hover);color:var(--strong)}
+.item[aria-current="true"]{background:var(--hover);color:var(--strong);font-weight:500;box-shadow:inset 2px 0 0 var(--accent)}
+.item small{font:11px var(--mono);color:var(--faint);font-weight:400}
+.rail-foot{margin-top:auto;padding:12px 8px 0;border-top:1px solid var(--line);font-size:11.5px;color:var(--faint);line-height:1.5}
+
+.canvas{overflow-y:auto;scroll-behavior:smooth}
+.col{max-width:760px;margin:0 auto;padding:40px 40px 96px}
+.eyebrow{font:500 11px var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.h1{font:400 34px/1.15 var(--serif);color:var(--strong);letter-spacing:-.015em;margin-top:10px}
+.lede{font-size:15px;color:var(--muted);margin-top:10px;max-width:62ch}
+.tabs{display:flex;gap:22px;border-bottom:1px solid var(--line);margin:26px 0 28px}
+.tab{padding:0 1px 10px;font-size:13px;font-weight:500;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-1px}
+.tab:hover{color:var(--strong)}
+.tab[aria-selected="true"]{color:var(--strong);border-bottom-color:var(--accent)}
+.sec{scroll-margin-top:24px;margin-bottom:36px}
+.h2{font:500 13px var(--sans);color:var(--strong);padding-bottom:9px;border-bottom:1px solid var(--line);margin-bottom:4px;display:flex;justify-content:space-between;align-items:baseline;gap:12px}
+.h2 span{font-weight:400;color:var(--faint);font-size:12px}
+.prose p{margin:12px 0;max-width:66ch}
+.prose b{color:var(--strong);font-weight:500}
+.summary{font-size:15.5px;line-height:1.65;color:var(--text);max-width:64ch}
+.summary b{color:var(--strong);font-weight:500}
+.ic{font:12px var(--mono);color:var(--strong);background:var(--sunk);border:1px solid var(--line);border-radius:4px;padding:1px 5px}
+
+/* filters as quiet text toggles */
+.filters{display:flex;flex-wrap:wrap;gap:4px;margin-top:16px}
+.flt{height:28px;padding:0 10px;border-radius:6px;font-size:12.5px;color:var(--muted);display:inline-flex;align-items:center;gap:7px}
+.flt:hover{color:var(--strong);background:var(--hover)}
+.flt[aria-pressed="true"]{color:var(--strong);background:var(--raised);box-shadow:inset 0 0 0 1px var(--line-2)}
+.flt .n{font:11px var(--mono);color:var(--faint)}
+
+/* ---------- Diff entries (code-review idiom) ---------- */
+.entries{list-style:none}
+.entry{display:grid;grid-template-columns:22px minmax(0,1fr) auto;gap:0 14px;padding:14px 12px;margin:0 -12px;border-bottom:1px solid var(--line);border-radius:0;cursor:default}
+.entry:hover{background:var(--hover)}
+.entry.sel{background:var(--sel)}
+.g{font:500 14px/1.45 var(--mono);text-align:center}
+.g-changed{color:var(--chg)} .g-onlyA{color:var(--del)} .g-onlyB{color:var(--add)} .g-same{color:var(--faint)} .g-sugg{color:var(--accent)}
+.e-head{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.e-name{font-weight:500;color:var(--strong)}
+.e-kind{font-size:12px;color:var(--muted)}
+.e-tag{font:11px var(--mono);color:var(--muted);border:1px solid var(--line-2);border-radius:4px;padding:0 5px}
+.e-tag.verified{color:var(--add);border-color:color-mix(in srgb,var(--add) 40%,transparent)}
+.e-tag.flagged{color:var(--chg);border-color:color-mix(in srgb,var(--chg) 40%,transparent)}
+.e-tag.deferred{color:var(--accent-ink);border-color:color-mix(in srgb,var(--accent) 40%,transparent)}
+.e-sum{font-size:13px;color:var(--text);margin-top:3px}
+.e-sum .from{color:var(--del);text-decoration:line-through;text-decoration-thickness:1px;opacity:.9}
+.e-sum .to{color:var(--strong)}
+.e-sum .nd{color:var(--muted);font-style:italic}
+.seg{display:inline-flex;border:1px solid var(--line-2);border-radius:6px;overflow:hidden;height:26px;align-self:start}
+.seg button{padding:0 9px;font-size:12px;color:var(--muted);border-left:1px solid var(--line-2)}
+.seg button:first-child{border-left:0}
+.seg button:hover{color:var(--strong);background:var(--hover)}
+.seg button[aria-pressed="true"]{color:var(--strong);background:var(--raised)}
+.seg button[aria-pressed="true"].v{color:var(--add)}
+.seg button[aria-pressed="true"].f{color:var(--chg)}
+.seg button[aria-pressed="true"].d{color:var(--accent-ink)}
+.detail{grid-column:2 / 4;margin-top:14px;cursor:auto}
+.ftable{width:100%;border-collapse:collapse;font-size:12.5px}
+.ftable th{font-weight:500;color:var(--faint);text-align:left;padding:6px 10px 6px 0;border-bottom:1px solid var(--line);font-size:11.5px}
+.ftable td{padding:7px 10px 7px 0;border-bottom:1px solid var(--line);vertical-align:top}
+.ftable td:first-child{color:var(--muted);width:110px}
+.ftable tr.chg td:not(:first-child){color:var(--strong)}
+.ftable tr.chg td:nth-child(2){color:var(--del)}
+.nd{color:var(--muted);font-style:italic}
+.na{color:var(--faint)}
+.src{display:flex;gap:18px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-top:10px}
+.src b{font:500 11px var(--mono);color:var(--text);margin-right:5px}
+.note{width:100%;min-height:58px;margin-top:12px;background:var(--sunk);border:1px solid var(--line);border-radius:6px;padding:8px 10px;font-size:12.5px;resize:vertical;color:var(--strong)}
+.note:focus{outline:none;border-color:var(--line-2)}
+.hint{font-size:11.5px;color:var(--faint);margin:10px 0 2px;display:flex;gap:12px;flex-wrap:wrap}
+
+/* ---------- Generic controls ---------- */
+.btn{height:30px;padding:0 12px;border-radius:6px;font-size:12.5px;font-weight:500;color:var(--strong);border:1px solid var(--line-2);background:var(--raised);display:inline-flex;align-items:center;gap:7px;white-space:nowrap}
+.btn:hover{border-color:var(--muted)}
+.btn.primary{color:var(--accent-ink);border-color:color-mix(in srgb,var(--accent) 45%,transparent)}
+.btn.primary:hover{border-color:var(--accent)}
+.btn.quiet{background:transparent;border-color:transparent;color:var(--muted)}
+.btn.quiet:hover{color:var(--strong);background:var(--hover)}
+.btn[disabled]{opacity:.45;cursor:not-allowed}
+.bar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:6px 0 4px}
+.bar-l{font-size:12.5px;color:var(--muted);display:flex;align-items:center;gap:8px}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.chip{height:26px;padding:0 10px;border-radius:13px;font-size:12px;color:var(--text);border:1px solid var(--line-2)}
+.chip:hover{color:var(--strong);border-color:var(--muted)}
+.conf{display:inline-flex;align-items:center;gap:8px;font:12px var(--mono);color:var(--text)}
+.conf i{display:block;width:48px;height:2px;background:var(--line-2);position:relative}
+.conf i::after{content:"";position:absolute;inset:0 auto 0 0;width:var(--w);background:var(--accent)}
+.empty{padding:28px 0;color:var(--muted);font-size:13.5px;border-bottom:1px solid var(--line)}
+.empty b{color:var(--strong);font-weight:500}
+
+/* rows for connections / audit / eval */
+.rows{list-style:none}
+.row{display:grid;gap:0 14px;align-items:center;padding:12px 0;border-bottom:1px solid var(--line);font-size:13px}
+.row.conn{grid-template-columns:12px minmax(0,1fr) auto}
+.row .r-name{color:var(--strong);font-weight:500}
+.row .r-sub{font-size:12px;color:var(--muted);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.row .r-acts{display:flex;gap:4px;align-items:center}
+.row.audit{grid-template-columns:82px 96px minmax(0,1fr) minmax(0,.8fr);font-size:12.5px}
+.row.eval{grid-template-columns:minmax(0,1.6fr) repeat(4,minmax(0,.6fr));font-size:12.5px}
+.row.head{color:var(--faint);font-size:11.5px;padding:8px 0}
+.active-tag{font:11px var(--mono);color:var(--accent-ink);margin-left:8px;font-weight:400}
+
+/* form */
+.form{display:grid;grid-template-columns:1fr 1fr;gap:16px 18px;margin-top:16px}
+.field{display:flex;flex-direction:column;gap:6px}
+.field.full{grid-column:1 / -1}
+.field label{font-size:12px;color:var(--muted)}
+.field input,.field select,.field textarea{height:32px;background:var(--sunk);border:1px solid var(--line-2);border-radius:6px;padding:0 10px;font-size:13px;color:var(--strong)}
+.field textarea{height:auto;min-height:84px;padding:8px 10px;font:12px/1.5 var(--mono);resize:vertical}
+.field input:focus,.field select:focus,.field textarea:focus{outline:none;border-color:var(--accent)}
+.field .help{font-size:11.5px;color:var(--faint)}
+.err{color:var(--del);font-size:12px}
+pre.code{background:var(--sunk);border:1px solid var(--line);border-radius:6px;padding:14px 16px;font:12px/1.6 var(--mono);color:var(--text);overflow:auto;max-height:420px;margin-top:12px}
+pre.code .k{color:var(--accent-ink)} pre.code .c{color:var(--faint)}
+.snap{width:100%;border-collapse:collapse;font-size:12.5px;margin-top:6px}
+.snap th{text-align:left;font-weight:500;color:var(--faint);font-size:11.5px;padding:7px 10px 7px 0;border-bottom:1px solid var(--line)}
+.snap td{padding:8px 10px 8px 0;border-bottom:1px solid var(--line)}
+.snap td:first-child{color:var(--strong)}
+
+/* ---------- Right rail ---------- */
+.rail-r{border-left:1px solid var(--line);overflow-y:auto;padding:40px 20px 24px}
+.rr-h{font:500 11px var(--sans);color:var(--faint);letter-spacing:.06em;text-transform:uppercase;margin-bottom:10px}
+.toc{display:flex;flex-direction:column;margin-bottom:30px}
+.toc button{text-align:left;font-size:12.5px;color:var(--muted);padding:4px 0 4px 12px;border-left:1px solid var(--line)}
+.toc button:hover{color:var(--strong)}
+.toc button.on{color:var(--strong);border-left:1px solid var(--accent)}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:7px 12px;font-size:12px;margin-bottom:28px}
+.kv dt{color:var(--faint)}
+.kv dd{color:var(--text);text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cx{display:flex;flex-direction:column;gap:9px;margin-bottom:28px}
+.cx button{display:grid;grid-template-columns:10px 1fr auto;gap:8px;align-items:center;font-size:12px;text-align:left;color:var(--text)}
+.cx button:hover .cx-n{color:var(--strong)}
+.cx-n{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cx small{font:11px var(--mono);color:var(--faint)}
+.disclaimer{font-size:11.5px;line-height:1.5;color:var(--faint);border-top:1px solid var(--line);padding-top:14px}
+
+/* ---------- Command palette & toast ---------- */
+.cmd{position:fixed;inset:0;background:rgba(5,6,8,.55);display:none;justify-content:center;align-items:flex-start;padding-top:14vh;z-index:60}
+.cmd.open{display:flex}
+.cmd-box{width:560px;max-width:92vw;background:var(--raised);border:1px solid var(--line-2);border-radius:10px;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.45)}
+.cmd-in{width:100%;height:48px;background:transparent;border:0;border-bottom:1px solid var(--line);padding:0 16px;font-size:14.5px;color:var(--strong)}
+.cmd-in:focus{outline:none}
+.cmd-list{max-height:320px;overflow-y:auto;padding:6px}
+.cmd-it{width:100%;display:flex;justify-content:space-between;align-items:center;height:34px;padding:0 10px;border-radius:6px;font-size:13px;color:var(--text);text-align:left}
+.cmd-it small{font-size:11px;color:var(--faint)}
+.cmd-it.on{background:var(--sel);color:var(--strong)}
+.toast{position:fixed;left:50%;bottom:22px;transform:translate(-50%,12px);background:var(--raised);border:1px solid var(--line-2);color:var(--strong);font-size:12.5px;padding:8px 14px;border-radius:8px;opacity:0;pointer-events:none;transition:opacity .16s,transform .16s;z-index:70}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+
+@media (max-width:1180px){.frame{grid-template-columns:232px minmax(0,1fr)}.rail-r{display:none}}
+@media (max-width:780px){.frame{grid-template-columns:1fr}.rail-l{display:none}.col{padding:28px 18px 80px}.form{grid-template-columns:1fr}.entry{grid-template-columns:22px 1fr}.entry .seg{grid-column:2;margin-top:10px}.crumbs{display:none}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}.canvas{scroll-behavior:auto}}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="top-l">
+    <div class="wordmark">Clinical Diff<span>Veritas</span></div>
+    <div class="crumbs" id="crumbs"></div>
+  </div>
+  <div class="top-r">
+    <button class="ghost" id="health" data-action="nav" data-value="models" title="Connection health"></button>
+    <div class="menu-wrap">
+      <button class="ghost" id="pal-btn" data-action="pal-toggle" aria-haspopup="menu" aria-expanded="false">Palette</button>
+      <div class="menu" id="pal-menu" role="menu" aria-label="Palette"></div>
+    </div>
+    <button class="ghost" data-action="cmd-open" aria-label="Open command menu"><kbd>Ctrl</kbd><kbd>K</kbd></button>
+  </div>
+</header>
+
+<div class="frame">
+  <aside class="rail-l" aria-label="Navigation">
+    <input class="search" id="rail-search" type="search" placeholder="Filter…" aria-label="Filter navigation" />
+    <div class="grp">
+      <div class="grp-h">Patients · synthetic</div>
+      <div id="patient-list"></div>
+    </div>
+    <div class="grp">
+      <div class="grp-h">Workspace</div>
+      <button class="item" data-action="nav" data-value="diff" data-nav="diff">Medication diff <small id="nav-diff-n"></small></button>
+      <button class="item" data-action="nav" data-value="triage" data-nav="triage">AI triage <small id="nav-tri-n"></small></button>
+      <button class="item" data-action="nav" data-value="eval" data-nav="eval">Evaluations <small>held-out</small></button>
+      <button class="item" data-action="nav" data-value="audit" data-nav="audit">Audit log <small id="nav-aud-n"></small></button>
+    </div>
+    <div class="grp">
+      <div class="grp-h">System</div>
+      <button class="item" data-action="nav" data-value="models" data-nav="models">Models &amp; data <small id="nav-con-n"></small></button>
+    </div>
+    <div class="rail-foot">Fictional data only. Not a medical device. Differences describe documentation, not clinical intent.</div>
+  </aside>
+
+  <main class="canvas" id="canvas"><div class="col" id="view"></div></main>
+
+  <aside class="rail-r" id="rail-r" aria-label="Page outline and context"></aside>
+</div>
+
+<div class="cmd" id="cmd" role="dialog" aria-label="Command menu">
+  <div class="cmd-box">
+    <input class="cmd-in" id="cmd-in" placeholder="Go to a page, patient, palette, or action…" aria-label="Command" />
+    <div class="cmd-list" id="cmd-list" role="listbox"></div>
+  </div>
+</div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+"use strict";
+/* ================================================================
+   Utilities
+   ================================================================ */
+const $ = (s, r = document) => r.querySelector(s);
+const esc = v => String(v ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+let booted = false;
+const now = () => new Date().toISOString();
+const uid = p => p + "-" + Math.random().toString(36).slice(2, 8);
+let toastTimer;
+function toast(msg) {
+  const t = $("#toast"); t.textContent = msg; t.classList.add("show");
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove("show"), 2400);
+}
+
+/* ================================================================
+   Palettes
+   ================================================================ */
+const PALETTES = [
+  { id: "dimmed", name: "Dark Dimmed", rec: true, note: "Soft slate, lowest glare. Best for long review sessions.", sw: ["#1c2128", "#22272e", "#adbac7", "#6cb6ff"] },
+  { id: "void", name: "Linear Void", note: "Near-black and quiet. Highest focus, slightly more contrast.", sw: ["#0e0f11", "#151619", "#b4b8c2", "#9aa4ff"] },
+  { id: "obsidian", name: "Primer Obsidian", note: "Neutral carbon with a clinical cyan signal.", sw: ["#131517", "#191c1f", "#c2c9d0", "#56c8d0"] },
+  { id: "forest", name: "Nordic Forest", note: "Green-grey and warm. Gentlest on tired eyes.", sw: ["#141a17", "#1a221e", "#bccac1", "#8fcfa8"] }
+];
+
+/* ================================================================
+   Synthetic fixtures (fictional people, fictional records)
+   ================================================================ */
+const PATIENTS = {
+  morgan: {
+    name: "Morgan Lee", born: "1961",
+    a: { label: "Outpatient medication list", date: "2026-10-01", meds: [
+      { id: "lisinopril", name: "Lisinopril", dose: "10 mg", route: "Oral", frequency: "Once daily" },
+      { id: "metformin", name: "Metformin", dose: "500 mg", route: "Oral", frequency: "Twice daily" },
+      { id: "atorvastatin", name: "Atorvastatin", dose: "20 mg", route: "Oral", frequency: "Nightly" },
+      { id: "aspirin", name: "Aspirin", dose: "81 mg", route: "Oral", frequency: "Once daily" }
+    ] },
+    b: { label: "Discharge summary", date: "2026-11-10", meds: [
+      { id: "lisinopril", name: "Lisinopril", dose: "20 mg", route: "Oral", frequency: "Once daily" },
+      { id: "metformin", name: "Metformin", dose: "500 mg", route: "Oral", frequency: "Twice daily" },
+      { id: "aspirin", name: "Aspirin", dose: "81 mg", route: "Oral", frequency: null }
+    ] }
+  },
+  elena: {
+    name: "Elena Rostova", born: "1978",
+    a: { label: "Primary care list", date: "2026-09-14", meds: [
+      { id: "levothyroxine", name: "Levothyroxine", dose: "50 mcg", route: "Oral", frequency: "Once daily" },
+      { id: "vitd", name: "Cholecalciferol (Vitamin D3)", dose: "1000 IU", route: "Oral", frequency: "Once daily" }
+    ] },
+    b: { label: "Urgent care note", date: "2026-11-02", meds: [
+      { id: "levothyroxine", name: "Levothyroxine", dose: "75 mcg", route: "Oral", frequency: "Once daily" },
+      { id: "vitd", name: "Cholecalciferol (Vitamin D3)", dose: "1000 IU", route: "Oral", frequency: "Once daily" },
+      { id: "omeprazole", name: "Omeprazole", dose: "20 mg", route: "Oral", frequency: "Once daily" }
+    ] }
+  },
+  marcus: {
+    name: "Marcus Vance", born: "1954",
+    a: { label: "Cardiology clinic", date: "2026-08-30", meds: [
+      { id: "amlodipine", name: "Amlodipine", dose: "5 mg", route: "Oral", frequency: "Once daily" },
+      { id: "furosemide", name: "Furosemide", dose: "20 mg", route: "Oral", frequency: "Once daily" },
+      { id: "apixaban", name: "Apixaban", dose: "5 mg", route: "Oral", frequency: "Twice daily" }
+    ] },
+    b: { label: "Pharmacy fill history", date: "2026-11-05", meds: [
+      { id: "amlodipine", name: "Amlodipine", dose: "5 mg", route: "Oral", frequency: "Once daily" },
+      { id: "furosemide", name: "Furosemide", dose: "40 mg", route: "Oral", frequency: "Once daily" },
+      { id: "apixaban", name: "Apixaban", dose: "5 mg", route: null, frequency: "Twice daily" }
+    ] }
+  }
+};
+
+/* Held-out synthetic cases with gold labels, never shown in the workspace */
+const HELDOUT = [
+  { a: [{ id: "x", dose: "10 mg", route: "Oral", frequency: "Daily" }, { id: "y", dose: "1 g", route: "Oral", frequency: "BID" }],
+    b: [{ id: "x", dose: "10 mg", route: "Oral", frequency: "Daily" }], gold: { x: "same", y: "onlyA" } },
+  { a: [{ id: "p", dose: "5 mg", route: "Oral", frequency: "Daily" }],
+    b: [{ id: "p", dose: "5 mg", route: "Oral", frequency: null }, { id: "q", dose: "2 mg", route: "Oral", frequency: "Nightly" }], gold: { p: "changed", q: "onlyB" } },
+  { a: [{ id: "m", dose: "25 mcg", route: "Oral", frequency: "Daily" }, { id: "n", dose: "40 mg", route: "IV", frequency: "Q12H" }],
+    b: [{ id: "m", dose: "50 mcg", route: "Oral", frequency: "Daily" }, { id: "n", dose: "40 mg", route: "IV", frequency: "Q12H" }], gold: { m: "changed", n: "same" } }
+];
+
+/* ================================================================
+   Deterministic comparison engine
+   Identity comes from fixture-supplied IDs only; nothing is inferred.
+   ================================================================ */
+const FIELDS = [["dose", "Dose"], ["route", "Route"], ["frequency", "Frequency"]];
+const KIND = {
+  changed: { glyph: "~", label: "Changed" },
+  onlyA: { glyph: "−", label: "Only in A" },
+  onlyB: { glyph: "+", label: "Only in B" },
+  same: { glyph: "=", label: "Unchanged" }
+};
+const norm = v => (v === undefined || v === null || v === "") ? null : v;
+function compare(aMeds, bMeds) {
+  const ids = [...new Set([...aMeds.map(m => m.id), ...bMeds.map(m => m.id)])];
+  return ids.map(id => {
+    const x = aMeds.find(m => m.id === id), y = bMeds.find(m => m.id === id);
+    const fields = FIELDS.map(([k, label]) => {
+      const a = x ? norm(x[k]) : undefined, b = y ? norm(y[k]) : undefined;
+      return { key: k, label, a, b, changed: !!(x && y) && a !== b };
+    });
+    const kind = x && !y ? "onlyA" : !x && y ? "onlyB" : fields.some(f => f.changed) ? "changed" : "same";
+    return { id, name: (x || y).name || id, kind, fields, x, y };
+  });
+}
+const showVal = v => v === undefined ? '<span class="na">Not in snapshot</span>' : v === null ? '<span class="nd">Not documented</span>' : esc(v);
+
+/* ================================================================
+   Open integration layer
+   Drivers describe how to talk to a backend. Connections are
+   configured instances. Anything can register a driver at runtime:
+     window.ClinicalDiff.registerDriver({ id, kind, label, health, load | infer })
+   ================================================================ */
+const Drivers = {};
+function registerDriver(d) {
+  if (!d || !d.id || !["db", "model"].includes(d.kind)) throw new Error("Driver needs id and kind 'db' | 'model'");
+  Drivers[d.id] = { defaultEndpoint: "", ...d };
+  if (booted) render();
+  return Drivers[d.id];
+}
+async function simulatedHealth(conn) {
+  await sleep(220 + Math.random() * 380);
+  if (!conn.endpoint) return { state: "error", detail: "No endpoint configured" };
+  if (/fail|refuse|error/i.test(conn.endpoint)) return { state: "error", detail: "Connection refused (simulated)" };
+  const latency = 18 + Math.round(Math.random() * 170);
+  return { state: latency > 150 ? "degraded" : "ok", latency, detail: "Simulated handshake. Wire a server route to make this live." };
+}
+
+function heuristicInfer({ item, patient }) {
+  const p = patient, src = [`A · ${p.a.label} · ${p.a.date}`, `B · ${p.b.label} · ${p.b.date}`];
+  const name = item.name;
+  if (item.kind === "onlyA") return { proposal: `Confirm whether ${name} is still being taken`, rationale: `${name} is listed in Snapshot A but does not appear in Snapshot B. Absence from a snapshot is not evidence it was stopped.`, confidence: 0.71, evidence: src };
+  if (item.kind === "onlyB") return { proposal: `Confirm the origin of ${name}`, rationale: `${name} first appears in Snapshot B (${p.b.label}). Check whether it was newly started or previously undocumented.`, confidence: 0.8, evidence: src };
+  const missing = item.fields.find(f => f.changed && f.b === null);
+  if (missing) return { proposal: `Request the missing ${missing.label.toLowerCase()} for ${name}`, rationale: `Snapshot B does not document ${missing.label.toLowerCase()}. Snapshot A records “${missing.a}”. Missing is not the same as changed.`, confidence: 0.83, evidence: src };
+  const f = item.fields.find(f => f.changed);
+  return { proposal: `Confirm the ${f.label.toLowerCase()} change for ${name}: ${f.a} → ${f.b}`, rationale: `The two sources record different ${f.label.toLowerCase()}s. The diff cannot tell whether this was intended, a titration, or a transcription error.`, confidence: 0.9, evidence: src };
+}
+
+/* Built-in and placeholder drivers */
+registerDriver({ id: "fixtures", kind: "db", label: "Synthetic fixtures", builtin: true, defaultEndpoint: "fixtures://veritas/v1",
+  async health() { await sleep(120); return { state: "ok", latency: 1, detail: "In-memory, read-only" }; },
+  async load(pid) { return PATIENTS[pid]; } });
+registerDriver({ id: "postgres-fhir", kind: "db", label: "PostgreSQL · FHIR R4", defaultEndpoint: "postgres://localhost:5432/fhir" });
+registerDriver({ id: "supabase", kind: "db", label: "Supabase", defaultEndpoint: "https://<project>.supabase.co" });
+registerDriver({ id: "sqlite", kind: "db", label: "SQLite (local)", defaultEndpoint: "file:./veritas.db" });
+registerDriver({ id: "fhir-rest", kind: "db", label: "FHIR REST server", defaultEndpoint: "https://hapi.fhir.org/baseR4" });
+registerDriver({ id: "graphql", kind: "db", label: "GraphQL endpoint", defaultEndpoint: "https://api.example.com/graphql" });
+registerDriver({ id: "heuristic", kind: "model", label: "Rule-based baseline", builtin: true, defaultEndpoint: "local://rules",
+  async health() { await sleep(100); return { state: "ok", latency: 2, detail: "Deterministic rules, no network" }; },
+  async infer(input) { await sleep(90); return heuristicInfer(input); } });
+registerDriver({ id: "ollama", kind: "model", label: "Ollama (local LLM)", defaultEndpoint: "http://localhost:11434", defaultModel: "medgemma:4b" });
+registerDriver({ id: "openai-compatible", kind: "model", label: "OpenAI-compatible API", defaultEndpoint: "http://localhost:8000/v1", defaultModel: "served-model" });
+registerDriver({ id: "hf-inference", kind: "model", label: "Hugging Face Inference", defaultEndpoint: "https://api-inference.huggingface.co", defaultModel: "emilyalsentzer/Bio_ClinicalBERT" });
+
+const S = {
+  view: "diff", tabs: { diff: "diff", models: "connections" },
+  patient: "morgan", filter: "all", selected: null,
+  reviews: {}, notes: {}, triage: {}, triageBusy: false,
+  evalRun: null, auditFilter: "all", palette: "dimmed",
+  conns: [], connLog: [], audit: [], formError: "", addKind: "db"
+};
+try { const p = localStorage.getItem("cd-palette"); if (PALETTES.some(x => x.id === p)) S.palette = p; } catch (e) {}
+
+function connect(cfg) {
+  const d = Drivers[cfg.driver];
+  if (!d) throw new Error("Unknown driver " + cfg.driver);
+  const c = { id: uid("conn"), kind: d.kind, driver: d.id, name: cfg.name || d.label, endpoint: cfg.endpoint ?? d.defaultEndpoint, model: cfg.model || d.defaultModel || "", config: cfg.config || {}, state: "idle", latency: null, detail: "Not tested yet", checkedAt: null, active: !!cfg.active };
+  if (c.active) S.conns.forEach(o => { if (o.kind === c.kind) o.active = false; });
+  S.conns.push(c);
+  logConn(`Registered ${c.name}`, c.kind);
+  return c;
+}
+async function testConn(id, quiet) {
+  const c = S.conns.find(x => x.id === id); if (!c) return;
+  const d = Drivers[c.driver];
+  c.state = "checking"; if (!quiet) render();
+  let r;
+  try { r = d.health ? await d.health(c) : await simulatedHealth(c); }
+  catch (e) { r = { state: "error", detail: e.message }; }
+  Object.assign(c, { state: r.state, latency: r.latency ?? null, detail: r.detail || "", checkedAt: now() });
+  if (!quiet) logConn(`${c.name}: ${r.state}${r.latency != null ? " · " + r.latency + " ms" : ""}`, c.kind);
+  render();
+  return c;
+}
+function setActive(id) {
+  const c = S.conns.find(x => x.id === id); if (!c) return;
+  S.conns.forEach(o => { if (o.kind === c.kind) o.active = o.id === id; });
+  logConn(`Active ${c.kind === "db" ? "database" : "model"} → ${c.name}`, c.kind);
+  addAudit("Connector", `Set active ${c.kind === "db" ? "database" : "model"}`, c.name);
+  if (c.state === "idle") testConn(id);
+}
+function removeConn(id) {
+  const c = S.conns.find(x => x.id === id); if (!c) return;
+  if (c.active) { toast("Switch the active connection before removing it"); return; }
+  S.conns = S.conns.filter(x => x.id !== id);
+  logConn(`Removed ${c.name}`, c.kind); addAudit("Connector", "Removed connection", c.name);
+}
+const activeConn = kind => S.conns.find(c => c.kind === kind && c.active);
+function logConn(msg, kind) { S.connLog.unshift({ ts: now(), msg, kind }); S.connLog = S.connLog.slice(0, 40); }
+
+window.ClinicalDiff = {
+  registerDriver, connect: cfg => { const c = connect(cfg); render(); testConn(c.id); return c; },
+  test: testConn, setActive: id => { setActive(id); render(); },
+  connections: () => S.conns.map(c => ({ ...c })), drivers: () => Object.values(Drivers).map(d => ({ id: d.id, kind: d.kind, label: d.label })),
+  compare
+};
+
+/* seed connections */
+connect({ driver: "fixtures", name: "Synthetic fixtures", active: true });
+connect({ driver: "postgres-fhir", name: "FHIR R4 staging" });
+connect({ driver: "heuristic", name: "Rule-based baseline", active: true });
+connect({ driver: "ollama", name: "MedGemma 4B · Ollama" });
+
+/* ================================================================
+   Audit
+   ================================================================ */
+function addAudit(actor, action, target) { S.audit.unshift({ ts: now(), actor, action, target: String(target) }); }
+addAudit("System", "Session started", "synthetic fixtures");
+
+/* ================================================================
+   Derived state
+   ================================================================ */
+const P = () => PATIENTS[S.patient];
+const diffFor = pid => compare(PATIENTS[pid].a.meds, PATIENTS[pid].b.meds);
+const rk = id => S.patient + ":" + id;
+function pendingCount(pid) { return diffFor(pid).filter(r => r.kind !== "same" && !S.reviews[pid + ":" + r.id]).length; }
+
+/* ================================================================
+   View helpers
+   ================================================================ */
+function head(eyebrow, title, lede) {
+  return `<div class="eyebrow">${esc(eyebrow)}</div><h1 class="h1">${esc(title)}</h1>${lede ? `<p class="lede">${lede}</p>` : ""}`;
+}
+function tabs(group, list) {
+  return `<div class="tabs" role="tablist">${list.map(([id, label]) => `<button class="tab" role="tab" aria-selected="${S.tabs[group] === id}" data-action="tab" data-group="${group}" data-value="${id}">${esc(label)}</button>`).join("")}</div>`;
+}
+function summaryLine(r) {
+  if (r.kind === "changed") return r.fields.filter(f => f.changed).map(f => `${f.label} <span class="from">${esc(f.a ?? "")}</span> → ${f.b === null ? '<span class="nd">Not documented</span>' : `<span class="to">${esc(f.b)}</span>`}`).join(" &nbsp;·&nbsp; ");
+  const m = r.x || r.y;
+  const desc = [m.dose, m.route, m.frequency].map(v => v == null ? "not documented" : v).join(" · ");
+  if (r.kind === "onlyA") return `${esc(desc)}. Not in Snapshot B, which is not assumed to mean stopped.`;
+  if (r.kind === "onlyB") return `${esc(desc)}. Not in Snapshot A.`;
+  return `${esc(desc)}, identical in both.`;
+}
+
+/* ================================================================
+   Views
+   ================================================================ */
+const VIEWS = {};
+const OUTLINE = {};
+
+VIEWS.diff = () => {
+  const p = P(), rows = diffFor(S.patient), tab = S.tabs.diff;
+  const c = k => rows.filter(r => r.kind === k).length;
+  const diffs = rows.filter(r => r.kind !== "same");
+  const reviewed = diffs.filter(r => S.reviews[rk(r.id)]).length;
+  let body = "";
+  if (tab === "diff") {
+    const shown = rows.filter(r => S.filter === "all" || r.kind === S.filter);
+    const f = (id, label, n) => `<button class="flt" aria-pressed="${S.filter === id}" data-action="filter" data-value="${id}">${label}<span class="n">${n}</span></button>`;
+    body = `
+      <section class="sec" id="o-summary">
+        <p class="summary">${esc(p.name)} has <b>${rows.length}</b> medication statements across the two snapshots: <b>${c("changed")}</b> changed, <b>${c("onlyA")}</b> only in A, <b>${c("onlyB")}</b> only in B, and ${c("same")} unchanged. <b>${reviewed} of ${diffs.length}</b> differences reviewed.</p>
+        <div class="filters">${f("all", "All", rows.length)}${f("changed", "Changed", c("changed"))}${f("onlyA", "Only in A", c("onlyA"))}${f("onlyB", "Only in B", c("onlyB"))}${f("same", "Unchanged", c("same"))}</div>
+      </section>
+      <section class="sec" id="o-statements">
+        <h2 class="h2">Statements <span>A ${esc(p.a.date)} → B ${esc(p.b.date)}</span></h2>
+        <div class="hint"><span><kbd>J</kbd> <kbd>K</kbd> move</span><span><kbd>V</kbd> verify</span><span><kbd>F</kbd> flag</span><span><kbd>D</kbd> defer</span><span><kbd>Esc</kbd> collapse</span></div>
+        <ol class="entries">${shown.length ? shown.map(entryHtml).join("") : `<li class="empty">Nothing matches this filter.</li>`}</ol>
+      </section>`;
+    OUTLINE.diff = [["o-summary", "Summary"], ["o-statements", "Statements"]];
+  } else if (tab === "snapshots") {
+    const tbl = (s, id, letter) => `<section class="sec" id="${id}"><h2 class="h2">Snapshot ${letter} · ${esc(s.label)} <span>${esc(s.date)}</span></h2>
+      <table class="snap"><thead><tr><th>Medication</th><th>Dose</th><th>Route</th><th>Frequency</th><th>ID</th></tr></thead><tbody>
+      ${s.meds.map(m => `<tr><td>${esc(m.name)}</td><td>${showVal(norm(m.dose))}</td><td>${showVal(norm(m.route))}</td><td>${showVal(norm(m.frequency))}</td><td class="mono" style="color:var(--faint)">${esc(m.id)}</td></tr>`).join("")}
+      </tbody></table></section>`;
+    body = tbl(p.a, "o-snapA", "A") + tbl(p.b, "o-snapB", "B");
+    OUTLINE.diff = [["o-snapA", "Snapshot A"], ["o-snapB", "Snapshot B"]];
+  } else {
+    body = `<div class="prose">
+      <section class="sec" id="o-scope"><h2 class="h2">Scope</h2>
+        <p>Clinical Diff compares two medication snapshots for one person and shows where the documentation differs. It is a retrospective review aid built on <b>fictional records</b>. It is not a prescribing tool, a medical device, or a complete audit trail.</p></section>
+      <section class="sec" id="o-rules"><h2 class="h2">Comparison rules</h2>
+        <p>Statements are matched by the IDs supplied in each record. Nothing is matched by name similarity or inferred.</p>
+        <p>A field that is empty is shown as <span class="nd">Not documented</span>. A medication that does not appear at all is shown as <span class="na">Not in snapshot</span>. Neither is treated as discontinued.</p>
+        <p>Source labels and recorded dates are kept as they appear. A difference does not establish an error, an authorisation, the timing of a change, or harm.</p></section>
+      <section class="sec" id="o-limits"><h2 class="h2">Limits</h2>
+        <p>Review decisions are held in this browser session only and reset on reload. No clinician has validated the fixtures or the wording. Model suggestions from placeholder connectors are labelled as simulated.</p></section>
+    </div>`;
+    OUTLINE.diff = [["o-scope", "Scope"], ["o-rules", "Comparison rules"], ["o-limits", "Limits"]];
+  }
+  return head(`Medication reconciliation · ${p.name}`, "What changed between the two snapshots",
+    `Comparing <b style="color:var(--text);font-weight:500">${esc(p.a.label)}</b> (${esc(p.a.date)}) with <b style="color:var(--text);font-weight:500">${esc(p.b.label)}</b> (${esc(p.b.date)}).`) +
+    tabs("diff", [["diff", "Diff"], ["snapshots", "Snapshots"], ["method", "Method & limits"]]) + body;
+};
+
+function entryHtml(r) {
+  const sel = S.selected === r.id, rev = S.reviews[rk(r.id)];
+  const reviewable = r.kind !== "same";
+  const seg = reviewable ? `<div class="seg" role="group" aria-label="Review ${esc(r.name)}">
+      <button class="v" aria-pressed="${rev === "verified"}" data-action="review" data-id="${r.id}" data-value="verified">Verify</button>
+      <button class="f" aria-pressed="${rev === "flagged"}" data-action="review" data-id="${r.id}" data-value="flagged">Flag</button>
+      <button class="d" aria-pressed="${rev === "deferred"}" data-action="review" data-id="${r.id}" data-value="deferred">Defer</button></div>` : `<span></span>`;
+  const p = P();
+  const detail = sel ? `<div class="detail">
+      <table class="ftable"><thead><tr><th>Field</th><th>Snapshot A</th><th>Snapshot B</th></tr></thead><tbody>
+      ${r.fields.map(f => `<tr class="${f.changed ? "chg" : ""}"><td>${f.label}</td><td>${showVal(f.a)}</td><td>${showVal(f.b)}</td></tr>`).join("")}
+      </tbody></table>
+      <div class="src"><span><b>A</b>${esc(p.a.label)} · ${esc(p.a.date)}</span><span><b>B</b>${esc(p.b.label)} · ${esc(p.b.date)}</span><span><b>ID</b>${esc(r.id)}</span></div>
+      <textarea class="note" data-note="${r.id}" placeholder="Reviewer note (stays in this session)">${esc(S.notes[rk(r.id)] || "")}</textarea>
+    </div>` : "";
+  return `<li class="entry ${sel ? "sel" : ""}" data-action="select" data-value="${r.id}" tabindex="0" aria-expanded="${sel}">
+    <span class="g g-${r.kind}" aria-label="${KIND[r.kind].label}">${KIND[r.kind].glyph}</span>
+    <div><div class="e-head"><span class="e-name">${esc(r.name)}</span><span class="e-kind">${KIND[r.kind].label}</span>${rev ? `<span class="e-tag ${rev}">${rev}</span>` : ""}</div>
+    <div class="e-sum">${summaryLine(r)}</div></div>
+    ${seg}${detail}</li>`;
+}
+
+VIEWS.triage = () => {
+  const p = P(), m = activeConn("model"), list = S.triage[S.patient] || [];
+  const pending = list.filter(s => !s.decision || s.decision === "override-pending").length;
+  const simulated = m && !Drivers[m.driver].infer;
+  OUTLINE.triage = [["o-model", "Model"], ["o-queue", "Queue"]];
+  return head(`AI triage · ${p.name}`, "Suggestions waiting for a clinician",
+    "The active model reads each difference and proposes what to check. Nothing is applied until a person accepts it.") + `
+    <section class="sec" id="o-model" style="margin-top:28px">
+      <h2 class="h2">Model</h2>
+      <div class="bar" style="padding:12px 0;border-bottom:1px solid var(--line)">
+        <div class="bar-l">${m ? `<span class="dot ${m.state}"></span><span style="color:var(--strong)">${esc(m.name)}</span><span class="mono" style="font-size:11.5px">${esc(Drivers[m.driver].label)}${simulated ? " · simulated" : ""}</span>` : "No model connected"}</div>
+        <div style="display:flex;gap:6px"><button class="btn quiet" data-action="nav" data-value="models">Change</button>
+        <button class="btn primary" data-action="triage-run" ${!m || S.triageBusy ? "disabled" : ""}>${S.triageBusy ? "Running…" : list.length ? "Re-run triage" : "Run triage"}</button></div>
+      </div>
+    </section>
+    <section class="sec" id="o-queue">
+      <h2 class="h2">Queue <span>${list.length ? `${pending} open of ${list.length}` : ""}</span></h2>
+      ${list.length ? `<ol class="entries">${list.map(triageHtml).join("")}</ol>` : `<div class="empty"><b>No suggestions yet.</b> Run triage to send ${diffFor(S.patient).filter(r => r.kind !== "same").length} differences to the active model.</div>`}
+    </section>`;
+};
+function triageHtml(s) {
+  const dec = s.decision;
+  const tag = dec === "accepted" ? `<span class="e-tag verified">accepted</span>` : dec === "overridden" ? `<span class="e-tag flagged">overridden · ${esc(s.reason)}</span>` : dec === "skipped" ? `<span class="e-tag">skipped</span>` : "";
+  return `<li class="entry">
+    <span class="g g-sugg">?</span>
+    <div><div class="e-head"><span class="e-name">${esc(s.proposal)}</span>${tag}</div>
+      <div class="e-sum" style="color:var(--muted)">${esc(s.rationale)}</div>
+      <div class="src"><span class="conf" style="--w:${Math.round(s.confidence * 100)}%">${s.confidence.toFixed(2)} <i></i></span>${s.evidence.map(e => `<span>${esc(e)}</span>`).join("")}<span class="mono">${esc(s.model)}${s.simulated ? " · simulated" : ""}</span></div>
+      ${dec === "override-pending" ? `<div class="chips">${["Patient-reported change", "Documentation error", "Intentional per prescriber", "Needs pharmacist review"].map(r => `<button class="chip" data-action="triage-reason" data-id="${s.id}" data-value="${esc(r)}">${esc(r)}</button>`).join("")}</div>` : ""}
+    </div>
+    <div class="seg" role="group" aria-label="Decide">
+      <button class="v" aria-pressed="${dec === "accepted"}" data-action="triage-decide" data-id="${s.id}" data-value="accepted">Accept</button>
+      <button class="f" aria-pressed="${dec === "overridden" || dec === "override-pending"}" data-action="triage-decide" data-id="${s.id}" data-value="override-pending">Override</button>
+      <button aria-pressed="${dec === "skipped"}" data-action="triage-decide" data-id="${s.id}" data-value="skipped">Skip</button>
+    </div></li>`;
+}
+
+VIEWS.models = () => {
+  const tab = S.tabs.models;
+  let body = "";
+  if (tab === "connections") {
+    const list = kind => S.conns.filter(c => c.kind === kind).map(c => `<li class="row conn">
+        <span class="dot ${c.state}" title="${c.state}"></span>
+        <div style="min-width:0"><div class="r-name">${esc(c.name)}${c.active ? `<span class="active-tag">active</span>` : ""}</div>
+          <div class="r-sub"><span class="mono">${esc(Drivers[c.driver] ? Drivers[c.driver].label : c.driver)}</span> · <span class="mono">${esc(c.endpoint || "no endpoint")}</span>${c.model ? ` · <span class="mono">${esc(c.model)}</span>` : ""}</div>
+          <div class="r-sub">${esc(c.state === "checking" ? "Checking…" : c.detail)}${c.latency != null ? ` · ${c.latency} ms` : ""}${c.checkedAt ? ` · ${c.checkedAt.slice(11, 19)}Z` : ""}</div></div>
+        <div class="r-acts"><button class="btn quiet" data-action="conn-test" data-value="${c.id}">Test</button>
+          ${c.active ? "" : `<button class="btn quiet" data-action="conn-active" data-value="${c.id}">Use</button><button class="btn quiet" data-action="conn-remove" data-value="${c.id}" aria-label="Remove ${esc(c.name)}">Remove</button>`}</div></li>`).join("");
+    body = `
+      <div class="bar" style="margin-bottom:18px"><div class="bar-l">Live connections are re-checked every 20 seconds.</div>
+        <div style="display:flex;gap:6px"><button class="btn quiet" data-action="conn-testall">Test all</button><button class="btn primary" data-action="tab" data-group="models" data-value="add">New connection</button></div></div>
+      <section class="sec" id="o-db"><h2 class="h2">Databases <span>source of snapshots</span></h2><ul class="rows">${list("db")}</ul></section>
+      <section class="sec" id="o-ml"><h2 class="h2">Models <span>used by AI triage</span></h2><ul class="rows">${list("model")}</ul></section>
+      <section class="sec" id="o-log"><h2 class="h2">Connection events</h2><ul class="rows">${S.connLog.slice(0, 10).map(l => `<li class="row audit" style="grid-template-columns:82px 1fr"><span class="mono" style="color:var(--faint)">${l.ts.slice(11, 19)}Z</span><span>${esc(l.msg)}</span></li>`).join("")}</ul></section>`;
+    OUTLINE.models = [["o-db", "Databases"], ["o-ml", "Models"], ["o-log", "Connection events"]];
+  } else if (tab === "add") {
+    const drivers = Object.values(Drivers).filter(d => d.kind === S.addKind);
+    const d0 = drivers[0];
+    body = `<section class="sec" id="o-new"><h2 class="h2">New connection</h2>
+      <form id="add-form" class="form" autocomplete="off">
+        <div class="field"><label for="f-kind">Type</label><select id="f-kind" name="kind" data-change="add-kind"><option value="db" ${S.addKind === "db" ? "selected" : ""}>Database</option><option value="model" ${S.addKind === "model" ? "selected" : ""}>Model</option></select></div>
+        <div class="field"><label for="f-driver">Driver</label><select id="f-driver" name="driver" data-change="add-driver">${drivers.map(d => `<option value="${d.id}">${esc(d.label)}</option>`).join("")}</select></div>
+        <div class="field"><label for="f-name">Name</label><input id="f-name" name="name" placeholder="e.g. Hospital FHIR sandbox" /></div>
+        <div class="field"><label for="f-endpoint">Endpoint</label><input id="f-endpoint" name="endpoint" class="mono" value="${esc(d0 ? d0.defaultEndpoint : "")}" /></div>
+        ${S.addKind === "model" ? `<div class="field full"><label for="f-model">Model ID</label><input id="f-model" name="model" class="mono" value="${esc(d0 && d0.defaultModel || "")}" /></div>` : ""}
+        <div class="field full"><label for="f-config">Options (JSON)</label><textarea id="f-config" name="config">{\n  "timeoutMs": 8000\n}</textarea>
+          <span class="help">Do not paste secrets here. Credentials belong in server-side environment variables; this prototype stores nothing.</span></div>
+        <div class="field full" style="flex-direction:row;gap:8px;align-items:center">
+          <button class="btn primary" type="submit">Register &amp; test</button><button class="btn quiet" type="button" data-action="tab" data-group="models" data-value="connections">Cancel</button>
+          <span class="err">${esc(S.formError)}</span></div>
+      </form></section>
+      <section class="sec" id="o-hook"><h2 class="h2">Register a driver from code</h2>
+      <pre class="code"><span class="c">// Any script on the page can add a backend at runtime.</span>
+window.ClinicalDiff.registerDriver({
+  id: <span class="k">"my-fhir"</span>, kind: <span class="k">"db"</span>, label: <span class="k">"My FHIR server"</span>,
+  defaultEndpoint: <span class="k">"https://fhir.example.org/r4"</span>,
+  async health(conn) { <span class="c">/* ping, return { state, latency, detail } */</span> },
+  async load(patientId) { <span class="c">/* return { a, b } snapshots */</span> }
+});</pre></section>`;
+    OUTLINE.models = [["o-new", "New connection"], ["o-hook", "Register from code"]];
+  } else {
+    body = `<section class="sec" id="o-ts"><h2 class="h2">Interfaces <span>integrations/contracts.ts</span></h2>
+<pre class="code"><span class="k">export type</span> HealthState = "idle" | "checking" | "ok" | "degraded" | "error";
+
+<span class="k">export interface</span> Health { state: HealthState; latency?: number; detail?: string }
+
+<span class="k">export interface</span> Snapshot {
+  label: string;            <span class="c">// source label, kept verbatim</span>
+  date: string;             <span class="c">// recorded date, kept verbatim</span>
+  meds: MedicationStatement[];
+}
+<span class="k">export interface</span> MedicationStatement {
+  id: string;               <span class="c">// identity is supplied, never inferred</span>
+  name: string;
+  dose: string | null;      <span class="c">// null renders as "Not documented"</span>
+  route: string | null;
+  frequency: string | null;
+}
+
+<span class="k">export interface</span> DataAdapter {
+  id: string; kind: "db"; label: string; defaultEndpoint?: string;
+  health(conn: Connection): Promise&lt;Health&gt;;
+  load(patientId: string): Promise&lt;{ a: Snapshot; b: Snapshot }&gt;;
+}
+
+<span class="k">export interface</span> ModelAdapter {
+  id: string; kind: "model"; label: string; defaultEndpoint?: string; defaultModel?: string;
+  health(conn: Connection): Promise&lt;Health&gt;;
+  infer(input: { item: DiffItem; patient: Patient }): Promise&lt;Suggestion&gt;;
+}
+
+<span class="k">export interface</span> Suggestion {
+  proposal: string; rationale: string;
+  confidence: number;       <span class="c">// 0..1, shown as a number, never as a verdict</span>
+  evidence: string[];       <span class="c">// source references</span>
+}</pre></section>
+      <section class="sec" id="o-fhir"><h2 class="h2">Live FHIR R4 preview <span>${esc(P().name)}</span></h2>
+      <pre class="code">${esc(JSON.stringify(fhirBundle(), null, 2))}</pre></section>`;
+    OUTLINE.models = [["o-ts", "Interfaces"], ["o-fhir", "FHIR preview"]];
+  }
+  return head("System · integrations", "Models and data", "Where snapshots come from and which model reads them. Connectors are swappable; the interface does not change when you add one.") +
+    tabs("models", [["connections", "Connections"], ["add", "New connection"], ["contracts", "Contracts"]]) + body;
+};
+
+function fhirBundle() {
+  const p = P(), db = activeConn("db");
+  const res = (s, letter) => s.meds.map(m => ({ resource: {
+    resourceType: "MedicationStatement", id: `${letter.toLowerCase()}-${m.id}`, status: "unknown",
+    medication: { concept: { text: m.name } },
+    dosage: [{ text: [m.dose, m.route, m.frequency].map(v => v ?? "not documented").join(" · ") }],
+    informationSource: [{ display: s.label }], effectiveDateTime: s.date,
+    extension: [{ url: "urn:clinical-diff:snapshot", valueString: letter }]
+  } }));
+  return { resourceType: "Bundle", type: "collection", meta: { source: db ? db.endpoint : "none", tag: [{ code: "synthetic" }] },
+    entry: [...res(p.a, "A"), ...res(p.b, "B")] };
+}
+
+VIEWS.eval = () => {
+  OUTLINE.eval = [["o-about", "About this set"], ["o-results", "Results"], ["o-agree", "Session agreement"]];
+  const r = S.evalRun;
+  const allTri = Object.values(S.triage).flat();
+  const acc = allTri.filter(s => s.decision === "accepted").length, ov = allTri.filter(s => s.decision === "overridden").length;
+  const revs = Object.values(S.reviews);
+  return head("Evaluation · held-out", "How the comparison holds up",
+    "A small labelled set kept apart from the workspace fixtures. Results here are a smoke test, not clinical validation.") + `
+    <section class="sec" id="o-about" style="margin-top:28px"><h2 class="h2">About this set</h2>
+      <div class="prose"><p><b>${HELDOUT.length} synthetic cases</b>, ${HELDOUT.reduce((n, c) => n + Object.keys(c.gold).length, 0)} labelled statements. Labels mark each statement as changed, only in A, only in B, or unchanged, including one case where a field is missing rather than changed in value.</p></div></section>
+    <section class="sec" id="o-results"><h2 class="h2">Results <span>${r ? "run " + r.ts.slice(11, 19) + "Z" : "not run"}</span></h2>
+      <ul class="rows">
+        <li class="row eval head"><span>Method</span><span>Cases</span><span>Precision</span><span>Recall</span><span>Exact match</span></li>
+        <li class="row eval"><span style="color:var(--strong)">Deterministic diff <span style="color:var(--faint)">baseline</span></span><span class="mono">${r ? r.n : "—"}</span><span class="mono">${r ? r.p.toFixed(2) : "—"}</span><span class="mono">${r ? r.r.toFixed(2) : "—"}</span><span class="mono">${r ? r.em.toFixed(2) : "—"}</span></li>
+        <li class="row eval"><span style="color:var(--strong)">Model-assisted triage <span style="color:var(--faint)">needs labels</span></span><span class="mono">—</span><span class="mono">—</span><span class="mono">—</span><span class="mono">—</span></li>
+      </ul>
+      <div style="margin-top:14px"><button class="btn primary" data-action="eval-run">${r ? "Run again" : "Run held-out set"}</button></div>
+    </section>
+    <section class="sec" id="o-agree"><h2 class="h2">Session agreement</h2>
+      <div class="prose"><p>Triage suggestions accepted: <b>${acc}</b> · overridden: <b>${ov}</b>${acc + ov ? ` · acceptance <b>${(acc / (acc + ov)).toFixed(2)}</b>` : ""}.</p>
+      <p>Clinician reviews this session: <b>${revs.filter(v => v === "verified").length}</b> verified, <b>${revs.filter(v => v === "flagged").length}</b> flagged, <b>${revs.filter(v => v === "deferred").length}</b> deferred.</p></div></section>`;
+};
+
+VIEWS.audit = () => {
+  OUTLINE.audit = [["o-trail", "Trail"]];
+  const actors = ["all", ...new Set(S.audit.map(a => a.actor))];
+  const list = S.audit.filter(a => S.auditFilter === "all" || a.actor === S.auditFilter);
+  return head("Session · audit", "Audit log", "Every review decision, model run and connector change in this session, newest first. It resets on reload and is not a production audit trail.") + `
+    <section class="sec" id="o-trail" style="margin-top:28px">
+      <div class="bar" style="margin-bottom:10px">
+        <div class="filters" style="margin:0">${actors.map(a => `<button class="flt" aria-pressed="${S.auditFilter === a}" data-action="audit-filter" data-value="${esc(a)}">${a === "all" ? "Everyone" : esc(a)}</button>`).join("")}</div>
+        <div style="display:flex;gap:6px"><button class="btn quiet" data-action="audit-export" data-value="csv">CSV</button><button class="btn" data-action="audit-export" data-value="json">Export JSON</button></div>
+      </div>
+      <ul class="rows">
+        <li class="row audit head"><span>Time</span><span>Actor</span><span>Action</span><span>Target</span></li>
+        ${list.map(a => `<li class="row audit"><span class="mono" style="color:var(--faint)">${a.ts.slice(11, 19)}Z</span><span style="color:var(--strong)">${esc(a.actor)}</span><span>${esc(a.action)}</span><span class="mono" style="font-size:11.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(a.target)}</span></li>`).join("")}
+      </ul></section>`;
+};
+
+/* ================================================================
+   Chrome rendering
+   ================================================================ */
+const VIEW_NAMES = { diff: "Medication diff", triage: "AI triage", models: "Models & data", eval: "Evaluations", audit: "Audit log" };
+
+function renderChrome() {
+  document.documentElement.dataset.palette = S.palette;
+  $("#crumbs").innerHTML = ["diff", "triage"].includes(S.view) ? `${esc(P().name)} &nbsp;/&nbsp; <b>${VIEW_NAMES[S.view]}</b>` : `<b>${VIEW_NAMES[S.view]}</b>`;
+  const live = S.conns.filter(c => c.state !== "idle");
+  const worst = live.some(c => c.state === "error") ? "error" : live.some(c => c.state === "degraded") ? "degraded" : live.some(c => c.state === "checking") ? "checking" : live.length ? "ok" : "";
+  $("#health").innerHTML = `<span class="dot ${worst}"></span>${S.conns.length} connections · ${S.conns.filter(c => c.state === "ok" || c.state === "degraded").length} live`;
+  $("#pal-btn").textContent = "Palette · " + PALETTES.find(p => p.id === S.palette).name;
+  $("#pal-menu").innerHTML = PALETTES.map(p => `<button class="pal-opt" role="menuitemradio" aria-checked="${S.palette === p.id}" data-action="palette" data-value="${p.id}">
+      <span class="sw">${p.sw.map(c => `<i style="background:${c}"></i>`).join("")}</span>
+      <span><span class="pal-name">${p.name}${p.rec ? "<em>recommended</em>" : ""}</span><br><span class="pal-note">${p.note}</span></span></button>`).join("");
+  $("#patient-list").innerHTML = Object.entries(PATIENTS).map(([id, p]) => {
+    const n = pendingCount(id);
+    return `<button class="item" data-action="patient" data-value="${id}" aria-current="${S.patient === id && ["diff", "triage"].includes(S.view)}">${esc(p.name)}<small>${n ? n + " open" : "done"}</small></button>`;
+  }).join("");
+  document.querySelectorAll("[data-nav]").forEach(b => b.setAttribute("aria-current", String(b.dataset.nav === S.view)));
+  $("#nav-diff-n").textContent = pendingCount(S.patient) || "";
+  const tri = (S.triage[S.patient] || []).filter(s => !s.decision || s.decision === "override-pending").length;
+  $("#nav-tri-n").textContent = tri || "";
+  $("#nav-aud-n").textContent = S.audit.length;
+  $("#nav-con-n").textContent = S.conns.length;
+  applyRailFilter();
+}
+
+function renderRight() {
+  const p = P(), outline = OUTLINE[S.view] || [];
+  const dbc = activeConn("db"), mc = activeConn("model");
+  const diffs = diffFor(S.patient).filter(r => r.kind !== "same");
+  $("#rail-r").innerHTML = `
+    <div class="rr-h">On this page</div>
+    <div class="toc">${outline.map(([id, label], i) => `<button data-action="jump" data-value="${id}" class="${i === 0 ? "on" : ""}">${esc(label)}</button>`).join("")}</div>
+    ${["diff", "triage"].includes(S.view) ? `<div class="rr-h">Patient</div>
+    <dl class="kv"><dt>Name</dt><dd>${esc(p.name)}</dd><dt>Born</dt><dd>${esc(p.born)}</dd>
+      <dt>A</dt><dd title="${esc(p.a.label)}">${esc(p.a.date)}</dd><dt>B</dt><dd title="${esc(p.b.label)}">${esc(p.b.date)}</dd>
+      <dt>Reviewed</dt><dd>${diffs.filter(r => S.reviews[rk(r.id)]).length} / ${diffs.length}</dd></dl>` : ""}
+    <div class="rr-h">Connections</div>
+    <div class="cx">${S.conns.map(c => `<button data-action="nav" data-value="models" title="${esc(c.detail)}"><span class="dot ${c.state}"></span><span class="cx-n">${esc(c.name)}</span><small>${c.active ? "active" : c.latency != null ? c.latency + "ms" : c.state}</small></button>`).join("")}</div>
+    <dl class="kv"><dt>Data</dt><dd>${esc(dbc ? dbc.name : "none")}</dd><dt>Model</dt><dd>${esc(mc ? mc.name : "none")}</dd></dl>
+    <p class="disclaimer">Synthetic records only. A difference is not a finding of error, harm, or discontinuation.</p>`;
+}
+
+function render() {
+  if (!VIEWS[S.view]) return;
+  $("#view").innerHTML = VIEWS[S.view]();
+  renderChrome(); renderRight();
+}
+
+function applyRailFilter() {
+  const q = ($("#rail-search").value || "").toLowerCase();
+  document.querySelectorAll(".rail-l .item").forEach(b => { b.style.display = !q || b.textContent.toLowerCase().includes(q) ? "" : "none"; });
+}
+
+/* ================================================================
+   Actions
+   ================================================================ */
+function go(view) { S.view = view; S.selected = null; $("#canvas").scrollTop = 0; render(); }
+async function runTriage() {
+  const m = activeConn("model"); if (!m || S.triageBusy) return;
+  const d = Drivers[m.driver], p = P();
+  S.triageBusy = true; render();
+  const items = diffFor(S.patient).filter(r => r.kind !== "same");
+  const out = [];
+  for (const item of items) {
+    let s;
+    if (d.infer) s = await d.infer({ item, patient: p });
+    else { await sleep(160 + Math.random() * 220); s = heuristicInfer({ item, patient: p }); s.confidence = Math.max(0.5, Math.min(0.97, s.confidence + (Math.random() - 0.5) * 0.1)); }
+    out.push({ id: uid("sg"), medId: item.id, model: m.model || d.label, simulated: !d.infer, decision: null, reason: null, ...s });
+  }
+  S.triage[S.patient] = out; S.triageBusy = false;
+  addAudit("Model", `Triage run · ${out.length} suggestions`, m.name);
+  toast(`${out.length} suggestions from ${m.name}`);
+  render();
+}
+function runEval() {
+  let tp = 0, fp = 0, fn = 0, exact = 0, n = 0;
+  HELDOUT.forEach(c => {
+    const res = compare(c.a, c.b);
+    res.forEach(r => {
+      n++; const g = c.gold[r.id];
+      if (r.kind === g) exact++;
+      const predDiff = r.kind !== "same", goldDiff = g !== "same";
+      if (predDiff && goldDiff && r.kind === g) tp++; else { if (predDiff) fp++; if (goldDiff) fn++; }
+    });
+  });
+  S.evalRun = { ts: now(), n: HELDOUT.length, p: tp / Math.max(1, tp + fp), r: tp / Math.max(1, tp + fn), em: exact / Math.max(1, n) };
+  addAudit("Eval", "Ran held-out set", `${HELDOUT.length} cases`);
+  render();
+}
+function download(name, text, type) {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([text], { type })); a.download = name; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+function setPalette(id) {
+  S.palette = id; try { localStorage.setItem("cd-palette", id); } catch (e) {}
+  closeMenus(); render(); toast("Palette: " + PALETTES.find(p => p.id === id).name);
+}
+function setReview(id, val) {
+  const key = rk(id), prev = S.reviews[key];
+  if (prev === val) delete S.reviews[key]; else S.reviews[key] = val;
+  const r = diffFor(S.patient).find(x => x.id === id);
+  addAudit("Clinician", prev === val ? `Cleared ${val}` : `Marked ${val}`, `${P().name} · ${r ? r.name : id}`);
+  render();
+}
+function closeMenus() { $("#pal-menu").classList.remove("open"); $("#pal-btn").setAttribute("aria-expanded", "false"); }
+
+const ACTIONS = {
+  nav: v => { closeMenus(); go(v); },
+  patient: v => { S.patient = v; S.filter = "all"; if (!["diff", "triage"].includes(S.view)) S.view = "diff"; S.selected = null; render(); },
+  tab: (v, el) => { S.tabs[el.dataset.group] = v; S.formError = ""; render(); },
+  filter: v => { S.filter = v; render(); },
+  select: (v, el, e) => { if (e.target.closest(".detail")) return; S.selected = S.selected === v ? null : v; render(); },
+  review: (v, el) => setReview(el.dataset.id, v),
+  "triage-run": () => runTriage(),
+  "triage-decide": (v, el) => {
+    const s = (S.triage[S.patient] || []).find(x => x.id === el.dataset.id); if (!s) return;
+    if (s.decision === v || (v === "override-pending" && s.decision === "overridden")) { s.decision = null; s.reason = null; }
+    else { s.decision = v; s.reason = null; if (v !== "override-pending") addAudit("Clinician", v === "accepted" ? "Accepted suggestion" : "Skipped suggestion", s.proposal); }
+    render();
+  },
+  "triage-reason": (v, el) => {
+    const s = (S.triage[S.patient] || []).find(x => x.id === el.dataset.id); if (!s) return;
+    s.decision = "overridden"; s.reason = v; addAudit("Clinician", `Overrode suggestion: ${v}`, s.proposal); render();
+  },
+  "conn-test": v => testConn(v),
+  "conn-testall": () => S.conns.forEach(c => testConn(c.id)),
+  "conn-active": v => { setActive(v); render(); },
+  "conn-remove": v => { removeConn(v); render(); },
+  "eval-run": () => runEval(),
+  "audit-filter": v => { S.auditFilter = v; render(); },
+  "audit-export": v => {
+    if (v === "json") download("clinical-diff-audit.json", JSON.stringify(S.audit, null, 2), "application/json");
+    else download("clinical-diff-audit.csv", "time,actor,action,target\n" + S.audit.map(a => [a.ts, a.actor, a.action, a.target].map(x => `"${String(x).replace(/"/g, '""')}"`).join(",")).join("\n"), "text/csv");
+    addAudit("User", "Exported audit log", v.toUpperCase()); render();
+  },
+  palette: v => setPalette(v),
+  "pal-toggle": () => { const m = $("#pal-menu"); const open = !m.classList.contains("open"); m.classList.toggle("open", open); $("#pal-btn").setAttribute("aria-expanded", String(open)); },
+  "cmd-open": () => openCmd(),
+  jump: (v, el) => {
+    const t = document.getElementById(v); if (t) t.scrollIntoView({ block: "start" });
+    document.querySelectorAll(".toc button").forEach(b => b.classList.toggle("on", b === el));
+  }
+};
+
+document.addEventListener("click", e => {
+  if (!e.target.closest(".menu-wrap")) closeMenus();
+  const el = e.target.closest("[data-action]"); if (!el) return;
+  const fn = ACTIONS[el.dataset.action]; if (fn) fn(el.dataset.value, el, e);
+});
+document.addEventListener("change", e => {
+  const t = e.target;
+  if (t.dataset.change === "add-kind") { S.addKind = t.value; render(); }
+  if (t.dataset.change === "add-driver") {
+    const d = Drivers[t.value]; $("#f-endpoint").value = d.defaultEndpoint || "";
+    const fm = $("#f-model"); if (fm) fm.value = d.defaultModel || "";
+  }
+  if (t.dataset.note) addAudit("Clinician", "Edited note", `${P().name} · ${t.dataset.note}`);
+});
+document.addEventListener("input", e => {
+  if (e.target.dataset.note) S.notes[rk(e.target.dataset.note)] = e.target.value;
+  if (e.target.id === "rail-search") applyRailFilter();
+});
+document.addEventListener("submit", e => {
+  if (e.target.id !== "add-form") return;
+  e.preventDefault();
+  const f = new FormData(e.target);
+  let config = {};
+  try { config = JSON.parse(f.get("config") || "{}"); } catch (err) { S.formError = "Options must be valid JSON."; render(); return; }
+  if (!String(f.get("endpoint") || "").trim()) { S.formError = "An endpoint is required."; render(); return; }
+  const c = connect({ driver: f.get("driver"), name: String(f.get("name") || "").trim(), endpoint: String(f.get("endpoint")).trim(), model: f.get("model") ? String(f.get("model")).trim() : "", config });
+  addAudit("Connector", "Registered connection", c.name);
+  S.formError = ""; S.tabs.models = "connections"; render();
+  testConn(c.id);
+  toast(`Registered ${c.name}`);
+});
+
+/* Keyboard: J/K/V/F/D on the diff, Ctrl/Cmd+K anywhere */
+document.addEventListener("keydown", e => {
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") { e.preventDefault(); openCmd(); return; }
+  if ($("#cmd").classList.contains("open")) return;
+  if (e.key === "Escape") { closeMenus(); if (S.selected) { S.selected = null; render(); } return; }
+  if (/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName) || e.metaKey || e.ctrlKey || e.altKey) return;
+  if (S.view !== "diff" || S.tabs.diff !== "diff") return;
+  const rows = diffFor(S.patient).filter(r => S.filter === "all" || r.kind === S.filter);
+  const i = rows.findIndex(r => r.id === S.selected);
+  const k = e.key.toLowerCase();
+  if (k === "j" || k === "k") {
+    e.preventDefault();
+    const next = rows[Math.max(0, Math.min(rows.length - 1, i < 0 ? 0 : i + (k === "j" ? 1 : -1)))];
+    if (next) { S.selected = next.id; render(); const el = document.querySelector(`.entry[data-value="${next.id}"]`); if (el) el.scrollIntoView({ block: "nearest" }); }
+  } else if (S.selected && ({ v: "verified", f: "flagged", d: "deferred" })[k]) {
+    const r = rows[i]; if (r && r.kind !== "same") setReview(r.id, { v: "verified", f: "flagged", d: "deferred" }[k]);
+  } else if (k === "enter" && document.activeElement.classList.contains("entry")) {
+    const v = document.activeElement.dataset.value; S.selected = S.selected === v ? null : v; render();
+  }
+});
+
+/* ================================================================
+   Command menu
+   ================================================================ */
+let cmdIdx = 0;
+function commands() {
+  return [
+    ...Object.entries(VIEW_NAMES).map(([id, label]) => ({ label: "Go to " + label, hint: "page", run: () => go(id) })),
+    ...Object.entries(PATIENTS).map(([id, p]) => ({ label: "Open " + p.name, hint: "patient", run: () => ACTIONS.patient(id) })),
+    ...PALETTES.map(p => ({ label: "Palette: " + p.name, hint: p.rec ? "recommended" : "palette", run: () => setPalette(p.id) })),
+    { label: "Run AI triage for " + P().name, hint: "action", run: () => { go("triage"); runTriage(); } },
+    { label: "Test all connections", hint: "action", run: () => S.conns.forEach(c => testConn(c.id)) },
+    { label: "Add a connection", hint: "action", run: () => { S.tabs.models = "add"; go("models"); } },
+    { label: "Run held-out evaluation", hint: "action", run: () => { go("eval"); runEval(); } },
+    { label: "Export audit log", hint: "action", run: () => ACTIONS["audit-export"]("json") }
+  ];
+}
+function cmdFiltered() { const q = $("#cmd-in").value.toLowerCase(); return commands().filter(c => c.label.toLowerCase().includes(q)); }
+function renderCmd() {
+  const list = cmdFiltered(); cmdIdx = Math.min(cmdIdx, Math.max(0, list.length - 1));
+  $("#cmd-list").innerHTML = list.length ? list.map((c, i) => `<button class="cmd-it ${i === cmdIdx ? "on" : ""}" role="option" aria-selected="${i === cmdIdx}" data-cmd="${i}">${esc(c.label)}<small>${esc(c.hint)}</small></button>`).join("") : `<div class="cmd-it" style="color:var(--faint)">No matches</div>`;
+}
+function openCmd() { closeMenus(); $("#cmd").classList.add("open"); $("#cmd-in").value = ""; cmdIdx = 0; renderCmd(); $("#cmd-in").focus(); }
+function closeCmd() { $("#cmd").classList.remove("open"); }
+function execCmd(i) { const c = cmdFiltered()[i]; closeCmd(); if (c) c.run(); }
+$("#cmd-in").addEventListener("input", () => { cmdIdx = 0; renderCmd(); });
+$("#cmd-in").addEventListener("keydown", e => {
+  const n = cmdFiltered().length;
+  if (e.key === "ArrowDown") { e.preventDefault(); cmdIdx = (cmdIdx + 1) % Math.max(1, n); renderCmd(); }
+  else if (e.key === "ArrowUp") { e.preventDefault(); cmdIdx = (cmdIdx - 1 + n) % Math.max(1, n); renderCmd(); }
+  else if (e.key === "Enter") { e.preventDefault(); execCmd(cmdIdx); }
+  else if (e.key === "Escape") closeCmd();
+});
+$("#cmd-list").addEventListener("click", e => { const b = e.target.closest("[data-cmd]"); if (b) execCmd(Number(b.dataset.cmd)); });
+$("#cmd").addEventListener("click", e => { if (e.target.id === "cmd") closeCmd(); });
+
+/* ================================================================
+   Boot + heartbeat for live connections
+   ================================================================ */
+booted = true;
+render();
+S.conns.filter(c => c.active).forEach(c => testConn(c.id, true));
+setInterval(() => { S.conns.filter(c => c.state === "ok" || c.state === "degraded").forEach(c => testConn(c.id, true)); }, 20000);
+</script>
+</body>
+</html>
