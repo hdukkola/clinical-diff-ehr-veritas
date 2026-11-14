@@ -1,0 +1,946 @@
+{
+  "dataset": "oopere/clinical-ner-qdora",
+  "revision": "5d3b7dabed4b96aa4f62051ada2337b4b7aec0b5",
+  "raw_json_sha256": "2c7ec9796d0076c843dcf631ebee78228880950c63e4ae170a5c55b5fa451f47",
+  "model": "mlx-community/Qwen3.5-4B-4bit",
+  "n_notes": 40,
+  "parse_failures": 0,
+  "summary": {
+    "baseline": {
+      "tp": 0,
+      "fp": 0,
+      "fn": 60,
+      "precision": null,
+      "recall": 0.0
+    },
+    "model": {
+      "tp": 49,
+      "fp": 11,
+      "fn": 11,
+      "precision": 0.8166666666666667,
+      "recall": 0.8166666666666667
+    }
+  },
+  "results": [
+    {
+      "row_idx": 0,
+      "category": "typos",
+      "reference": [
+        "amoxicillin",
+        "tylenol"
+      ],
+      "prediction": [
+        "amoxicillin",
+        "tylenol"
+      ],
+      "response": "{\n  \"medications\": [\n    \"amoxicillin\",\n    \"tylenol\"\n  ]\n}",
+      "parse_error": null,
+      "baseline": {
+        "tp": 0,
+        "fp": 0,
+        "fn": 2
+      },
+      "model": {
+        "tp": 2,
+        "fp": 0,
+        "fn": 0
+      }
+    },
+    {
+      "row_idx": 1,
+      "category": "clean",
+      "reference": [
+        "Azithromycin"
+      ],
+      "prediction": [
+        "Azithromycin"
+      ],
+      "response": "{\n  \"medications\": [\n    \"Azithromycin\"\n  ]\n}",
+      "parse_error": null,
+      "baseline": {
+        "tp": 0,
+        "fp": 0,
+        "fn": 1
+      },
+      "model": {
+        "tp": 1,
+        "fp": 0,
+        "fn": 0
+      }
+    },
+    {
+      "row_idx": 2,
+      "category": "clean",
+      "reference": [
+        "Azithromycin"
+      ],
+      "prediction": [
+        "Azithromycin"
+      ],
+      "response": "{\n  \"medications\": [\n    \"Azithromycin\"\n  ]\n}",
+      "parse_error": null,
+      "baseline": {
+        "tp": 0,
+        "fp": 0,
+        "fn": 1
+      },
+      "model": {
+        "tp": 1,
+        "fp": 0,
+        "fn": 0
+      }
+    },
+    {
+      "row_idx": 3,
+      "category": "typos",
+      "reference": [
+        "Tylenol",
+        "Albuterol inhaler"
+      ],
+      "prediction": [
+        "tylenol",
+        "albuterol"
+      ],
+      "response": "{\n  \"medications\": [\n    \"tylenol\",\n    \"albuterol\"\n  ]\n}",
+      "parse_error": null,
+      "baseline": {
+        "tp": 0,
+        "fp": 0,
+        "fn": 2
+      },
+      "model": {
+        "tp": 1,
+        "fp": 1,
+        "fn": 1
+      }
+    },
+    {
+      "row_idx": 4,
+      "category": "implicit",
+      "reference": [
+        "Lisinopril"
+      ],
+      "prediction": [
+        "Lisinopril"
+      ],
+      "response": "{\n  \"medications\": [\n    \"Lisinopril\"\n  ]\n}",
+      "parse_error": null,
+      "baseline": {
+        "tp": 0,
+        "fp": 0,
+        "fn": 1
+      },
+      "model": {
+        "tp": 1,
+        "fp": 0,
+        "fn": 0
+      }
+    },
+    {
+      "row_idx": 5,
+      "category": "clean",
+      "reference": [
+        "Amoxicillin"
+      ],
+      "prediction": [
+        "Amoxicillin"
+      ],
+      "response": "{\n  \"medications\": [\n    \"Amoxicillin\"\n  ]\n}",
+      "parse_error": null,
+      "baseline": {
+        "tp": 0,
+        "fp": 0,
+        "fn": 1
+      },
+      "model": {
+        "tp": 1,
+        "fp": 0,
+        "fn": 0
+      }
+    },
+    {
+      "row_idx": 6,
+      "category": "irrelevant",
+      "reference": [
+        "metformin",
+        "glipizide"
+      ],
+      "prediction": [
+        "metformin",
+        "glipizide"
+      ],
+      "response": "{\n  \"medications\": [\n    \"metformin\",\n    \"glipizide\"\n  ]\n}",
+      "parse_error": null,
+      "baseline": {
+        "tp": 0,
+        "fp": 0,
+        "fn": 2
+      },
+      "model": {
+        "tp": 2,
+        "fp": 0,
+        "fn": 0
+      }
+    },
+    {
+      "row_idx": 7,
+      "category": "abbreviations",
+      "reference": [
+        "Lisinopril",
+        "Albuterol HFA"
+      ],
+      "prediction": [
+        "Lisinopril",
+        "Albuterol"
+      ],
+      "response": "{\n  \"medications\": [\n    \"Lisinopril\",\n    \"Albuterol\"\n  ]\n}",
+      "parse_error": null,
+      "baseline": {
+        "tp": 0,
+        "fp": 0,
+        "fn": 2
+      },
+      "model": {
+        "tp": 1,
+        "fp": 1,
+        "fn": 1
+      }
+    },
+    {
+      "row_idx": 8,
+      "category": "implicit",
+      "reference": [
+        "Lisinopril"
+      ],
+      "prediction": [
+        "Lisinopril"
+      ],
+      "response": "{\n  \"medications\": [\n    \"Lisinopril\"\n  ]\n}",
+      "parse_error": null,
+      "baseline": {
+        "tp": 0,
+        "fp": 0,
+        "fn": 1
+      },
+      "model": {
+        "tp": 1,
+        "fp": 0,
+        "fn": 0
+      }
+    },
+    {
+      "row_idx": 9,
+      "category": "irrelevant",
+      "reference": [
+        "ibuprofen"
+      ],
+      "prediction": [
+        "ibuprofen"
+      ],
+      "response": "{\n  \"medications\": [\n    \"ibuprofen\"\n  ]\n}",
+      "parse_error": null,
+      "baseline": {
+        "tp": 0,
+        "fp": 0,
+        "fn": 1
+      },
+      "model": {
+        "tp": 1,
+        "fp": 0,
+        "fn": 0
+      }
+    },
+    {
+      "row_idx": 10,
+      "category": "abbreviations",
+      "reference": [
+        "Albuterol",
+        "Lisinopril"
+      ],
+      "prediction": [
+        "Albuterol",
+        "Lisinopril"
+      ],
+      "response": "{\n  \"medications\": [\n    \"Albuterol\",\n    \"Lisinopril\"\n  ]\n}",
+      "parse_error": null,
+      "baseline": {
+        "tp": 0,
+        "fp": 0,
+        "fn": 2
+      },
+      "model": {
+        "tp": 2,
+        "fp": 0,
+        "fn": 0
+      }
+    },
+    {
+      "row_idx": 11,
+      "category": "typos",
+      "reference": [
+        "tylenol",
+        "albuterol"
+      ],
+      "prediction": [
+        "tylenol",
+        "albuterol"
+      ],
+      "response": "{\n  \"medications\": [\n    \"tylenol\",\n    \"albuterol\"\n  ]\n}",
+      "parse_error": null,
+      "baseline": {
+        "tp": 0,
+        "fp": 0,
+        "fn": 2
+      },
+      "model": {
+        "tp": 2,
+        "fp": 0,
+        "fn": 0
+      }
+    },
+    {
+      "row_idx": 12,
+      "category": "implicit",
+      "reference": [
+        "Ibuprofen"
+      ],
+      "prediction": [
+        "Ibuprofen"
+      ],
+      "response": "{\n  \"medications\": [\n    \"Ibuprofen\"\n  ]\n}",
+      "parse_error": null,
+      "baseline": {
+        "tp": 0,
+        "fp": 0,
+        "fn": 1
+      },
+      "model": {
+        "tp": 1,
+        "fp": 0,
+        "fn": 0
+      }
+    },
+    {
+      "row_idx": 13,
+      "category": "clean",
+      "reference": [
+        "Amoxicillin"
+      ],
+      "prediction": [
+        "Amoxicillin"
+      ],
+      "response": "{\n  \"medications\": [\n    \"Amoxicillin\"\n  ]\n}",
+      "parse_error": null,
+      "baseline": {
+        "tp": 0,
+        "fp": 0,
+        "fn": 1
+      },
+      "model": {
+        "tp": 1,
+        "fp": 0,
+        "fn": 0
+      }
+    },
+    {
+      "row_idx": 14,
+      "category": "irrelevant",
+      "reference": [
+        "lisinopril"
+      ],
+      "prediction": [
+        "lisinopril"
+      ],
+      "response": "{\n  \"medications\": [\n    \"lisinopril\"\n  ]\n}",
+      "parse_error": null,
+      "baseline": {
+        "tp": 0,
+        "fp": 0,
+        "fn": 1
+      },
+      "model": {
+        "tp": 1,
+        "fp": 0,
+        "fn": 0
+      }
+    },
+    {
+      "row_idx": 15,
+      "category": "implicit",
+      "reference": [
+        "Tylenol"
+      ],
+      "prediction": [
+        "Tylenol"
+      ],
+      "response": "{\n  \"medications\": [\n    \"Tylenol\"\n  ]\n}",
+      "parse_error": null,
+      "baseline": {
+        "tp": 0,
+        "fp": 0,
+        "fn": 1
+      },
+      "model": {
+        "tp": 1,
+        "fp": 0,
+        "fn": 0
+      }
+    },
+    {
+      "row_idx": 16,
+      "category": "irrelevant",
+      "reference": [
+        "ibuprofen"
+      ],
+      "prediction": [
+        "ibuprofen"
+      ],
+      "response": "{\n  \"medications\": [\n    \"ibuprofen\"\n  ]\n}",
+      "parse_error": null,
+      "baseline": {
+        "tp": 0,
+        "fp": 0,
+        "fn": 1
+      },
+      "model": {
+        "tp": 1,
+        "fp": 0,
+        "fn": 0
+      }
+    },
+    {
+      "row_idx": 17,
+      "category": "irrelevant",
+      "reference": [
+        "Lisinopril"
+      ],
+      "prediction": [
+        "Lisinopril"
+      ],
+      "response": "{\n  \"medications\": [\n    \"Lisinopril\"\n  ]\n}",
+      "parse_error": null,
+      "baseline": {
+        "tp": 0,
+        "fp": 0,
+        "fn": 1
+      },
+      "model": {
+        "tp": 1,
+        "fp": 0,
+        "fn": 0
+      }
+    },
+    {
+      "row_idx": 18,
+      "category": "abbreviations",
+      "reference": [
+        "Albuterol",
+        "Prednisone"
+      ],
+      "prediction": [
+        "Albuterol",
+        "Prednisone"
+      ],
+      "response": "{\n  \"medications\": [\n    \"Albuterol\",\n    \"Prednisone\"\n  ]\n}",
+      "parse_error": null,
+      "baseline": {
+        "tp": 0,
+        "fp": 0,
+        "fn": 2
+      },
+      "model": {
+        "tp": 2,
+        "fp": 0,
+        "fn": 0
+      }
+    },
+    {
+      "row_idx": 19,
+      "category": "typos",
+      "reference": [
+        "lisinopril",
+        "albuterol"
+      ],
+      "prediction": [
+        "lisinopril",
+        "albutrol"
+      ],
+      "response": "{\n  \"medications\": [\n    \"lisinopril\",\n    \"albutrol\"\n  ]\n}",
+      "parse_error": null,
+      "baseline": {
+        "tp": 0,
+        "fp": 0,
+        "fn": 2
+      },
+      "model": {
+        "tp": 1,
+        "fp": 1,
+        "fn": 1
+      }
+    },
+    {
+      "row_idx": 20,
+      "category": "irrelevant",
+      "reference": [
+        "azithromycin"
+      ],
+      "prediction": [
+        "azithromycin"
+      ],
+      "response": "{\n  \"medications\": [\n    \"azithromycin\"\n  ]\n}",
+      "parse_error": null,
+      "baseline": {
+        "tp": 0,
+        "fp": 0,
+        "fn": 1
+      },
+      "model": {
+        "tp": 1,
+        "fp": 0,
+        "fn": 0
+      }
+    },
+    {
+      "row_idx": 21,
+      "category": "implicit",
+      "reference": [
+        "Metformin"
+      ],
+      "prediction": [
+        "Metformin"
+      ],
+      "response": "{\n  \"medications\": [\n    \"Metformin\"\n  ]\n}",
+      "parse_error": null,
+      "baseline": {
+        "tp": 0,
+        "fp": 0,
+        "fn": 1
+      },
+      "model": {
+        "tp": 1,
+        "fp": 0,
+        "fn": 0
+      }
+    },
+    {
+      "row_idx": 22,
+      "category": "clean",
+      "reference": [
+        "Albuterol HFA",
+        "Ibuprofen"
+      ],
+      "prediction": [
+        "Albuterol HFA 90mcg inhaler",
+        "Ibuprofen 400mg"
+      ],
+      "response": "{\n  \"medications\": [\n    \"Albuterol HFA 90mcg inhaler\",\n    \"Ibuprofen 400mg\"\n  ]\n}",
+      "parse_error": null,
+      "baseline": {
+        "tp": 0,
+        "fp": 0,
+        "fn": 2
+      },
+      "model": {
+        "tp": 0,
+        "fp": 2,
+        "fn": 2
+      }
+    },
+    {
+      "row_idx": 23,
+      "category": "typos",
+      "reference": [
+        "ibuprofen"
+      ],
+      "prediction": [
+        "advil"
+      ],
+      "response": "{\n  \"medications\": [\n    \"advil\"\n  ]\n}",
+      "parse_error": null,
+      "baseline": {
+        "tp": 0,
+        "fp": 0,
+        "fn": 1
+      },
+      "model": {
+        "tp": 0,
+        "fp": 1,
+        "fn": 1
+      }
+    },
+    {
+      "row_idx": 24,
+      "category": "typos",
+      "reference": [
+        "aspirin",
+        "lisinopril"
+      ],
+      "prediction": [
+        "asprin",
+        "lsnopril"
+      ],
+      "response": "{\n  \"medications\": [\n    \"asprin\",\n    \"lsnopril\"\n  ]\n}",
+      "parse_error": null,
+      "baseline": {
+        "tp": 0,
+        "fp": 0,
+        "fn": 2
+      },
+      "model": {
+        "tp": 0,
+        "fp": 2,
+        "fn": 2
+      }
+    },
+    {
+      "row_idx": 25,
+      "category": "abbreviations",
+      "reference": [
+        "Albuterol inhaler",
+        "Lisinopril"
+      ],
+      "prediction": [
+        "Albuterol inhaler",
+        "Lisinopril"
+      ],
+      "response": "{\n  \"medications\": [\n    \"Albuterol inhaler\",\n    \"Lisinopril\"\n  ]\n}",
+      "parse_error": null,
+      "baseline": {
+        "tp": 0,
+        "fp": 0,
+        "fn": 2
+      },
+      "model": {
+        "tp": 2,
+        "fp": 0,
+        "fn": 0
+      }
+    },
+    {
+      "row_idx": 26,
+      "category": "irrelevant",
+      "reference": [
+        "ibuprofen"
+      ],
+      "prediction": [
+        "ibuprofen"
+      ],
+      "response": "{\n  \"medications\": [\n    \"ibuprofen\"\n  ]\n}",
+      "parse_error": null,
+      "baseline": {
+        "tp": 0,
+        "fp": 0,
+        "fn": 1
+      },
+      "model": {
+        "tp": 1,
+        "fp": 0,
+        "fn": 0
+      }
+    },
+    {
+      "row_idx": 27,
+      "category": "irrelevant",
+      "reference": [
+        "lisinopril",
+        "metformin"
+      ],
+      "prediction": [
+        "lisinopril",
+        "metformin"
+      ],
+      "response": "{\n  \"medications\": [\n    \"lisinopril\",\n    \"metformin\"\n  ]\n}",
+      "parse_error": null,
+      "baseline": {
+        "tp": 0,
+        "fp": 0,
+        "fn": 2
+      },
+      "model": {
+        "tp": 2,
+        "fp": 0,
+        "fn": 0
+      }
+    },
+    {
+      "row_idx": 28,
+      "category": "clean",
+      "reference": [
+        "Amoxicillin"
+      ],
+      "prediction": [
+        "Amoxicillin"
+      ],
+      "response": "{\n  \"medications\": [\n    \"Amoxicillin\"\n  ]\n}",
+      "parse_error": null,
+      "baseline": {
+        "tp": 0,
+        "fp": 0,
+        "fn": 1
+      },
+      "model": {
+        "tp": 1,
+        "fp": 0,
+        "fn": 0
+      }
+    },
+    {
+      "row_idx": 29,
+      "category": "irrelevant",
+      "reference": [
+        "lisinopril",
+        "metformin"
+      ],
+      "prediction": [
+        "lisinopril",
+        "metformin"
+      ],
+      "response": "{\n  \"medications\": [\n    \"lisinopril\",\n    \"metformin\"\n  ]\n}",
+      "parse_error": null,
+      "baseline": {
+        "tp": 0,
+        "fp": 0,
+        "fn": 2
+      },
+      "model": {
+        "tp": 2,
+        "fp": 0,
+        "fn": 0
+      }
+    },
+    {
+      "row_idx": 30,
+      "category": "implicit",
+      "reference": [
+        "Atorvastatin"
+      ],
+      "prediction": [
+        "Atorvastatin"
+      ],
+      "response": "{\n  \"medications\": [\n    \"Atorvastatin\"\n  ]\n}",
+      "parse_error": null,
+      "baseline": {
+        "tp": 0,
+        "fp": 0,
+        "fn": 1
+      },
+      "model": {
+        "tp": 1,
+        "fp": 0,
+        "fn": 0
+      }
+    },
+    {
+      "row_idx": 31,
+      "category": "abbreviations",
+      "reference": [
+        "Albuterol",
+        "Prednisone"
+      ],
+      "prediction": [
+        "Albuterol",
+        "Prednisone"
+      ],
+      "response": "{\n  \"medications\": [\n    \"Albuterol\",\n    \"Prednisone\"\n  ]\n}",
+      "parse_error": null,
+      "baseline": {
+        "tp": 0,
+        "fp": 0,
+        "fn": 2
+      },
+      "model": {
+        "tp": 2,
+        "fp": 0,
+        "fn": 0
+      }
+    },
+    {
+      "row_idx": 32,
+      "category": "clean",
+      "reference": [
+        "Amoxicillin",
+        "Albuterol HFA"
+      ],
+      "prediction": [
+        "Amoxicillin",
+        "Albuterol HFA"
+      ],
+      "response": "{\n  \"medications\": [\n    \"Amoxicillin\",\n    \"Albuterol HFA\"\n  ]\n}",
+      "parse_error": null,
+      "baseline": {
+        "tp": 0,
+        "fp": 0,
+        "fn": 2
+      },
+      "model": {
+        "tp": 2,
+        "fp": 0,
+        "fn": 0
+      }
+    },
+    {
+      "row_idx": 33,
+      "category": "irrelevant",
+      "reference": [
+        "ibuprofen"
+      ],
+      "prediction": [
+        "ibuprofen"
+      ],
+      "response": "{\n  \"medications\": [\n    \"ibuprofen\"\n  ]\n}",
+      "parse_error": null,
+      "baseline": {
+        "tp": 0,
+        "fp": 0,
+        "fn": 1
+      },
+      "model": {
+        "tp": 1,
+        "fp": 0,
+        "fn": 0
+      }
+    },
+    {
+      "row_idx": 34,
+      "category": "implicit",
+      "reference": [
+        "Lisinopril",
+        "Atorvastatin"
+      ],
+      "prediction": [
+        "Lisinopril",
+        "Atorvastatin"
+      ],
+      "response": "{\n  \"medications\": [\n    \"Lisinopril\",\n    \"Atorvastatin\"\n  ]\n}",
+      "parse_error": null,
+      "baseline": {
+        "tp": 0,
+        "fp": 0,
+        "fn": 2
+      },
+      "model": {
+        "tp": 2,
+        "fp": 0,
+        "fn": 0
+      }
+    },
+    {
+      "row_idx": 35,
+      "category": "irrelevant",
+      "reference": [
+        "ibuprofen"
+      ],
+      "prediction": [
+        "ibuprofen"
+      ],
+      "response": "{\n  \"medications\": [\n    \"ibuprofen\"\n  ]\n}",
+      "parse_error": null,
+      "baseline": {
+        "tp": 0,
+        "fp": 0,
+        "fn": 1
+      },
+      "model": {
+        "tp": 1,
+        "fp": 0,
+        "fn": 0
+      }
+    },
+    {
+      "row_idx": 36,
+      "category": "typos",
+      "reference": [
+        "aspirin",
+        "lisinopril"
+      ],
+      "prediction": [
+        "asa 81mg",
+        "lisinoprl 10mg"
+      ],
+      "response": "{\n  \"medications\": [\n    \"asa 81mg\",\n    \"lisinoprl 10mg\"\n  ]\n}",
+      "parse_error": null,
+      "baseline": {
+        "tp": 0,
+        "fp": 0,
+        "fn": 2
+      },
+      "model": {
+        "tp": 0,
+        "fp": 2,
+        "fn": 2
+      }
+    },
+    {
+      "row_idx": 37,
+      "category": "irrelevant",
+      "reference": [
+        "metformin",
+        "glipizide"
+      ],
+      "prediction": [
+        "metformin",
+        "glipizide"
+      ],
+      "response": "{\n  \"medications\": [\n    \"metformin\",\n    \"glipizide\"\n  ]\n}",
+      "parse_error": null,
+      "baseline": {
+        "tp": 0,
+        "fp": 0,
+        "fn": 2
+      },
+      "model": {
+        "tp": 2,
+        "fp": 0,
+        "fn": 0
+      }
+    },
+    {
+      "row_idx": 38,
+      "category": "abbreviations",
+      "reference": [
+        "Albuterol",
+        "Prednisone"
+      ],
+      "prediction": [
+        "Albuterol",
+        "Prednisone"
+      ],
+      "response": "{\n  \"medications\": [\n    \"Albuterol\",\n    \"Prednisone\"\n  ]\n}",
+      "parse_error": null,
+      "baseline": {
+        "tp": 0,
+        "fp": 0,
+        "fn": 2
+      },
+      "model": {
+        "tp": 2,
+        "fp": 0,
+        "fn": 0
+      }
+    },
+    {
+      "row_idx": 39,
+      "category": "clean",
+      "reference": [
+        "Amoxicillin",
+        "Albuterol inhaler"
+      ],
+      "prediction": [
+        "Amoxicillin",
+        "Albuterol"
+      ],
+      "response": "{\n  \"medications\": [\n    \"Amoxicillin\",\n    \"Albuterol\"\n  ]\n}",
+      "parse_error": null,
+      "baseline": {
+        "tp": 0,
+        "fp": 0,
+        "fn": 2
+      },
+      "model": {
+        "tp": 1,
+        "fp": 1,
+        "fn": 1
+      }
+    }
+  ]
+}
