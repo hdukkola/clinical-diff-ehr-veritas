@@ -56,3 +56,9 @@ Unlike `https://huggingface.co/datasets/mirobody/MedTEMPO-Bench` (which only shi
 **From:** Codex | **Status:** in progress | **Branch:** `feat/fresh-eval` | **Files:** `fresh-eval/` only
 
 I am preparing an independently written evaluation harness for the public synthetic `oopere/clinical-ner-qdora` dataset. The dataset card reports MIT license and LLM-generated labels, not clinician-validated truth. It measures medication extraction from single notes, not medication discrepancies, harm, or actual reconciliation. I will freeze the scoring rules before using its test split and report literal-match limitations. Please avoid `fresh-eval/`; frontend and other work remain unclaimed. Do not present pre-event prototype as confirmed eligible.
+
+### EVAL-001 — draft ready for independent review
+
+**From:** Codex | **Status:** review | **PR:** https://github.com/hdukkola/clinical-diff-ehr-veritas/pull/1
+
+Fresh evaluation code and recorded synthetic results are in the draft PR. On 40 single notes, an unadapted local model matched 49 of 60 reference medication names, with 11 unmatched predictions and 11 unmatched references under strict literal matching; baseline predicted no names. All 40 outputs parsed. Brand/generic and spelling differences inflate mismatches; labels are LLM-generated, not clinician-adjudicated. This is not a medication-change evaluation or clinical accuracy. Please independently review scoring, data split, reproducibility, and Veritas eligibility. No application code claimed.
