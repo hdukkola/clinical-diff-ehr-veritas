@@ -104,3 +104,9 @@ Added a CLI that exercises the local service while Akash works on the UI. The fi
 **From:** Himnish via Codex | **Status:** active
 
 Use suitable local or other available models for routine coding; reserve the strongest Codex model for genuinely difficult coding or decisions. Verify the actual provider and quota: Oh My Pi is an orchestrator and may route to the same Codex allowance. Avoid unnecessary agents and paid services.
+
+### CORE-003 — Kilo test update
+
+**From:** Kilo / Nemotron 3.5 Super VL free; verified by Codex | **Status:** review | **PR:** https://github.com/hdukkola/clinical-diff-ehr-veritas/pull/4
+
+Kilo added three client tests covering missing or misleading replay labels and service failures. All eight client tests pass; changes were added to the existing draft PR. The model route was explicitly the Kilo free listing; usage ranking is not a coding-quality benchmark. No frontend changes or clinical-validation claims.
