@@ -26,6 +26,13 @@ import {
 } from '@/lib/ai-socket';
 import { getSyntheticScenario, syntheticScenarios, type SyntheticScenario } from '@/lib/fixtures';
 import { hfDatasetSources, hfNoteComparisonPairs, hfScenarios } from '@/lib/hf-fixtures';
+import {
+  CockpitWidgets,
+  DEFAULT_COCKPIT_WIDGET_ORDER,
+  type CockpitNavigateFilter,
+  type CockpitViewId,
+  type CockpitWidgetId,
+} from '@/components/CockpitWidgets';
 import type {
   Medication,
   MedicationChange,
@@ -914,6 +921,7 @@ export default function Home() {
   const [announcement, setAnnouncement] = useState('');
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const [focusHeadingNonce, setFocusHeadingNonce] = useState(0);
+  const [widgetOrder, setWidgetOrder] = useState<CockpitWidgetId[]>(DEFAULT_COCKPIT_WIDGET_ORDER);
 
   /* ---- Compare notes state ---- */
   const [selectedPresetId, setSelectedPresetId] = useState<string>('default');
@@ -1053,23 +1061,105 @@ export default function Home() {
     return () => document.removeEventListener('mousedown', handleOutsideClick);
   }, [paletteMenuOpen]);
 
+  /* ---- Persistence (/api/reviews) ---- */
+  const persistSessionUpdate = useCallback(async (payload: Record<string, unknown>) => {
+    if (typeof fetch !== 'function') return;
+    try {
+      await fetch('/api/reviews', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+    } catch {
+      // Graceful fallback when offline or /api/reviews is unavailable.
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof fetch !== 'function') return;
+    let active = true;
+
+    async function hydrateFromReviewsApi() {
+      try {
+        const response = await fetch('/api/reviews', { method: 'GET', cache: 'no-store' });
+        if (!response.ok) return;
+        const data = (await response.json().catch(() => null)) as {
+          reviews?: unknown;
+          audit?: unknown;
+        } | null;
+        if (!active || !data || typeof data !== 'object') return;
+
+        if (data.reviews && typeof data.reviews === 'object' && !Array.isArray(data.reviews)) {
+          const hydratedReviews: Record<string, ReviewDecision> = {};
+          for (const [key, val] of Object.entries(data.reviews as Record<string, unknown>)) {
+            if (val === 'verified' || val === 'flagged' || val === 'deferred') {
+              hydratedReviews[key] = val;
+            }
+          }
+          if (Object.keys(hydratedReviews).length > 0) {
+            setReviews((prev) => ({ ...hydratedReviews, ...prev }));
+          }
+        }
+
+        if (Array.isArray(data.audit) && data.audit.length > 0) {
+          const hydratedAudit = data.audit.filter(
+            (item): item is AuditEntry =>
+              Boolean(item) &&
+              typeof item === 'object' &&
+              typeof (item as AuditEntry).id === 'string' &&
+              typeof (item as AuditEntry).ts === 'string' &&
+              typeof (item as AuditEntry).actor === 'string' &&
+              typeof (item as AuditEntry).action === 'string' &&
+              typeof (item as AuditEntry).target === 'string',
+          );
+          if (hydratedAudit.length > 0) {
+            setAudit((prev) => {
+              const seen = new Set(prev.map((a) => a.id));
+              const incoming = hydratedAudit.filter((entry) => !seen.has(entry.id));
+              if (incoming.length === 0) return prev;
+              const initIdx = prev.findIndex((a) => a.id === 'aud-init');
+              if (initIdx === -1) {
+                return [...prev, ...incoming];
+              }
+              return [...prev.slice(0, initIdx), ...incoming, ...prev.slice(initIdx)];
+            });
+          }
+        }
+      } catch {
+        // Graceful fallback when offline or /api/reviews is unavailable.
+      }
+    }
+
+    void hydrateFromReviewsApi();
+    return () => {
+      active = false;
+    };
+  }, []);
+
   /* ---- Helpers ---- */
   const showToast = useCallback((msg: string) => {
     setToastMsg(msg);
   }, []);
 
-  const addAudit = useCallback((actor: string, action: string, target: string) => {
-    setAudit((prev) => [
-      {
-        id: `aud-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-        ts: new Date().toISOString(),
-        actor,
-        action,
-        target,
-      },
-      ...prev,
-    ]);
-  }, []);
+  const createAuditEntry = useCallback(
+    (actor: string, action: string, target: string): AuditEntry => ({
+      id: `aud-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      ts: new Date().toISOString(),
+      actor,
+      action,
+      target,
+    }),
+    [],
+  );
+
+  const addAudit = useCallback(
+    (actor: string, action: string, target: string) => {
+      const entry = createAuditEntry(actor, action, target);
+      setAudit((prev) => [entry, ...prev]);
+      void persistSessionUpdate({ auditEntry: entry });
+    },
+    [createAuditEntry, persistSessionUpdate],
+  );
 
   const navigateTo = useCallback((nextView: ViewId, focusHeading = true) => {
     setView(nextView);
@@ -1081,6 +1171,25 @@ export default function Home() {
       setFocusHeadingNonce((n) => n + 1);
     }
   }, []);
+
+  const handleCockpitNavigate = useCallback(
+    (nextView: CockpitViewId, filter?: CockpitNavigateFilter) => {
+      if (nextView === 'diff') {
+        setDiffTab('diff');
+        if (
+          filter === 'all' ||
+          filter === 'changed' ||
+          filter === 'onlyA' ||
+          filter === 'onlyB' ||
+          filter === 'same'
+        ) {
+          setDiffFilter(filter);
+        }
+      }
+      navigateTo(nextView);
+    },
+    [navigateTo],
+  );
 
   const selectPatient = useCallback(
     (scenarioId: string) => {
@@ -1120,17 +1229,26 @@ export default function Home() {
       const key = `${activeScenario.id}:${medId}`;
       const prev = reviews[key];
       const cleared = prev === choice;
+      const nextDecision = cleared ? null : choice;
+      const auditEntry = createAuditEntry(
+        'Clinician',
+        cleared ? `Cleared ${choice}` : `Marked ${choice}`,
+        `${cleanPatientName(activeScenario.patientLabel)} · ${medName}`,
+      );
       setReviews((curr) => {
         const next = { ...curr };
         if (cleared) delete next[key];
         else next[key] = choice;
         return next;
       });
-      addAudit(
-        'Clinician',
-        cleared ? `Cleared ${choice}` : `Marked ${choice}`,
-        `${cleanPatientName(activeScenario.patientLabel)} · ${medName}`,
-      );
+      setAudit((curr) => [auditEntry, ...curr]);
+      void persistSessionUpdate({
+        scenarioId: activeScenario.id,
+        medId,
+        key,
+        decision: nextDecision,
+        auditEntry,
+      });
       setAnnouncement(
         cleared ? `Cleared ${choice} for ${medName}` : `Marked ${medName} as ${choice}`,
       );
@@ -1141,7 +1259,13 @@ export default function Home() {
         });
       }
     },
-    [activeScenario.id, activeScenario.patientLabel, addAudit, reviews],
+    [
+      activeScenario.id,
+      activeScenario.patientLabel,
+      createAuditEntry,
+      persistSessionUpdate,
+      reviews,
+    ],
   );
 
   const toggleSnapshotRow = useCallback((medId: string, restoreRowFocus = false) => {
@@ -2288,6 +2412,20 @@ export default function Home() {
           </div>
 
           <div className="col">
+            <CockpitWidgets
+              snapshotEntries={snapshotEntries}
+              reviews={reviews}
+              activeScenarioId={activeScenario.id}
+              activeReport={activeReport}
+              triageByScenario={triageByScenario}
+              socketStatus={socketStatus}
+              evalSummary={evalSummary}
+              audit={audit}
+              onNavigate={handleCockpitNavigate}
+              order={widgetOrder}
+              onOrderChange={setWidgetOrder}
+            />
+
             {/* ==================== COMPARE NOTES (DEFAULT) ==================== */}
             {view === 'extract' && (
               <section className="extract-workspace" aria-label="Compare notes workspace">

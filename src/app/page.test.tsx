@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import Home from '@/app/page';
 import { syntheticScenarios } from '@/lib/fixtures';
@@ -804,5 +804,248 @@ describe('Clinical Diff Veritas Editorial UI', () => {
     expect(resultSection).toHaveTextContent('Frequency changed');
     expect(resultSection).toHaveTextContent('Duration changed');
     expect(resultSection).toHaveTextContent(/Unsupported in note-text comparison/i);
+  });
+
+  it('renders all 7 CockpitWidgets wired to live state with reordering and drill-down navigation', async () => {
+    const user = userEvent.setup();
+    render(<Home />);
+
+    const cockpit = screen.getByRole('region', { name: 'Clinical cockpit widgets' });
+    const getWidgetOrder = () =>
+      Array.from(cockpit.querySelectorAll<HTMLElement>('[data-widget-id]')).map(
+        (el) => el.dataset.widgetId,
+      );
+
+    expect(getWidgetOrder()).toEqual([
+      'diff-breakdown',
+      'review-progress',
+      'provenance-health',
+      'triage-queue',
+      'model-socket',
+      'eval-metrics',
+      'session-activity',
+    ]);
+
+    // Keyboard reorder button moves widget right and shows Reset layout
+    await user.click(within(cockpit).getByRole('button', { name: 'Move Medication Diff Breakdown right' }));
+    expect(getWidgetOrder().slice(0, 2)).toEqual(['review-progress', 'diff-breakdown']);
+
+    await user.click(within(cockpit).getByRole('button', { name: 'Reset layout' }));
+    expect(getWidgetOrder().slice(0, 2)).toEqual(['diff-breakdown', 'review-progress']);
+
+    // HTML5 drag-and-drop reorders widgets
+    const evalCard = cockpit.querySelector<HTMLElement>('[data-widget-id="eval-metrics"]')!;
+    const diffCard = cockpit.querySelector<HTMLElement>('[data-widget-id="diff-breakdown"]')!;
+    const dataTransfer = {
+      effectAllowed: 'move',
+      dropEffect: 'move',
+      data: {} as Record<string, string>,
+      setData(type: string, val: string) {
+        this.data[type] = val;
+      },
+      getData(type: string) {
+        return this.data[type] ?? '';
+      },
+    };
+    fireEvent.dragStart(evalCard, { dataTransfer });
+    fireEvent.dragOver(diffCard, { dataTransfer });
+    fireEvent.drop(diffCard, { dataTransfer });
+    fireEvent.dragEnd(evalCard);
+    expect(getWidgetOrder()[0]).toBe('eval-metrics');
+
+    // Drill-down: Medication Diff Breakdown 'Changed' chip navigates to Snapshot review with Changed filter
+    const changedChip = within(diffCard).getByRole('button', { name: /Changed/i });
+    await user.click(changedChip);
+
+    const morganHeading = screen.getByRole('heading', { level: 1, name: 'Morgan Lee' });
+    await waitFor(() => expect(morganHeading).toHaveFocus());
+    const filterGroup = screen.getByRole('group', { name: 'Filter medication differences' });
+    expect(within(filterGroup).getByRole('button', { name: /^Changed/ })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    expect(screen.getByText('Lisinopril')).toBeInTheDocument();
+    expect(screen.queryByText('Aspirin')).not.toBeInTheDocument();
+
+    // Drill-down: Provenance & Evidence Health navigates to Snapshot review with All filter
+    await user.click(within(cockpit).getByRole('button', { name: 'Provenance & Evidence Health' }));
+    expect(within(filterGroup).getByRole('button', { name: /^All/ })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+
+    // Drill-down: AI Triage Queue navigates to Review suggestions and updates live count after Run triage
+    await user.click(within(cockpit).getByRole('button', { name: 'AI Triage Queue' }));
+    const triageH1 = screen.getByRole('heading', {
+      level: 1,
+      name: 'Suggestions waiting for a clinician',
+    });
+    await waitFor(() => expect(triageH1).toHaveFocus());
+    await user.click(screen.getByRole('button', { name: 'Run triage' }));
+    const triageCard = cockpit.querySelector<HTMLElement>('[data-widget-id="triage-queue"]')!;
+    expect(within(triageCard).getByRole('img')).toHaveAttribute(
+      'aria-label',
+      expect.stringContaining('4 open'),
+    );
+
+    // Drill-down: Evaluation Metrics -> Evaluations
+    await user.click(within(cockpit).getByRole('button', { name: 'Evaluation Metrics' }));
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { level: 1, name: 'Evaluation results' })).toHaveFocus(),
+    );
+
+    // Drill-down: Session Activity -> Session activity
+    await user.click(within(cockpit).getByRole('button', { name: 'Session Activity' }));
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { level: 1, name: 'Session activity' })).toHaveFocus(),
+    );
+
+    // Drill-down: Note Extraction & Model Socket -> Models and data
+    await user.click(within(cockpit).getByRole('button', { name: 'Note Extraction & Model Socket' }));
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { level: 1, name: 'Models and data' })).toHaveFocus(),
+    );
+  });
+
+  it('hydrates reviews and audit from /api/reviews, persists review updates asynchronously, and falls back gracefully offline', async () => {
+    const user = userEvent.setup();
+    const origFetch = globalThis.fetch;
+    const scenarioId = syntheticScenarios[0].id;
+    const postPayloads: Array<Record<string, unknown>> = [];
+
+    try {
+      globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        const method = init?.method ?? 'GET';
+        if (url === '/api/reviews' && method === 'GET') {
+          return new Response(
+            JSON.stringify({
+              syntheticOnly: true,
+              disclaimer: 'Synthetic training/demo session data only. Never store real PHI.',
+              updatedAt: '2026-11-15T01:00:00.000Z',
+              persistence: 'local_file',
+              reviews: {
+                [`${scenarioId}:m1`]: 'verified',
+              },
+              reviewsByScenario: {
+                [scenarioId]: { m1: 'verified' },
+              },
+              audit: [
+                {
+                  id: 'aud-hydrated-1',
+                  ts: '2026-11-15T01:00:00.000Z',
+                  actor: 'Clinician',
+                  action: 'Marked verified',
+                  target: 'Morgan Lee · Lisinopril',
+                },
+              ],
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          );
+        }
+        if (url === '/api/reviews' && (method === 'POST' || method === 'PUT')) {
+          const parsed = JSON.parse(String(init?.body ?? '{}')) as Record<string, unknown>;
+          postPayloads.push(parsed);
+          return new Response(
+            JSON.stringify({
+              syntheticOnly: true,
+              disclaimer: 'Synthetic training/demo session data only. Never store real PHI.',
+              updatedAt: '2026-11-15T01:05:00.000Z',
+              persistence: 'local_file',
+              reviews: { [`${scenarioId}:m1`]: 'verified' },
+              reviewsByScenario: { [scenarioId]: { m1: 'verified' } },
+              audit: [],
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          );
+        }
+        return new Response(
+          JSON.stringify({
+            socket_open: true,
+            state: 'standby',
+            status: 'standby',
+            provider: 'deterministic_replay',
+            configured: false,
+            reachable: false,
+            simulated: true,
+            live_ai: false,
+            model: null,
+            adapter: null,
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      }) as unknown as typeof fetch;
+
+      const { unmount } = render(<Home />);
+
+      // Verify hydrated review appears in Snapshot review and CockpitWidgets
+      const cockpit = screen.getByRole('region', { name: 'Clinical cockpit widgets' });
+      const reviewCard = cockpit.querySelector<HTMLElement>('[data-widget-id="review-progress"]')!;
+      await waitFor(() => {
+        expect(within(reviewCard).getByRole('img')).toHaveAttribute(
+          'aria-label',
+          expect.stringContaining('1 of 4 reviewed'),
+        );
+      });
+
+      await user.click(within(getPatientsGroup()).getAllByRole('button')[0]);
+      const lisinoprilGroup = screen.getByRole('group', { name: 'Review Lisinopril' });
+      expect(within(lisinoprilGroup).getByRole('button', { name: 'Verify' })).toHaveAttribute(
+        'aria-pressed',
+        'true',
+      );
+
+      // Toggle Flag on Metformin (m2) -> persists asynchronously to POST /api/reviews
+      const metforminGroup = screen.getByRole('group', { name: 'Review Metformin' });
+      await user.click(within(metforminGroup).getByRole('button', { name: 'Flag' }));
+
+      await waitFor(() => {
+        expect(
+          postPayloads.some(
+            (p) =>
+              p.key === `${scenarioId}:m2` &&
+              p.decision === 'flagged' &&
+              typeof p.auditEntry === 'object' &&
+              p.auditEntry !== null &&
+              (p.auditEntry as { action?: string }).action === 'Marked flagged',
+          ),
+        ).toBe(true);
+      });
+
+      // Toggle Flag on Metformin again -> clears decision (decision: null)
+      await user.click(within(metforminGroup).getByRole('button', { name: 'Flag' }));
+      await waitFor(() => {
+        expect(
+          postPayloads.some(
+            (p) =>
+              p.key === `${scenarioId}:m2` &&
+              p.decision === null &&
+              typeof p.auditEntry === 'object' &&
+              p.auditEntry !== null &&
+              (p.auditEntry as { action?: string }).action === 'Cleared flagged',
+          ),
+        ).toBe(true);
+      });
+
+      // Hydrated audit entry is visible in Session activity
+      await user.click(within(getWorkspaceNav()).getByRole('button', { name: /^Session activity/i }));
+      expect(screen.getByText('Morgan Lee · Lisinopril')).toBeInTheDocument();
+
+      unmount();
+
+      // Offline fallback: fetch rejects, UI still works cleanly without throwing
+      globalThis.fetch = vi.fn(async () => {
+        throw new Error('offline mode');
+      }) as unknown as typeof fetch;
+
+      render(<Home />);
+      await user.click(within(getPatientsGroup()).getAllByRole('button')[0]);
+      const offlineLisinopril = screen.getByRole('group', { name: 'Review Lisinopril' });
+      const offlineVerify = within(offlineLisinopril).getByRole('button', { name: 'Verify' });
+      await user.click(offlineVerify);
+      expect(offlineVerify).toHaveAttribute('aria-pressed', 'true');
+    } finally {
+      globalThis.fetch = origFetch;
+    }
   });
 });
