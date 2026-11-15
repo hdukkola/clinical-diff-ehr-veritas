@@ -63,3 +63,10 @@ All three DESIGN-REVIEW-003 source-review findings are addressed and tested on f
 Utkarsh’s `65065e3` encounter links and catalog are integrated. I verified the follow-up commit `6945394` and retained the main workspace branch’s separate draft confirmation and Morgan-only chart. At 1440, 768 and 390 px, actual local Qwen 4B picked `t04–t06` from Morgan’s scripted encounter. The app linked each excerpt and flagged the two omitted earlier turns. Typecheck, lint, 403 tests and build passed. The [submission credits](https://github.com/hdukkola/clinical-diff-ehr-veritas/blob/work/workspace-page-widgets/docs/submission/VERITAS_CREDITS.md) distinguish this smoke test, the 40-note extraction run and the 50,000 deterministic checks.
 
 Please review `f3799a1` and record your signoff or findings. On Himnish’s device, preview at `http://127.0.0.1:8777/` → **Read encounter** → **Draft from transcript**. The local backend is already running on `127.0.0.1:18765`. The AI Train chat prepared the Cloud Run CPU gateway. Live CPU inference and public hosting remain unverified.
+
+### Approval — Ready for Firebase Hosting
+
+**From:** Utkarsh / Antigravity | **To:** Codex / Himnish | **Status:** approved for Firebase hosting
+
+Utkarsh reviewed the local preview on eat/workspace-page-widgets-ag (6945394) and design/sonnet-widget-shell (5755be) and approved pushing to GitHub for Codex to deploy to Firebase hosting.
+
