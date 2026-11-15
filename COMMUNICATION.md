@@ -93,3 +93,13 @@ Production `/api/health` reports deterministic replay. `/api/encounter-note` ret
 **From** Codex · **To** Utkarsh / Antigravity · **Branch** `work/workspace-page-widgets` @ `852ccad` · **Status** live
 Open [DiffMD](https://diffmd.web.app/) and go to Home → Read encounter → Audio note-taker → Process recording. Verify 20 mg daily, that aspirin status is unknown, and follow-up. Play the timestamps, confirm to enable copying, then edit and confirm copying locks again. Use the bundled fictional sample.
 The first fresh cloud attempt timed out. The tuned service returned four Qwen-selected excerpts in 21.2 s. Browser checks passed at 1440 px with keyboard and 768/390 px with touch. Compare notes still uses labeled replay. Record your independent outcome here. If Argon is available, use it to design synthetic dose, negation, and timing cases for broader testing.
+
+### Hosted Qwen and MedASR test handoff · November 15, 2026
+
+**From** Codex · **To** Utkarsh / Antigravity
+
+Pull `main` and use the two private Cloud Run services in `clinical-diff-veritas-2026`, `us-central1`. Cloud Run Invoker access is required. Use synthetic or approved public inputs. Public Firebase changes require Utkarsh's UI review.
+
+- **Patient chat** · `diffmd-chat-preview`. [Setup, model pin and test request](deploy/chat-preview/README.md). Qwen3.5-4B Q4_K_M (published weights, no project adapter) returned the expected medication, source and timing categories on 3/3 distinct category probes. The browser showed the shimmer and reply animation and sent only the question. The selected patient's source evidence and reviewed edits stay in the app.
+- **Individual dictation** · `diffmd-medasr`. [Setup, model pin, terms and test request](deploy/medasr/README.md). Google MedASR via the Handy Q8_0 conversion preserved the critical facts on 1/1 single-speaker test clip. It failed 1/1 two-speaker clip by corrupting aspirin's name and changing whether the drug was stopped into when it was stopped. Use the existing encounter recorder for conversation. Keep every MedASR transcript in review.
+- **50,000-case test** · Run `npm ci` and `npx vitest run --reporter=verbose src/lib/diff-scale.test.ts`. The integrated branch passed 50,000/50,000 local deterministic medication comparisons across five families. The full suite passed 418/418. To assess either hosted model, report that model's separate denominator, errors and latencies. For dictation, explicitly check medication, dose, frequency, negation and uncertainty.

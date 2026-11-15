@@ -4,6 +4,7 @@ COPY package.json package-lock.json ./
 RUN npm ci
 COPY next.config.ts tsconfig.json vitest.setup.ts ./
 COPY src ./src
+COPY public ./public
 COPY fresh-backend ./fresh-backend
 ENV NEXT_TELEMETRY_DISABLED=1 NEXT_PUBLIC_CLINICAL_DIFF_CLOUD_CHAT=1
 RUN npm run build && npm prune --omit=dev

@@ -2,7 +2,7 @@
 
 The preview serves synthetic charts on Cloud Run in the DiffMD project. Google IAM controls access. Qwen classifies ambiguous questions so the app can ask a follow-up. Chart answers and review decisions stay in the app.
 
-The model container is pinned by digest in [service.yaml](service.yaml). It contains `ggml-org/Qwen3.5-4B-GGUF` at revision `8d43d974efc48399cb58957ad49c8b26bf5a109c` with the Q4_K_M GGUF SHA-256 `217002fa8008ef4fc6d548353a3aebef055a96e6ff8e0e2c0953ef8254a89c14`. This preview loads the model directly through llama.cpp on CPU. The service uses request-based billing with a maximum of one instance and scales to zero.
+The model container is pinned by digest in [service.yaml](service.yaml). It contains `ggml-org/Qwen3.5-4B-GGUF` at revision `8d43d974efc48399cb58957ad49c8b26bf5a109c` with the Q4_K_M GGUF SHA-256 `217002fa8008ef4fc6d548353a3aebef055a96e6ff8e0e2c0953ef8254a89c14`. This preview uses the published Qwen weights without a project adapter and loads them through llama.cpp on CPU. The service uses request-based billing with a maximum of one instance and scales to zero.
 
 From a clean checkout, stage the committed files and build the web image.
 
@@ -27,3 +27,11 @@ gcloud run services proxy diffmd-chat-preview --port=3105 \
 ```
 
 Set `preview_digest` to the `sha256:…` value from Cloud Build before running the second block. Open [the local preview](http://127.0.0.1:3105), choose **AI chat**, and ask “Did something happen on which visit?” A successful call displays “Cloud Qwen assisted with this follow-up.” Public Firebase Hosting uses its own Cloud Run service and release.
+
+For the API smoke test, use the same proxy and send just the question. The expected `focus` is `timing`.
+
+```sh
+curl --fail-with-body http://127.0.0.1:3105/api/patient-chat \
+  -H 'Origin: http://127.0.0.1:3105' -H 'Content-Type: application/json' \
+  -d '{"question":"Did something happen on which visit?"}'
+```
