@@ -1756,3 +1756,215 @@ export function searchChartRecords(params: SearchChartParams): ChartSearchMatch[
 
   return matches;
 }
+
+export type DocumentIndexStatus = 'available' | 'revision' | 'duplicate' | 'unavailable';
+
+export interface DocumentIndexEntry {
+  id: string;
+  sourceLabel: string;
+  recordedAt: string | null;
+  sourceKind: EvidenceSourceKind;
+  status: DocumentIndexStatus;
+  statusLabel: string;
+  detail: string;
+  medicationId?: string;
+  citationIdx?: number;
+  targetView?: 'extract' | 'diff';
+}
+
+export interface DocumentIndexResult {
+  dated: DocumentIndexEntry[];
+  undated: DocumentIndexEntry[];
+  counts: {
+    total: number;
+    revisions: number;
+    duplicates: number;
+    unavailable: number;
+  };
+}
+
+const REVISION_TEXT_PATTERN = /\b(revision|revised|amended|amendment|addendum|updated)\b/i;
+
+const DOCUMENT_STATUS_LABELS: Record<DocumentIndexStatus, string> = {
+  available: 'Available',
+  revision: 'Revision',
+  duplicate: 'Duplicate',
+  unavailable: 'Unavailable document',
+};
+
+/**
+ * List synthetic notes and snapshot documents by source and date,
+ * surfacing revisions, duplicates, and unavailable documents while keeping
+ * undated records separate.
+ */
+export function buildDocumentIndex(
+  earlier: Snapshot,
+  later: Snapshot,
+  report: Pick<SnapshotComparisonReport, 'changes'>,
+): DocumentIndexResult {
+  interface RawDoc {
+    id: string;
+    identityKey: string;
+    contentKey: string;
+    sourceLabel: string;
+    recordedAt: string | null;
+    sourceKind: EvidenceSourceKind;
+    isUnavailable: boolean;
+    explicitRevision: boolean;
+    detail: string;
+    medicationId?: string;
+    citationIdx?: number;
+  }
+
+  const rawDocs: RawDoc[] = [
+    {
+      id: `doc-snap-${earlier.id}`,
+      identityKey: `snap:${earlier.source.trim().toLowerCase()}`,
+      contentKey: `snap:${earlier.medications.map((m) => `${m.id}:${m.dose ?? ''}`).join('|')}`,
+      sourceLabel: earlier.source,
+      recordedAt: normalizeOptionalText(earlier.recordedAt),
+      sourceKind: earlier.sourceKind ?? 'snapshot',
+      isUnavailable: false,
+      explicitRevision: REVISION_TEXT_PATTERN.test(earlier.source),
+      detail: `${earlier.medications.length} documented ${
+        earlier.medications.length === 1 ? 'medication' : 'medications'
+      }`,
+    },
+    {
+      id: `doc-snap-${later.id}`,
+      identityKey: `snap:${later.source.trim().toLowerCase()}`,
+      contentKey: `snap:${later.medications.map((m) => `${m.id}:${m.dose ?? ''}`).join('|')}`,
+      sourceLabel: later.source,
+      recordedAt: normalizeOptionalText(later.recordedAt),
+      sourceKind: later.sourceKind ?? 'snapshot',
+      isUnavailable: false,
+      explicitRevision: REVISION_TEXT_PATTERN.test(later.source),
+      detail: `${later.medications.length} documented ${
+        later.medications.length === 1 ? 'medication' : 'medications'
+      }`,
+    },
+  ];
+
+  for (const change of report.changes) {
+    (change.evidenceLinks ?? []).forEach((link, idx) => {
+      const hasDocIdentity = Boolean(
+        link.noteId || link.sourceId || link.excerpt || link.resolutionStatus === 'unavailable',
+      );
+      if (!hasDocIdentity) return;
+
+      const sourceLabel =
+        link.sourceLabel ??
+        link.noteId ??
+        link.sourceId ??
+        (link.side === 'earlier'
+          ? earlier.source
+          : link.side === 'later'
+            ? later.source
+            : 'Unattributed document');
+
+      const recordedAt = normalizeOptionalText(
+        link.recordedAt ??
+          (link.side === 'earlier'
+            ? earlier.recordedAt
+            : link.side === 'later'
+              ? later.recordedAt
+              : null),
+      );
+
+      const identityKey = (link.noteId ?? link.sourceId ?? sourceLabel).trim().toLowerCase();
+      const contentKey = `${(link.excerpt ?? '').trim().toLowerCase()}|${(link.section ?? '').trim().toLowerCase()}`;
+      const isUnavailable = link.resolutionStatus === 'unavailable';
+
+      rawDocs.push({
+        id: `doc-link-${change.medicationId}-${idx}`,
+        identityKey,
+        contentKey,
+        sourceLabel,
+        recordedAt,
+        sourceKind: link.sourceKind ?? 'clinical_note',
+        isUnavailable,
+        explicitRevision: REVISION_TEXT_PATTERN.test(
+          `${sourceLabel} ${link.section ?? ''} ${link.note ?? ''}`,
+        ),
+        detail: isUnavailable
+          ? `Source unavailable${link.note ? ` — ${link.note}` : ''}`
+          : link.excerpt
+            ? `${change.name}: "${link.excerpt}"`
+            : `${change.name}: ${link.note ?? 'Document reference'}`,
+        medicationId: change.medicationId,
+        citationIdx: idx,
+      });
+    });
+  }
+
+  const seenExact = new Map<string, number>();
+  const seenIdentity = new Map<string, string>();
+  const dated: DocumentIndexEntry[] = [];
+  const undated: DocumentIndexEntry[] = [];
+
+  let revisions = 0;
+  let duplicates = 0;
+  let unavailable = 0;
+
+  for (const doc of rawDocs) {
+    const exactKey = `${doc.identityKey}|${doc.recordedAt ?? 'undated'}|${doc.contentKey}`;
+    const exactCount = seenExact.get(exactKey) ?? 0;
+    seenExact.set(exactKey, exactCount + 1);
+
+    const prevContent = seenIdentity.get(doc.identityKey);
+    let status: DocumentIndexStatus = 'available';
+    if (doc.isUnavailable) {
+      status = 'unavailable';
+      unavailable += 1;
+    } else if (exactCount > 0) {
+      status = 'duplicate';
+      duplicates += 1;
+    } else if (doc.explicitRevision || (prevContent !== undefined && prevContent !== doc.contentKey)) {
+      status = 'revision';
+      revisions += 1;
+    }
+
+    if (prevContent === undefined) {
+      seenIdentity.set(doc.identityKey, doc.contentKey);
+    }
+
+    const entry: DocumentIndexEntry = {
+      id: doc.id,
+      sourceLabel: doc.sourceLabel,
+      recordedAt: doc.recordedAt,
+      sourceKind: doc.sourceKind,
+      status,
+      statusLabel: DOCUMENT_STATUS_LABELS[status],
+      detail: doc.detail,
+      ...(doc.medicationId ? { medicationId: doc.medicationId } : {}),
+      ...(doc.citationIdx !== undefined ? { citationIdx: doc.citationIdx } : {}),
+      ...(doc.medicationId ? { targetView: 'diff' as const } : {}),
+    };
+
+    if (entry.recordedAt) {
+      dated.push(entry);
+    } else {
+      undated.push(entry);
+    }
+  }
+
+  dated.sort((a, b) => {
+    const timeA = Date.parse(a.recordedAt!);
+    const timeB = Date.parse(b.recordedAt!);
+    if (!Number.isNaN(timeA) && !Number.isNaN(timeB) && timeA !== timeB) {
+      return timeA - timeB;
+    }
+    return a.sourceLabel.localeCompare(b.sourceLabel);
+  });
+
+  return {
+    dated,
+    undated,
+    counts: {
+      total: dated.length + undated.length,
+      revisions,
+      duplicates,
+      unavailable,
+    },
+  };
+}

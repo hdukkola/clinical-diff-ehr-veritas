@@ -1176,10 +1176,17 @@ kbd {
   }
 }
 
-.timeline-wrap {
+.timeline-wrap,
+.doc-index-wrap {
   display: flex;
   flex-direction: column;
   gap: 14px;
+}
+
+.doc-index-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .timeline-list {

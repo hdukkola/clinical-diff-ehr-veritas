@@ -1380,4 +1380,28 @@ describe('Clinical Diff Veritas Editorial UI', () => {
     expect(searchInput).toHaveValue('');
     expect(searchInput).toHaveFocus();
   });
+
+  it('lists notes by source and date in Document index and surfaces counts', async () => {
+    const user = userEvent.setup();
+    render(<Home />);
+
+    await user.click(within(getPatientsGroup()).getAllByRole('button')[0]);
+    const tablist = screen.getByRole('tablist', { name: 'Snapshot review tabs' });
+    const docsTab = within(tablist).getByRole('tab', { name: 'Document index' });
+    await user.click(docsTab);
+    expect(docsTab).toHaveAttribute('aria-selected', 'true');
+
+    const counts = screen.getByLabelText('Document index counts');
+    expect(counts).toHaveTextContent('2 documents');
+    expect(counts).toHaveTextContent('0 revisions');
+    expect(counts).toHaveTextContent('0 duplicates');
+    expect(counts).toHaveTextContent('0 unavailable');
+
+    const datedDocs = screen.getByRole('region', { name: 'Document index by source and date' });
+    const items = within(datedDocs).getAllByRole('listitem');
+    expect(items[0]).toHaveTextContent('2026-10-01');
+    expect(items[0]).toHaveTextContent('Fictional outpatient medication list');
+    expect(items[1]).toHaveTextContent('2026-10-15');
+    expect(items[1]).toHaveTextContent('Fictional discharge medication list');
+  });
 });

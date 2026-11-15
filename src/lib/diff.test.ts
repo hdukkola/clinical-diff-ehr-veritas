@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   analyzeSnapshots,
+  buildDocumentIndex,
   buildEncounterTimeline,
   classifyChangeEvidenceState,
   classifyLinkEvidenceState,
@@ -725,6 +726,73 @@ describe('compareNoteRegimens & normalizeNoteText', () => {
           m.sourceKind === 'medication_diff' &&
           m.medicationId === 'm1' &&
           m.sourceLabel.includes('Medication diff'),
+      ),
+    ).toBe(true);
+  });
+
+  it('builds Document index by source and date surfacing revisions, duplicates, and unavailable documents', () => {
+    const earlierSnap: Snapshot = {
+      id: 'doc-s1',
+      source: 'Outpatient medication list',
+      recordedAt: '2026-10-01',
+      medications: [
+        med('Lisinopril', '10 mg', {
+          evidenceLinks: [
+            {
+              id: 'ev-orig',
+              noteId: 'note-100',
+              sourceLabel: 'Clinic Note',
+              excerpt: 'Lisinopril 10 mg daily',
+              recordedAt: '2026-10-01',
+            },
+          ],
+        }),
+      ],
+    };
+    const laterSnap: Snapshot = {
+      id: 'doc-s2',
+      source: 'Discharge medication list',
+      recordedAt: '2026-10-15',
+      medications: [
+        med('Lisinopril', '20 mg', {
+          evidenceLinks: [
+            {
+              id: 'ev-dup',
+              noteId: 'note-100',
+              sourceLabel: 'Clinic Note',
+              excerpt: 'Lisinopril 10 mg daily',
+              recordedAt: '2026-10-01',
+            },
+            {
+              id: 'ev-rev',
+              noteId: 'note-100',
+              sourceLabel: 'Clinic Note',
+              excerpt: 'Lisinopril increased to 20 mg daily',
+              recordedAt: '2026-10-10',
+            },
+            {
+              id: 'ev-unavail',
+              sourceId: 'ext-missing',
+              sourceLabel: 'External Pharmacy Record',
+              resolutionStatus: 'unavailable',
+              recordedAt: null,
+            },
+          ],
+        }),
+      ],
+    };
+
+    const report = analyzeSnapshots(earlierSnap, laterSnap);
+    const index = buildDocumentIndex(earlierSnap, laterSnap, report);
+
+    expect(index.counts.revisions).toBe(1);
+    expect(index.counts.duplicates).toBe(1);
+    expect(index.counts.unavailable).toBe(1);
+    expect(index.dated.some((d) => d.status === 'duplicate' && d.statusLabel === 'Duplicate')).toBe(true);
+    expect(index.dated.some((d) => d.status === 'revision' && d.statusLabel === 'Revision')).toBe(true);
+    expect(
+      [...index.dated, ...index.undated].some(
+        (d) => d.status === 'unavailable' && d.statusLabel === 'Unavailable document',
       ),
     ).toBe(true);
   });

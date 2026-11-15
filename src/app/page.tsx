@@ -12,6 +12,7 @@ import {
 } from 'react';
 import {
   analyzeSnapshots,
+  buildDocumentIndex,
   buildEncounterTimeline,
   classifyChangeEvidenceState,
   classifyLinkEvidenceState,
@@ -56,7 +57,7 @@ type PaletteId = 'void' | 'dimmed' | 'obsidian' | 'forest';
 type DiffFilter = 'all' | 'changed' | 'onlyA' | 'onlyB' | 'same';
 type ReviewDecision = 'verified' | 'flagged' | 'deferred';
 type NoteReviewDecision = 'clarify' | 'reviewed';
-type DiffTab = 'diff' | 'timeline' | 'snapshots' | 'method';
+type DiffTab = 'diff' | 'timeline' | 'documents' | 'snapshots' | 'method';
 type ModelsTab = 'connections' | 'add' | 'contracts';
 
 const VIEW_NAMES: Record<ViewId, string> = {
@@ -1012,6 +1013,11 @@ export default function Home() {
 
   const encounterTimeline = useMemo(
     () => buildEncounterTimeline(activeScenario.earlier, activeScenario.later, activeReport),
+    [activeReport, activeScenario.earlier, activeScenario.later],
+  );
+
+  const documentIndex = useMemo(
+    () => buildDocumentIndex(activeScenario.earlier, activeScenario.later, activeReport),
     [activeReport, activeScenario.earlier, activeScenario.later],
   );
 
@@ -3085,6 +3091,7 @@ export default function Home() {
                     [
                       ['diff', 'Differences'],
                       ['timeline', 'Encounter timeline'],
+                      ['documents', 'Document index'],
                       ['snapshots', 'Source snapshots'],
                       ['method', 'Method & limits'],
                     ] as const
@@ -3847,6 +3854,115 @@ export default function Home() {
                               </div>
                               <p className="timeline-source">{item.sourceLabel}</p>
                               <p className="timeline-detail">{item.detail}</p>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </section>
+                  </div>
+                )}
+
+                {diffTab === 'documents' && (
+                  <div className="doc-index-wrap">
+                    <div className="doc-index-summary" aria-label="Document index counts">
+                      <span className="e-tag">{documentIndex.counts.total} documents</span>
+                      <span className="e-tag evidence-state-conflicting_excerpts">
+                        {documentIndex.counts.revisions} revisions
+                      </span>
+                      <span className="e-tag">
+                        {documentIndex.counts.duplicates} duplicates
+                      </span>
+                      <span className="e-tag unavailable">
+                        {documentIndex.counts.unavailable} unavailable
+                      </span>
+                    </div>
+
+                    <section className="sec" aria-label="Document index by source and date">
+                      <h2 className="sec-h">
+                        Documents by source &amp; date · {documentIndex.dated.length}{' '}
+                        {documentIndex.dated.length === 1 ? 'record' : 'records'}
+                      </h2>
+                      {documentIndex.dated.length === 0 ? (
+                        <p className="nd">No dated documents in this comparison.</p>
+                      ) : (
+                        <ol className="timeline-list">
+                          {documentIndex.dated.map((doc) => (
+                            <li
+                              key={doc.id}
+                              className={`timeline-item${doc.status === 'unavailable' ? ' is-undated' : ''}`}
+                            >
+                              <div className="timeline-head">
+                                <span className="e-tag mono">{doc.recordedAt}</span>
+                                <span
+                                  className={`e-tag${
+                                    doc.status === 'unavailable'
+                                      ? ' unavailable'
+                                      : doc.status === 'revision'
+                                        ? ' evidence-state-conflicting_excerpts'
+                                        : doc.status === 'duplicate'
+                                          ? ' evidence-state-documented_negative'
+                                          : ''
+                                  }`}
+                                >
+                                  {doc.statusLabel}
+                                </span>
+                                <strong className="timeline-title">{doc.sourceLabel}</strong>
+                                {doc.medicationId && (
+                                  <button
+                                    type="button"
+                                    className="timeline-inspect-btn"
+                                    onClick={() => {
+                                      if (doc.citationIdx !== undefined) {
+                                        const citKey = `${activeScenario.id}:${doc.medicationId}`;
+                                        setActiveCitationByMed((curr) => ({
+                                          ...curr,
+                                          [citKey]: doc.citationIdx!,
+                                        }));
+                                      }
+                                      handleSelectEvidenceChange(doc.medicationId!);
+                                    }}
+                                  >
+                                    Inspect source
+                                  </button>
+                                )}
+                              </div>
+                              <p className="timeline-detail">{doc.detail}</p>
+                            </li>
+                          ))}
+                        </ol>
+                      )}
+                    </section>
+
+                    <section className="sec" aria-label="Undated documents">
+                      <h2 className="sec-h">
+                        Undated documents · {documentIndex.undated.length}{' '}
+                        {documentIndex.undated.length === 1 ? 'record' : 'records'}
+                      </h2>
+                      {documentIndex.undated.length === 0 ? (
+                        <p className="nd">No undated documents in this comparison.</p>
+                      ) : (
+                        <ul className="timeline-list">
+                          {documentIndex.undated.map((doc) => (
+                            <li key={doc.id} className="timeline-item is-undated">
+                              <div className="timeline-head">
+                                <span className="e-tag unavailable">Undated</span>
+                                <span
+                                  className={`e-tag${doc.status === 'unavailable' ? ' unavailable' : ''}`}
+                                >
+                                  {doc.statusLabel}
+                                </span>
+                                <strong className="timeline-title">{doc.sourceLabel}</strong>
+                                {doc.medicationId && (
+                                  <button
+                                    type="button"
+                                    className="timeline-inspect-btn"
+                                    onClick={() => handleSelectEvidenceChange(doc.medicationId!)}
+                                  >
+                                    Inspect source
+                                  </button>
+                                )}
+                              </div>
+                              <p className="timeline-detail">{doc.detail}</p>
                             </li>
                           ))}
                         </ul>
