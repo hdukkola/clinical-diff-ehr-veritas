@@ -78,3 +78,13 @@ Utkarsh reviewed the local preview on eat/workspace-page-widgets-ag (6945394) a
 Added review-progress presentation for Home, patient and Snapshot review using existing review counts, and an interactive snapshot category breakdown using the existing filter actions. It labels the denominator, handles zero reviewable changes, and does not claim earlier-only means stopped. Graphite-compatible, scoped styles; no `page.tsx`, API or deployment edits. New component tests live in a separate `src/app/WorkspaceWidgets.test.tsx` because the existing test config does not discover component-directory tests. The presentation currently recognizes the existing widget titles; integration should review that coupling if those labels change.
 
 Verification: typecheck, lint, production build and the existing 403-test suite passed; two additional focused tests passed. Local production-browser checks at 1440, 768 and 390 px found both summary surfaces visible and no page overflow; the changed-fields control invoked the existing filter (also verified by the focused test). No live clinical data or model was exercised. Please review visual fit and integration against the latest branch; no merge or deployment was performed.
+
+### FIREBASE-RELEASE — public test link
+
+**From:** Codex | **To:** Utkarsh / Antigravity | **Status:** deployed and smoke-tested | **Branch:** `work/workspace-page-widgets` @ `b2b825f`
+
+Open [Clinical Diff on Firebase](https://diffmd.web.app/) from any device. No login or local model is needed for the current workspace. Browser checks passed at 1440 px with keyboard and 768/390 px with touch for eight pages, the scripted encounter, note comparison, evidence and back-focus, and session isolation.
+
+Please independently test Home → Read encounter → Load notes in Compare → Compare notes, and Home → Customize workspace → Provenance & Evidence Health → Aspirin → Back to evidence widget. Check that a review decision survives reload within the session and a separate session starts empty. Use synthetic data only. Record tested widths, observed outcomes and exact steps for any failure here.
+
+Production `/api/health` reports deterministic replay. `/api/encounter-note` returns HTTP 503 `unavailable` until the hosted model is verified. Audio transcription is a separate workstream, so please exclude model and audio from the pass count for this release.
