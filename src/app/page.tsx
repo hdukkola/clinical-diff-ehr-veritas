@@ -893,6 +893,11 @@ export default function Home() {
     return [...map.values()];
   }, []);
 
+  const patientScenarios = useMemo(
+    () => allScenarios.filter((scenario) => scenario.id === 'scenario-morgan-lee-baseline'),
+    [allScenarios],
+  );
+
   const allMedicationTerms = useMemo(() => {
     const terms = new Set<string>();
     for (const s of allScenarios) {
@@ -939,7 +944,7 @@ export default function Home() {
   const [noteReviewDecisions, setNoteReviewDecisions] = useState<Record<string, NoteReviewDecision>>({});
 
   /* ---- Snapshot review state ---- */
-  const [selectedScenarioId, setSelectedScenarioId] = useState<string>(allScenarios[0].id);
+  const [selectedScenarioId, setSelectedScenarioId] = useState<string>('scenario-morgan-lee-baseline');
   const [diffTab, setDiffTab] = useState<DiffTab>('diff');
   const [diffFilter, setDiffFilter] = useState<DiffFilter>('all');
   const [selectedMedId, setSelectedMedId] = useState<string | null>(null);
@@ -1858,7 +1863,7 @@ export default function Home() {
         action: 'view' as const,
         target: 'models' as ViewId,
       },
-      ...allScenarios.map((s) => ({
+      ...patientScenarios.map((s) => ({
         id: `pat-${s.id}`,
         label: `Open ${cleanPatientName(s.patientLabel)}`,
         hint: s.patientId,
@@ -1898,7 +1903,7 @@ export default function Home() {
             item.label.toLowerCase().includes(q) || item.hint.toLowerCase().includes(q),
         )
       : items;
-  }, [activeScenario.patientLabel, allScenarios, cmdQuery]);
+  }, [activeScenario.patientLabel, patientScenarios, cmdQuery]);
 
   const executeCommandItem = useCallback(
     (item: CommandItem | undefined) => {
@@ -2045,11 +2050,11 @@ export default function Home() {
   /* ---- Filtered Left Rail Lists ---- */
   const normalizedRailFilter = railFilter.trim().toLowerCase();
   const visibleScenarios = useMemo(() => {
-    if (!normalizedRailFilter) return allScenarios;
-    return allScenarios.filter((s) =>
+    if (!normalizedRailFilter) return patientScenarios;
+    return patientScenarios.filter((s) =>
       `${s.patientLabel} ${s.patientId} ${s.title}`.toLowerCase().includes(normalizedRailFilter),
     );
-  }, [allScenarios, normalizedRailFilter]);
+  }, [patientScenarios, normalizedRailFilter]);
 
   const visibleWorkspaceViews = useMemo(() => {
     if (!normalizedRailFilter) return WORKSPACE_VIEWS;

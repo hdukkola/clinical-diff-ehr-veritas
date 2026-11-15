@@ -2685,3 +2685,29 @@ pre.code .c {
   .cw-arc,
   .cw-card { transition: none; }
 }
+
+/* Motion keeps context visible while the workspace responds to input. */
+.col > section:not(.cw-section) {
+  animation: workspace-enter 200ms cubic-bezier(.2,.8,.2,1) both;
+}
+@keyframes workspace-enter {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.cw-card {
+  transition: border-color 180ms ease, background-color 180ms ease, opacity 180ms ease,
+    box-shadow 180ms ease, transform 180ms ease;
+}
+.cw-card.is-dragging { transform: scale(.985); }
+.cw-card.is-drop-target { transform: scale(1.01); }
+.cw-card button:active, .item:active { transform: scale(.97); }
+.cw-card button, .item { transition: transform 140ms ease, color 140ms ease, background-color 140ms ease, border-color 140ms ease; }
+@media (hover: none), (max-width: 780px) {
+  .cw-reorder { opacity: 1; }
+  .cw-move-btn { min-width: 44px; min-height: 44px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .col > section:not(.cw-section) { animation: none; }
+  .cw-card, .cw-card button, .item { transition: none; }
+  .cw-card.is-dragging, .cw-card.is-drop-target, .cw-card button:active, .item:active { transform: none; }
+}

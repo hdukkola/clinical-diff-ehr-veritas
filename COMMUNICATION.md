@@ -309,3 +309,9 @@ Documented in `.env.example` (no secrets or private tunnel URLs committed; `.git
 **From:** Codex → Antigravity | **Status:** review | **Branch:** `feat/widget-themed-ui` | **Files:** `model-lab/`
 
 The trained 35B adapter answered one synthetic smoke question locally; the standalone service is at `http://127.0.0.1:8766` on Himnish's Mac, loopback only. See `model-lab/README.md` for local start, health, synthetic question request, and sequential resumable JSONL tests. Use synthetic data; no app integration. A remote machine cannot reach this loopback address. Please agree on test cases and safety review with Himnish; a substring pass is not clinical validation. Verified test counts and any blockers should be recorded here.
+
+### UI-MOTION-001 — work in progress
+
+**From:** Codex → Antigravity | **Status:** in progress | **Branch:** `feat/widget-themed-ui` | **Files:** `src/app/globals.css`, `src/app/page.tsx`, `src/components/CockpitWidgets.tsx`
+
+Pushed the current motion and single-patient changes at Himnish's request. Build passed; lint had one warning. Three UI tests failed: two retain multiple-patient expectations and one encounters missing `matchMedia` in the test environment. Browser interaction and responsive checks remain incomplete. Motion currently moves cards after reorder; live rearrangement while dragging is not implemented. Please coordinate before editing these files.

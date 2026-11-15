@@ -3,6 +3,7 @@
 import {
   useCallback,
   useId,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -544,11 +545,31 @@ export function CockpitWidgets({
   const [dragOverId, setDragOverId] = useState<CockpitWidgetId | null>(null);
   const [liveStatus, setLiveStatus] = useState<string>('');
   const moveBtnRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+  const gridRef = useRef<HTMLDivElement>(null);
+  const previousRects = useRef<Map<string, DOMRect> | null>(null);
 
   const order = controlledOrder ?? internalOrder;
 
+  useLayoutEffect(() => {
+    const before = previousRects.current;
+    previousRects.current = null;
+    if (!before || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    gridRef.current?.querySelectorAll<HTMLElement>('[data-widget-id]').forEach((card) => {
+      const old = before.get(card.dataset.widgetId ?? '');
+      if (!old) return;
+      const now = card.getBoundingClientRect();
+      const x = old.left - now.left;
+      const y = old.top - now.top;
+      if (x || y) card.animate([{ transform: `translate(${x}px, ${y}px)` }, { transform: 'translate(0, 0)' }], { duration: 260, easing: 'cubic-bezier(.2,.8,.2,1)' });
+    });
+  }, [order]);
+
   const updateOrder = useCallback(
     (next: CockpitWidgetId[], announcement?: string) => {
+      previousRects.current = new Map(
+        Array.from(gridRef.current?.querySelectorAll<HTMLElement>('[data-widget-id]') ?? [],
+          (card) => [card.dataset.widgetId ?? '', card.getBoundingClientRect()]),
+      );
       if (!controlledOrder) {
         setInternalOrder(next);
       }
@@ -1083,7 +1104,7 @@ export function CockpitWidgets({
       <div className="cw-toolbar">
         <div className="cw-toolbar-title">
           <span className="cw-toolbar-eyebrow">Cockpit</span>
-          <span className="cw-toolbar-hint">Drag cards or use arrows to reorder · click to inspect</span>
+          <span className="cw-toolbar-hint">Drag cards or use arrows to reorder · tap a title to inspect</span>
         </div>
         {isCustomOrder && (
           <button
@@ -1102,7 +1123,7 @@ export function CockpitWidgets({
         {liveStatus}
       </div>
 
-      <div className="cw-grid" role="list">
+      <div className="cw-grid" role="list" ref={gridRef}>
         {order.map((id, index) => {
           const title = WIDGET_TITLES[id];
           const isDragging = draggedId === id;
