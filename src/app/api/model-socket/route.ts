@@ -29,6 +29,10 @@ function statusSignature(status: SocketStatus): string {
 }
 
 export async function GET(req: NextRequest) {
+  if (process.env.CLINICAL_DIFF_DISABLE_SOCKET_STREAM === '1') {
+    return new Response(null, { status: 204, headers: { 'Cache-Control': 'no-store' } });
+  }
+
   const encoder = new TextEncoder();
   const heartbeatMs = parseHeartbeatMs();
 

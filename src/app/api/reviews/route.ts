@@ -14,13 +14,19 @@ const NO_STORE_HEADERS = {
   'Cache-Control': 'no-store',
 };
 
-const SESSION_COOKIE = 'diffmd-review-session';
+// Firebase Hosting forwards only the __session cookie to its rewrite target.
+const SESSION_COOKIE = '__session';
+const LEGACY_SESSION_COOKIE = 'diffmd-review-session';
 const SESSION_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
+function validSessionId(value: string | undefined) {
+  return value && SESSION_ID.test(value) ? value : undefined;
+}
+
 function reviewSession(req: NextRequest) {
-  const existing = req.cookies.get(SESSION_COOKIE)?.value;
-  const verifiedId = existing && SESSION_ID.test(existing) ? existing : undefined;
-  const id = verifiedId ?? randomUUID();
+  const existing = validSessionId(req.cookies.get(SESSION_COOKIE)?.value);
+  const legacy = validSessionId(req.cookies.get(LEGACY_SESSION_COOKIE)?.value);
+  const id = existing ?? legacy ?? randomUUID();
   return {
     options: {
       storePath: path.join(path.dirname(resolveStorePath()), 'sessions', `${id}.json`),
@@ -28,12 +34,12 @@ function reviewSession(req: NextRequest) {
     },
     respond: (snapshot: Awaited<ReturnType<typeof getSessionStore>>) => {
       const response = NextResponse.json(snapshot, { headers: NO_STORE_HEADERS });
-      if (!verifiedId) {
+      if (!existing) {
         response.cookies.set({
           name: SESSION_COOKIE,
           value: id,
           httpOnly: true,
-          secure: req.nextUrl.protocol === 'https:',
+          secure: req.nextUrl.protocol === 'https:' || Boolean(process.env.K_SERVICE),
           sameSite: 'strict',
           path: '/api/reviews',
         });

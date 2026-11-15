@@ -1655,7 +1655,10 @@ export default function Home() {
       }
     });
 
-    if (typeof EventSource === 'undefined') {
+    if (
+      process.env.NEXT_PUBLIC_CLINICAL_DIFF_DISABLE_SOCKET_STREAM === '1' ||
+      typeof EventSource === 'undefined'
+    ) {
       return () => {
         active = false;
       };

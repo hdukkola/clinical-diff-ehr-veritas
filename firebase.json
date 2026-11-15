@@ -1,0 +1,17 @@
+{
+  "hosting": {
+    "site": "diffmd",
+    "public": "deploy/firebase-public",
+    "ignore": ["**/.*"],
+    "rewrites": [
+      {
+        "source": "**",
+        "run": {
+          "serviceId": "diffmd-web",
+          "region": "us-central1",
+          "pinTag": true
+        }
+      }
+    ]
+  }
+}
