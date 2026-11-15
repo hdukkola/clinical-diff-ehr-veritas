@@ -15,14 +15,18 @@ MODEL = {
 MAX_BYTES = 960_044
 
 
-def duration_ms(data):
+def inspect_wav(data):
     with wave.open(io.BytesIO(data), "rb") as audio:
         frames = audio.getnframes()
         if (audio.getnchannels(), audio.getsampwidth(), audio.getframerate()) != (1, 2, 16000):
             raise ValueError("unsupported WAV format")
-        if not 0 < frames <= 480_000 or len(audio.readframes(frames)) != frames * 2:
+        if not 0 < frames <= 480_000:
             raise ValueError("invalid WAV length")
-        return frames * 1000 // 16000
+        samples = audio.readframes(frames)
+        if len(samples) != frames * 2:
+            raise ValueError("invalid WAV length")
+        # A constant PCM signal cannot contain speech, including digital silence with a DC offset.
+        return frames * 1000 // 16000, samples.count(samples[:2]) == frames
 
 
 def transcribe(data, duration):
@@ -92,9 +96,11 @@ class Handler(BaseHTTPRequestHandler):
             data = self.rfile.read(size)
             if len(data) != size:
                 raise ValueError("incomplete audio")
-            duration = duration_ms(data)
+            duration, constant_signal = inspect_wav(data)
         except (ValueError, wave.Error, EOFError, TimeoutError):
             return self.reply(400, {"error": "invalid_audio"})
+        if constant_signal:
+            return self.reply(422, {"error": "no_speech"})
 
         try:
             segments = transcribe(data, duration)
