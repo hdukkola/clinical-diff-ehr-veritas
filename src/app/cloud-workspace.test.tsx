@@ -2,13 +2,14 @@ import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import Home from '@/app/page';
-import type { CloudCase } from '@/lib/cloud-workspace';
+import { CloudCaseConflict, type CloudCase } from '@/lib/cloud-workspace';
 
 const mocked = vi.hoisted(() => ({
   uid: undefined as string | undefined,
   cases: [] as CloudCase[],
   create: vi.fn(),
   save: vi.fn(),
+  remove: vi.fn(),
   changeAccount: vi.fn(),
 }));
 
@@ -19,6 +20,7 @@ vi.mock('@/lib/cloud-workspace', () => ({
   useCloudSession: () => ({ user: mocked.uid ? { uid: mocked.uid } : null, error: '', pending: false, changeAccount: mocked.changeAccount }),
   useCloudCases: () => ({ cases: mocked.cases, connected: Boolean(mocked.uid), error: '', loading: false, retry: vi.fn() }),
   createCloudCase: mocked.create,
+  removeCloudCase: mocked.remove,
   saveCloudCaseNotes: mocked.save,
 }));
 
@@ -41,8 +43,12 @@ describe('Account workspace', () => {
     localStorage.setItem('diffmd-case-v1:LOCAL-AAAAAAAAAAAA', 'Browser reference');
     mocked.uid = 'account-a';
     mocked.cases = [];
-    mocked.create.mockResolvedValue(cloudRecord);
+    mocked.create.mockImplementation(async () => {
+      mocked.cases = [cloudRecord];
+      return cloudRecord;
+    });
     mocked.save.mockResolvedValue(2);
+    mocked.remove.mockReset().mockResolvedValue(undefined);
   });
 
   it('creates an account case without uploading browser cases or writing on each keystroke', async () => {
@@ -85,6 +91,34 @@ describe('Account workspace', () => {
       await user.click(screen.getByRole('button', { name: 'Discard edits' }));
       expect(earlier).toHaveValue('Saved elsewhere');
       expect(mocked.save).not.toHaveBeenCalled();
+    } finally {
+      confirm.mockRestore();
+    }
+  });
+
+  it('requires confirmation and submits the selected cloud case version for removal', async () => {
+    const user = userEvent.setup();
+    mocked.cases = [cloudRecord];
+    render(<Home />);
+    await user.click(screen.getByRole('button', { name: /^Cloud reference/ }));
+    const remove = screen.getByRole('button', { name: 'Remove patient' });
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    try {
+      await user.click(remove);
+      expect(mocked.remove).not.toHaveBeenCalled();
+      expect(remove).toBeVisible();
+      confirm.mockReturnValue(true);
+      mocked.remove.mockRejectedValueOnce(new CloudCaseConflict());
+      await user.click(remove);
+      expect(await screen.findByRole('alert')).toHaveTextContent('This case changed on another device.');
+      mocked.remove.mockImplementationOnce(async () => {
+        mocked.cases = [];
+      });
+      await user.click(remove);
+      expect(mocked.remove).toHaveBeenLastCalledWith('account-a', cloudRecord);
+      expect(await screen.findByRole('heading', { name: 'Home' })).toHaveFocus();
+      expect(screen.queryByRole('button', { name: /^Cloud reference/ })).not.toBeInTheDocument();
+      expect(localStorage.getItem('diffmd-case-v1:LOCAL-AAAAAAAAAAAA')).toBe('Browser reference');
     } finally {
       confirm.mockRestore();
     }

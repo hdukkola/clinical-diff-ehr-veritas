@@ -3,6 +3,7 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -33,6 +34,7 @@ import {
   readBrowserNote,
   readBrowserNoteReviews,
   readBrowserPatients,
+  removeBrowserPatient,
   saveBrowserNote,
   saveBrowserNoteReview,
   subscribeToPatients,
@@ -41,7 +43,7 @@ import {
 } from '@/lib/browser-patients';
 import {
   CLOUD_CASE_LIMIT, CloudCaseConflict, cloudWorkspaceEnabled, createCloudCase,
-  saveCloudCaseNotes, useCloudCases, useCloudSession, type CaseNotes,
+  removeCloudCase, saveCloudCaseNotes, useCloudCases, useCloudSession, type CaseNotes,
 } from '@/lib/cloud-workspace';
 import { BRAND_NAME } from '@/lib/branding';
 import { WorkspaceWidgets, type WorkspaceWidget } from '@/components/WorkspaceWidgets';
@@ -873,23 +875,28 @@ export default function Home() {
 
 type CloudDraft = CaseNotes & { baseVersion: number; savedVersion?: number };
 
+function withoutPatient<T>(data: Record<string, T>, id: string): Record<string, T> {
+  const next = { ...data };
+  delete next[id];
+  return next;
+}
+
 function Workspace({ session }: { session: ReturnType<typeof useCloudSession> }) {
   const exampleWorkspace = process.env.NEXT_PUBLIC_CLINICAL_DIFF_EXAMPLE_WORKSPACE === '1';
   const initialPatientId = exampleWorkspace ? DEMO_PATIENT.id : '';
   const cloudUser = session.user?.uid;
   const cloud = useCloudCases(cloudUser);
-  const [newCloudCase, setNewCloudCase] = useState<Awaited<ReturnType<typeof createCloudCase>>>();
+  const cloudCases = cloud.cases;
   const [cloudDrafts, setCloudDrafts] = useState<Record<string, CloudDraft>>({});
   const [cloudWrite, setCloudWrite] = useState(false);
   const cloudWritePending = useRef(false);
   const [cloudSaveError, setCloudSaveError] = useState<{ id: string; message: string }>();
   const hasUnsavedCloudNotes = Object.values(cloudDrafts).some((draft) => !draft.savedVersion);
-  const cloudCases = useMemo(() => newCloudCase && !cloud.cases.some((item) => item.id === newCloudCase.id)
-    && !cloud.error ? [...cloud.cases, newCloudCase] : cloud.cases, [cloud.cases, cloud.error, newCloudCase]);
   const savedPatients = useSyncExternalStore(subscribeToPatients, readBrowserPatients, noBrowserPatients);
   const [unsavedNotes, setUnsavedNotes] = useState<Record<string, Partial<Record<'earlier' | 'later', string>>>>({});
   const [creatingPatient, setCreatingPatient] = useState(false);
   const [patientFormError, setPatientFormError] = useState('');
+  const [patientRemovalError, setPatientRemovalError] = useState<{ id: string; message: string }>();
   const patientScenarios = useMemo(
     () => [
       ...(exampleWorkspace && !cloudUser ? [DEMO_PATIENT] : []),
@@ -962,6 +969,10 @@ function Workspace({ session }: { session: ReturnType<typeof useCloudSession> })
 
   /* ---- Snapshot review state ---- */
   const [selectedScenarioId, setSelectedScenarioId] = useState(initialPatientId);
+  const selectedPatientRef = useRef(initialPatientId);
+  useLayoutEffect(() => {
+    selectedPatientRef.current = selectedScenarioId;
+  }, [selectedScenarioId]);
   const [diffTab, setDiffTab] = useState<DiffTab>('diff');
   const [diffFilter, setDiffFilter] = useState<DiffFilter>('all');
   const [selectedMedId, setSelectedMedId] = useState<string | null>(null);
@@ -1539,7 +1550,6 @@ function Workspace({ session }: { session: ReturnType<typeof useCloudSession> })
       setCloudWrite(true);
       try {
         const patient = await createCloudCase(cloudUser, name);
-        setNewCloudCase(patient);
         setRailFilter('');
         openPatient(toPatientScenario(patient));
       } catch {
@@ -1557,6 +1567,54 @@ function Workspace({ session }: { session: ReturnType<typeof useCloudSession> })
     }
     setRailFilter('');
     openPatient(toPatientScenario(patient));
+  }
+
+  async function removePatient() {
+    const { id, patientLabel } = activeScenario;
+    if (!id || isDemoPatient || hostedComparePending.current || cloudWritePending.current) return;
+    if (cloudUser && (!cloudCase || !cloud.connected || cloudEditConflict)) return;
+    const name = cleanPatientName(patientLabel);
+    if (!window.confirm(`Remove "${name}" and its saved notes? This cannot be undone.`)) return;
+
+    setPatientRemovalError(undefined);
+    if (cloudUser && cloudCase) {
+      cloudWritePending.current = true;
+      setCloudWrite(true);
+      try {
+        await removeCloudCase(cloudUser, cloudCase);
+      } catch (error) {
+        setPatientRemovalError({ id, message: error instanceof CloudCaseConflict
+          ? 'This case changed on another device. Check the latest notes before removing it.'
+          : 'Could not remove the cloud case. Check your connection and try again.' });
+        return;
+      } finally {
+        cloudWritePending.current = false;
+        setCloudWrite(false);
+      }
+    } else if (!removeBrowserPatient(id)) {
+      setPatientRemovalError({ id, message: 'Could not remove this case from browser storage.' });
+      return;
+    }
+
+    setUnsavedNotes((current) => withoutPatient(current, id));
+    setCloudDrafts((current) => withoutPatient(current, id));
+    setCloudSaveError((current) => current?.id === id ? undefined : current);
+    setChatThreads((current) => withoutPatient(current, id));
+    setWidgetNotes((current) => withoutPatient(current, id));
+    setChartCorrections((current) => current.filter((change) => change.scenarioId !== id));
+    setComparisonDrafts((current) => {
+      const next = new Map(current);
+      next.delete(id);
+      return next;
+    });
+    setChatChartId((current) => current === id ? '' : current);
+    if (selectedPatientRef.current === id) {
+      setSelectedScenarioId('');
+      setCompletedComparison(null);
+      setNoteReviewDecisions({});
+      navigateTo('home');
+    }
+    setAnnouncement(`Removed ${name}.`);
   }
 
   function changeWorkspaceAccount() {
@@ -3161,7 +3219,12 @@ function Workspace({ session }: { session: ReturnType<typeof useCloudSession> })
                     </p>}
                   </div>
                   {view === 'patient' && !isDemoPatient && (
-                    <button type="button" className="btn primary" onClick={() => navigateTo('extract')}>Edit patient notes</button>
+                    <div className="patient-create-actions">
+                      <button type="button" className="btn primary" onClick={() => navigateTo('extract')}>Edit patient notes</button>
+                      <button type="button" className="btn quiet"
+                        disabled={cloudWrite || hostedCompareBusy || Boolean(cloudUser && (!cloud.connected || cloudEditConflict))}
+                        onClick={() => void removePatient()}>Remove patient</button>
+                    </div>
                   )}
                   {view === 'home' && <div className="patient-create-actions">
                     <button type="button" className="btn quiet" disabled={hostedCompareBusy} onClick={showPatientForm}>Add patient</button>
@@ -3172,6 +3235,8 @@ function Workspace({ session }: { session: ReturnType<typeof useCloudSession> })
                     <button type="button" className="btn" onClick={() => navigateTo('extract')}>Start comparison</button>
                   </div>}
                 </header>
+                {view === 'patient' && patientRemovalError?.id === activeScenario.id &&
+                  <p role="alert">{patientRemovalError.message}</p>}
                 {view === 'patient' && cloudCase && session.user && process.env.NEXT_PUBLIC_DIFFMD_RECORDING_TRANSCRIPTION === '1' && (
                   <RecordingTranscription key={session.user.uid + '/' + cloudCase.id} uid={session.user.uid}
                     caseId={cloudCase.id} getToken={() => session.user!.getIdToken()}

@@ -3,6 +3,7 @@ import { webcrypto } from 'node:crypto';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import Home from '@/app/page';
+import { saveBrowserNote, saveBrowserNoteReview } from '@/lib/browser-patients';
 import * as cloudWorkspace from '@/lib/cloud-workspace';
 import { earlier, later, syntheticScenarios } from '@/lib/fixtures';
 import { TRANSCRIPTION_MODEL, TRANSCRIPTION_WEIGHTS } from '@/lib/recording-transcription';
@@ -46,6 +47,39 @@ describe('Clinical Diff Veritas Editorial UI', () => {
   });
 
   afterEach(() => vi.unstubAllEnvs());
+
+  it('removes only the selected browser case and prevents stale edits from restoring its stored data', async () => {
+    const user = userEvent.setup();
+    const removedId = 'LOCAL-AAAAAAAAAAAA';
+    const removedKey = `diffmd-case-v1:${removedId}`;
+    const otherKey = 'diffmd-case-v1:LOCAL-BBBBBBBBBBBB';
+    localStorage.setItem(removedKey, 'Case QA remove');
+    localStorage.setItem(`${removedKey}:earlier`, 'Lisinopril 10 mg daily');
+    localStorage.setItem(`${removedKey}:later`, 'Lisinopril 20 mg daily');
+    localStorage.setItem(`${removedKey}:review:lisinopril`, 'version:reviewed');
+    localStorage.setItem(otherKey, 'Case QA keep');
+    localStorage.setItem(`${otherKey}:later`, 'Continue metformin 500 mg daily');
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    try {
+      render(<Home />);
+      await user.click(within(getPatientsGroup()).getByRole('button', { name: /^Case QA remove/ }));
+      const remove = screen.getByRole('button', { name: 'Remove patient' });
+      await user.click(remove);
+      expect(localStorage.getItem(removedKey)).toBe('Case QA remove');
+      confirm.mockReturnValue(true);
+      await user.click(remove);
+      await waitFor(() => expect(screen.getByRole('heading', { name: 'Home' })).toHaveFocus());
+      expect(within(getPatientsGroup()).queryByRole('button', { name: /^Case QA remove/ })).not.toBeInTheDocument();
+      for (const suffix of ['', ':earlier', ':later', ':review:lisinopril']) {
+        expect(localStorage.getItem(removedKey + suffix)).toBeNull();
+      }
+      expect(saveBrowserNote(removedId, 'later', 'Stale edit')).toBe(false);
+      expect(saveBrowserNoteReview(removedId, 'version', 'lisinopril', 'reviewed')).toBe(false);
+      expect(localStorage.getItem(`${otherKey}:later`)).toBe('Continue metformin 500 mg daily');
+    } finally {
+      confirm.mockRestore();
+    }
+  });
 
   it('starts the public workspace empty and compares only notes the reviewer enters', async () => {
     vi.stubEnv('NEXT_PUBLIC_CLINICAL_DIFF_EXAMPLE_WORKSPACE', '0');
