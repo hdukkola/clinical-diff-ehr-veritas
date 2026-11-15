@@ -1404,4 +1404,35 @@ describe('Clinical Diff Veritas Editorial UI', () => {
     expect(items[1]).toHaveTextContent('2026-10-15');
     expect(items[1]).toHaveTextContent('Fictional discharge medication list');
   });
+
+  it('opens a synthetic outside report with origin and import date prominently visible and returns focus on close', async () => {
+    const user = userEvent.setup();
+    render(<Home />);
+
+    await user.click(within(getPatientsGroup()).getAllByRole('button')[0]);
+    const tablist = screen.getByRole('tablist', { name: 'Snapshot review tabs' });
+    await user.click(within(tablist).getByRole('tab', { name: 'Document index' }));
+
+    const outsideSec = screen.getByRole('region', { name: 'Synthetic outside reports' });
+    const openBtn = within(outsideSec).getByRole('button', { name: 'Open outside report' });
+    await user.click(openBtn);
+
+    const viewer = screen.getByRole('region', {
+      name: 'External record viewer: Synthetic external pharmacy & clinic summary',
+    });
+    await waitFor(() => expect(viewer).toHaveFocus());
+    expect(viewer).toHaveTextContent('Origin');
+    expect(viewer).toHaveTextContent('Fictional Regional HIE · Westside Pharmacy Exchange (Synthetic)');
+    expect(viewer).toHaveTextContent('Import date');
+    expect(viewer).toHaveTextContent('2026-10-16T09:30:00Z');
+    expect(viewer).toHaveTextContent('Synthetic · Read-only');
+
+    await user.click(within(viewer).getByRole('button', { name: 'Close outside report' }));
+    await waitFor(() => expect(openBtn).toHaveFocus());
+    expect(
+      screen.queryByRole('region', {
+        name: 'External record viewer: Synthetic external pharmacy & clinic summary',
+      }),
+    ).not.toBeInTheDocument();
+  });
 });

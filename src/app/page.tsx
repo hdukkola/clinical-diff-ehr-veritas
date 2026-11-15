@@ -949,6 +949,7 @@ export default function Home() {
   const [selectedMedId, setSelectedMedId] = useState<string | null>(null);
   const [evidenceReturnMedId, setEvidenceReturnMedId] = useState<string | null>(null);
   const [activeCitationByMed, setActiveCitationByMed] = useState<Record<string, number>>({});
+  const [activeExternalRecordId, setActiveExternalRecordId] = useState<string | null>(null);
   const [chartSearchQuery, setChartSearchQuery] = useState('');
   const chartSearchInputRef = useRef<HTMLInputElement | null>(null);
   const [reviews, setReviews] = useState<Record<string, ReviewDecision>>({});
@@ -1356,12 +1357,33 @@ export default function Home() {
     [activeScenario.id],
   );
 
+  const openExternalRecord = useCallback((recordId: string, title: string) => {
+    setActiveExternalRecordId(recordId);
+    setAnnouncement(`Opened synthetic outside report: ${title}`);
+    requestAnimationFrame(() => {
+      const viewer = document.querySelector<HTMLElement>('.ext-viewer');
+      viewer?.focus({ preventScroll: true });
+      viewer?.scrollIntoView?.({ block: 'nearest' });
+    });
+  }, []);
+
+  const closeExternalRecord = useCallback((recordId: string) => {
+    setActiveExternalRecordId(null);
+    requestAnimationFrame(() => {
+      const trigger = document.querySelector<HTMLElement>(
+        `[data-external-trigger="${CSS.escape(recordId)}"]`,
+      );
+      trigger?.focus({ preventScroll: true });
+    });
+  }, []);
+
   const selectPatient = useCallback(
     (scenarioId: string) => {
       setSelectedScenarioId(scenarioId);
       setDiffFilter('all');
       setSelectedMedId(null);
       setEvidenceReturnMedId(null);
+      setActiveExternalRecordId(null);
       setMobileNavOpen(false);
       const targetView: ViewId = view === 'triage' ? 'triage' : 'diff';
       setView(targetView);
@@ -2122,6 +2144,10 @@ export default function Home() {
           setMobileNavOpen(false);
           return;
         }
+        if (activeExternalRecordId) {
+          closeExternalRecord(activeExternalRecordId);
+          return;
+        }
         if (selectedMedId) {
           closeEvidenceDrilldown(selectedMedId, true);
           return;
@@ -2181,7 +2207,9 @@ export default function Home() {
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [
+    activeExternalRecordId,
     closeEvidenceDrilldown,
+    closeExternalRecord,
     cmdOpen,
     diffFilter,
     diffTab,
@@ -3967,6 +3995,90 @@ export default function Home() {
                           ))}
                         </ul>
                       )}
+                    </section>
+
+                    <section className="sec" aria-label="Synthetic outside reports">
+                      <h2 className="sec-h">
+                        Synthetic outside reports · {(activeScenario.externalRecords ?? []).length}
+                      </h2>
+                      {(activeScenario.externalRecords ?? []).length === 0 ? (
+                        <p className="nd">No imported outside reports for this scenario.</p>
+                      ) : (
+                        <ul className="timeline-list">
+                          {(activeScenario.externalRecords ?? []).map((record) => {
+                            const isOpen = activeExternalRecordId === record.id;
+                            return (
+                              <li key={record.id} className="timeline-item">
+                                <div className="timeline-head">
+                                  <span className="e-tag">External · Synthetic</span>
+                                  <span className="e-tag mono">Imported {record.importedAt}</span>
+                                  <strong className="timeline-title">{record.title}</strong>
+                                  <button
+                                    type="button"
+                                    className="timeline-inspect-btn"
+                                    data-external-trigger={record.id}
+                                    aria-expanded={isOpen}
+                                    onClick={() =>
+                                      isOpen
+                                        ? closeExternalRecord(record.id)
+                                        : openExternalRecord(record.id, record.title)
+                                    }
+                                  >
+                                    {isOpen ? 'Close outside report' : 'Open outside report'}
+                                  </button>
+                                </div>
+                                <p className="timeline-source">Origin: {record.origin}</p>
+                                <p className="timeline-detail">{record.summary}</p>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      )}
+
+                      {activeExternalRecordId &&
+                        (() => {
+                          const record = (activeScenario.externalRecords ?? []).find(
+                            (r) => r.id === activeExternalRecordId,
+                          );
+                          if (!record) return null;
+                          return (
+                            <section
+                              className="ext-viewer"
+                              tabIndex={-1}
+                              aria-label={`External record viewer: ${record.title}`}
+                            >
+                              <div className="ext-viewer-head">
+                                <div>
+                                  <h3 className="ext-viewer-title">{record.title}</h3>
+                                  <div className="ext-viewer-meta">
+                                    <span>
+                                      <b>Origin</b> {record.origin}
+                                    </span>
+                                    <span>
+                                      <b>Import date</b>{' '}
+                                      <span className="mono">{record.importedAt}</span>
+                                    </span>
+                                    <span>
+                                      <b>Recorded</b>{' '}
+                                      <span className="mono">
+                                        {record.recordedAt ?? 'Undated'}
+                                      </span>
+                                    </span>
+                                    <span className="e-tag">Synthetic · Read-only</span>
+                                  </div>
+                                </div>
+                                <button
+                                  type="button"
+                                  className="timeline-inspect-btn"
+                                  onClick={() => closeExternalRecord(record.id)}
+                                >
+                                  Close outside report
+                                </button>
+                              </div>
+                              <p className="ext-viewer-body">{record.body}</p>
+                            </section>
+                          );
+                        })()}
                     </section>
                   </div>
                 )}

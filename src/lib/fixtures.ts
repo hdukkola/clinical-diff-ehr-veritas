@@ -1,4 +1,4 @@
-import type { Snapshot } from './types';
+import type { ExternalRecordReport, Snapshot } from './types';
 import {
   hfDatasetSources,
   hfNoteComparisonPairs,
@@ -68,6 +68,7 @@ export type SyntheticScenario = {
   earlier: Snapshot;
   later: Snapshot;
   provenance?: HfFixtureProvenance;
+  externalRecords?: ExternalRecordReport[];
 };
 
 const baseSyntheticScenarios: SyntheticScenario[] = [
@@ -82,6 +83,17 @@ const baseSyntheticScenarios: SyntheticScenario[] = [
     tags: ['baseline', 'discharge', 'missing-frequency'],
     earlier,
     later,
+    externalRecords: [
+      {
+        id: 'ext-morgan-01',
+        title: 'Synthetic external pharmacy & clinic summary',
+        origin: 'Fictional Regional HIE · Westside Pharmacy Exchange (Synthetic)',
+        importedAt: '2026-10-16T09:30:00Z',
+        recordedAt: '2026-10-14',
+        summary: 'Outside synthetic dispense and medication summary imported for reconciliation review.',
+        body: 'Synthetic outside report: Outpatient pharmacy dispense history lists Lisinopril 10 mg oral daily (last filled 2026-09-28) and Metformin 500 mg oral twice daily. Read-only imported record; no live EHR write.',
+      },
+    ],
   },
   {
     id: 'scenario-polypharmacy-discharge-followup',

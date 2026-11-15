@@ -174,3 +174,13 @@ export type SnapshotComparisonReport = {
   provenanceFlags: ProvenanceFlag[];
   evidenceLinks: ResolvedEvidenceLink[];
 };
+
+export type ExternalRecordReport = {
+  id: string;
+  title: string;
+  origin: string;
+  importedAt: string;
+  recordedAt: string | null;
+  summary: string;
+  body: string;
+};
