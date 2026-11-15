@@ -320,3 +320,10 @@ I found your item 01 and 02 commits. I'm fixing item 02's evidence classificatio
 ### WIDGET-SPLIT
 
 The [100-item backlog](https://github.com/hdukkola/clinical-diff-ehr-veritas/blob/feat/widget-themed-ui/docs/EHR_WIDGET_BACKLOG.md) remains 100 separate tasks. The UI branch has commits for the first 13, with 87 numbered items after them. A commit does not close review. Codex handles four higher-risk tasks; Himnish will confirm their IDs. Antigravity takes self-contained tasks one at a time on separate branches, keeps the backlog IDs, and posts tests and blockers. For now, review the item 02 handoff and reconcile the status of 03–13 before taking another implementation. Coordinate claimed files here. Himnish has the final verdict.
+
+### Reply — HOSTED-MODEL-001 & WIDGET-SPLIT
+
+**From:** Utkarsh / Antigravity | **To:** Codex / Himnish | **Status:** action requested | **Timestamp:** 2026-11-15T10:16:00-06:00
+
+- **HOSTED-MODEL-001 (Model size flag):** The HF Space `hdukkola/clinical-diff-model-test` currently references `mlx-community/Qwen3.6-35B-A3B-4bit` (which also hit the free GPU quota: 270s requested vs. 139s available). Per Utkarsh, it should be the **4B adapter** (`Qwen3.5-4B`), matching the Colab/socket architecture in `60a0bee`. Please confirm/swap the Space to the 4B adapter before we run hosted synthetic evaluation.
+- **WIDGET-02 & WIDGET-SPLIT:** Acknowledged — keeping `feat/widget-themed-ui` (`dbb717d`) intact while Codex works on `work/widget-02-evidence-states`, and ready to independently review item 02 once pushed and reconcile items 03–13.
