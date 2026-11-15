@@ -3,7 +3,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import userEvent from '@testing-library/user-event';
 import Home from '@/app/page';
 import { syntheticScenarios } from '@/lib/fixtures';
-import { hfDatasetSources, hfNoteComparisonPairs, hfScenarios } from '@/lib/hf-fixtures';
+import { hfDatasetSources, hfNoteComparisonPairs } from '@/lib/hf-fixtures';
 
 function getLiveNavAnnouncement() {
   return document.querySelector('.sr-only[aria-live="polite"][aria-atomic="true"]');
@@ -264,12 +264,9 @@ describe('Clinical Diff Veritas Editorial UI', () => {
     const user = userEvent.setup();
     render(<Home />);
 
-    // Open Morgan Lee (first scenario) from Patients rail and verify all HF scenarios are listed
+    // Open Morgan Lee (active single-patient view) from Patients rail
     const patientButtons = within(getPatientsGroup()).getAllByRole('button');
-    expect(patientButtons).toHaveLength(syntheticScenarios.length);
-    for (const hf of hfScenarios) {
-      expect(within(getPatientsGroup()).getByRole('button', { name: new RegExp(hf.patientLabel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')) })).toBeInTheDocument();
-    }
+    expect(patientButtons).toHaveLength(1);
     await user.click(patientButtons[0]);
 
     const morganHeading = screen.getByRole('heading', { level: 1, name: 'Morgan Lee' });
@@ -356,49 +353,6 @@ describe('Clinical Diff Veritas Editorial UI', () => {
 
     // Switch back to Differences tab
     await user.click(screen.getByRole('tab', { name: 'Differences' }));
-
-    // CD-03 scenario: missing & undocumented fields (Avery Kim)
-    const averyIdx = syntheticScenarios.findIndex(
-      (s) => s.id === 'scenario-missing-undocumented-fields',
-    );
-    await user.click(within(getPatientsGroup()).getAllByRole('button')[averyIdx]);
-    expect(screen.getByRole('heading', { level: 1, name: 'Avery Kim' })).toBeInTheDocument();
-    expect(screen.getAllByText(/Timestamp not documented/).length).toBeGreaterThanOrEqual(1);
-    const provSummary = screen.getByRole('region', { name: 'Provenance and evidence summary' });
-    expect(provSummary).toHaveTextContent('Missing timestamp');
-    expect(provSummary).toHaveTextContent('Undocumented field');
-
-    // HF synthetic scenario with resolved evidence & documented provenance
-    const htnIdx = syntheticScenarios.findIndex((s) => s.id === 'hf-qdora-htn-escalation');
-    await user.click(within(getPatientsGroup()).getAllByRole('button')[htnIdx]);
-    expect(
-      screen.getByRole('heading', { level: 1, name: 'HF Synthetic Patient 014 (oopere/clinical-ner-qdora)' }),
-    ).toBeInTheDocument();
-    expect(screen.getByText('oopere/clinical-ner-qdora')).toBeInTheDocument();
-    expect(screen.getByText('MIT')).toBeInTheDocument();
-    expect(provSummary).toHaveTextContent('Earlier: Documented');
-    expect(provSummary).toHaveTextContent('Later: Documented');
-
-    // HF synthetic scenario with unknown provenance indicators (ClarusC64 CMRD-005)
-    const unknownIdx = syntheticScenarios.findIndex((s) => s.id === 'hf-clarus-cmrd005-unknown-ed');
-    await user.click(within(getPatientsGroup()).getAllByRole('button')[unknownIdx]);
-    expect(
-      screen.getByRole('heading', { level: 1, name: 'HF Synthetic Patient CMRD-005 (ClarusC64)' }),
-    ).toBeInTheDocument();
-    expect(provSummary).toHaveTextContent('Earlier: Unknown');
-    expect(provSummary).toHaveTextContent('Later: Unknown');
-    expect(provSummary).toHaveTextContent('Unknown provenance');
-    expect(provSummary).toHaveTextContent('Missing timestamp');
-    expect(provSummary).toHaveTextContent('Ambiguous source');
-
-    // Expand Warfarin to inspect ambiguous resolution & unknown provenance details
-    const warfarinTrigger = screen
-      .getByText('Warfarin')
-      .closest('button.entry-trigger') as HTMLButtonElement;
-    await user.click(warfarinTrigger);
-    const warfarinEvidence = screen.getByLabelText('Evidence and provenance for Warfarin');
-    expect(warfarinEvidence).toHaveTextContent('Provenance: Unknown');
-    expect(warfarinEvidence).toHaveTextContent('Ambiguous');
   });
 
   it('supports Review suggestions, Evaluations, Session activity CSV/JSON export, and Models & data HF dataset provenance', async () => {
@@ -549,7 +503,7 @@ describe('Clinical Diff Veritas Editorial UI', () => {
     const navButtons = Array.from(
       document.querySelectorAll<HTMLButtonElement>('#app-navigation button.item'),
     );
-    expect(navButtons.length).toBe(syntheticScenarios.length + 6);
+    expect(navButtons.length).toBe(7);
 
     navButtons[0].focus();
     expect(navButtons[0]).toHaveFocus();
@@ -581,10 +535,10 @@ describe('Clinical Diff Veritas Editorial UI', () => {
 
     // Filter navigation input narrows patient list cleanly
     const railSearch = screen.getByRole('searchbox', { name: 'Filter navigation' });
-    await user.type(railSearch, 'CMRD-005');
+    await user.type(railSearch, 'Morgan');
     const filteredPatients = within(getPatientsGroup()).getAllByRole('button');
     expect(filteredPatients).toHaveLength(1);
-    expect(filteredPatients[0]).toHaveTextContent('HF Synthetic Patient CMRD-005 (ClarusC64)');
+    expect(filteredPatients[0]).toHaveTextContent('Morgan Lee');
   });
 
   it('subscribes to /api/model-socket via EventSource when available and falls back to /api/health & /api/compare on Check socket', async () => {
