@@ -1,0 +1,50 @@
+{
+  "seed_sha256": "181ced979a48358df40a1bd8fd3e051c64f4e258450b3151258e5c6d2af9fcd2",
+  "model_revision": "38740b847e4cb78f352aba30aa41c76e08e6eb46",
+  "adapter_sha256": "88509363f9205cfcfa4b2ac4941cbeb3cde67879afe0a7635b74df4341004b57",
+  "limitations": "Draft labels on two development cases. Event counts match medication/action pairs only. Literal evidence checks do not establish semantic support.",
+  "base": [
+    {
+      "id": "PMC13402246",
+      "strict_schema": false,
+      "parseable_schema": true,
+      "matched": 6,
+      "missed": 0,
+      "extra": 0,
+      "nonliteral_evidence": 0,
+      "response": "```json\n[\n  {\n    \"medication\": \"Ciclosporin\",\n    \"action\": \"stop\",\n    \"dose\": null,\n    \"time\": \"day +20\",\n    \"evidence\": \"Ciclosporin was stopped on day +20.\"\n  },\n  {\n    \"medication\": \"methylprednisolone\",\n    \"action\": \"start\",\n    \"dose\": \"0.5 mg/kg\",\n    \"time\": null,\n    \"evidence\": \"The team initiated methylprednisolone at 0.5 mg/kg\"\n  },\n  {\n    \"medication\": \"tacrolimus\",\n    \"action\": \"start\",\n    \"dose\": null,\n    \"time\": null,\n    \"evidence\": \"They started oral tacrolimus\"\n  },\n  {\n    \"medication\": \"methylprednisolone\",\n    \"action\": \"taper\",\n    \"dose\": null,\n    \"time\": null,\n    \"evidence\": \"tapering methylprednisolone\"\n  },\n  {\n    \"medication\": \"Tacrolimus\",\n    \"action\": \"stop\",\n    \"dose\": null,\n    \"time\": \"day +100\",\n    \"evidence\": \"Tacrolimus was stopped on day +100\"\n  },\n  {\n    \"medication\": \"Tacrolimus\",\n    \"action\": \"restart\",\n    \"dose\": null,\n    \"time\": \"day +230\",\n    \"evidence\": \"restarted on day +230\"\n  }\n]\n```"
+    },
+    {
+      "id": "PMC8025526",
+      "strict_schema": false,
+      "parseable_schema": true,
+      "matched": 3,
+      "missed": 0,
+      "extra": 0,
+      "nonliteral_evidence": 0,
+      "response": "```json\n[\n  {\n    \"medication\": \"escitalopram\",\n    \"action\": \"continue\",\n    \"dose\": \"10 mg daily\",\n    \"time\": null,\n    \"evidence\": \"The patient was already taking escitalopram 10 mg daily.\"\n  },\n  {\n    \"medication\": \"agomelatine\",\n    \"action\": \"start\",\n    \"dose\": \"25 mg nightly\",\n    \"time\": null,\n    \"evidence\": \"Agomelatine 25 mg nightly was added.\"\n  },\n  {\n    \"medication\": \"agomelatine\",\n    \"action\": \"stop\",\n    \"dose\": null,\n    \"time\": \"At a later consultation\",\n    \"evidence\": \"At a later consultation the team stopped agomelatine\"\n  }\n]\n```"
+    }
+  ],
+  "adapter": [
+    {
+      "id": "PMC13402246",
+      "strict_schema": false,
+      "parseable_schema": false,
+      "matched": 0,
+      "missed": 6,
+      "extra": 0,
+      "nonliteral_evidence": null,
+      "response": "{\"medication\": \"Ciclosporin\", \"action\": \"stop\", \"dose\": null, \"time\": \"day +20\", \"evidence\": \"Ciclosporin was stopped on day +20.\"}{\"medication\": \"methylprednisolone\", \"action\": \"start\", \"dose\": \"0.5 mg/kg\", \"time\": null, \"evidence\": \"The team initiated methylprednisolone at 0.5 mg/kg for GVHD prophylaxis.\"}{\"medication\": \"tacrolimus\", \"action\": \"start\", \"dose\": \"oral\", \"time\": null, \"evidence\": \"They started oral tacrolimus while tapering methylprednisolone.\"}{\"medication\": \"methylprednisolone\", \"action\": \"taper\", \"dose\": null, \"time\": null, \"evidence\": \"They started oral tacrolimus while tapering methylprednisolone.\"}{\"medication\": \"tacrolimus\", \"action\": \"stop\", \"dose\": null, \"time\": \"day +100\", \"evidence\": \"Tacrolimus was stopped on day +100\"}{\"medication\": \"tacrolimus\", \"action\": \"restart\", \"dose\": null, \"time\": \"day +230\", \"evidence\": \"and restarted on day +230.\"}"
+    },
+    {
+      "id": "PMC8025526",
+      "strict_schema": false,
+      "parseable_schema": false,
+      "matched": 0,
+      "missed": 3,
+      "extra": 0,
+      "nonliteral_evidence": null,
+      "response": "{\"medication\": \"Agomelatine\", \"action\": \"start\", \"dose\": \"25 mg nightly\", \"time\": \"null\", \"evidence\": \"Agomelatine 25 mg nightly was added\"}{\"medication\": \"Agomelatine\", \"action\": \"stop\", \"dose\": \"null\", \"time\": \"At a later consultation\", \"evidence\": \"the team stopped agomelatine\"}{\"medication\": \"escitalopram\", \"action\": \"continue\", \"dose\": \"10 mg daily\", \"time\": \"null\", \"evidence\": \"leaving escitalopram in place\"}"
+    }
+  ]
+}

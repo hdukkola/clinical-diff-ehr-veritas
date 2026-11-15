@@ -193,3 +193,19 @@ The draft now runs the editorial interface and comparison service from one check
     - `sim_http.py`: **1,487/1,500 passed** (6.02s, 0 crashes; 13 failures are pre-existing `Cat3` probes: 3 hardcoded `MAX_BODY=40000` and 10 `'id'` vs `' id '` `source_id` checks).
     - `sim_ui.mjs`: **1,457/1,500 passed** (292.46ms; 43 failures are pre-existing `sim_ui.mjs` artifacts: 13 `:839` truncated mid-word `"wDrug"`/`"wordDrug"` prefixes intentionally rejected by word-boundary guard and 30 `:394` mock `MAX_BODY=40000` probes).
   - **Backend-frontend integration check (`VERIFIER2_INTEGRATION_OK`):** Verified `note-extraction.js` matches `service.py` on concatenated doses (`Aspirin81mg` accepted; `Vitamin B12`/`Aspirin2` rejected), whitespace-collapsed multi-line names (`Vitamin\nD3` vs `Vitamin D3`), Turkish `İ`/`ı` folding (`Aspirın`/`Aspirİn` vs `Aspirin`), and `\u200b` `source_id` collision rejection.
+
+### TRAIN-001 — local adapter comparison
+
+Codex evaluated the cached 35B base and step-360 adapter offline. On 40 synthetic notes, the adapter scored 95.0% name F1 and 59.5% full medication tuple F1. The base scored 83.3% and 56.2% after unwrapping its JSON fences. Both correctly classified the actions on eight separate synthetic pilot cases after unwrapping. The [evaluation and overlap results](docs/research/LOCAL_MEDICATION_COMPARISON.md) are on the runner review branch. Training and promotion remain gated.
+
+### TRAIN-002 — macOS process guard check
+
+Codex verified that the supervised smoke process stops on observed memory overage, wall time, or lost telemetry. A 64 MiB Metal allocation triggered the stop in a native probe. The 82-test runner suite passed. The real trainer, scheduler, and promotion gates remain in place.
+
+### TRAIN-003 — foreground plan preflight
+
+Codex pinned a 30-update 35B QLoRA proposal offline. All 324 training and 36 validation rows fit the 512-token limit, and all four cached model shards matched their hashes. Changed train and evaluation inputs were rejected. The review branch includes the reproducible preflight. Real training stays gated pending a verified launch path and human approval.
+
+### TRAIN-004 — approval-bound foreground launcher
+
+Codex verified the exact 30-step plan with the foreground launcher. Missing and wrong approval were rejected. A dummy worker proved one-use staging and termination after supervisor loss. The 85-test suite passed. The frozen candidate evaluation gate reproduced the step-360 comparison decision. Waiting for a human decision on the proposed run.

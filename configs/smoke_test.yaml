@@ -1,0 +1,35 @@
+# Smoke test configuration — lightweight, bounded experiment
+mode: train-once
+require_operator_approval: true
+auto_promote: false
+thermal_telemetry_available: false
+dry_run_only: false
+
+resources:
+  max_memory_gb: 40.0
+  max_disk_gb: 100.0
+  max_duration_minutes: 5
+  max_temperature_c: null
+  max_concurrent_training: 1
+  smoke_test_max_steps: 10
+  smoke_test_max_duration_minutes: 5
+
+model:
+  base_model_id: Qwen/Qwen3.6-35B-A3B
+  base_model_available_locally: false
+  local_model_path: null
+  local_model_id: mlx-community/Qwen2.5-7B-Instruct-4bit
+  local_model_params: 7615616512
+  local_model_quantization: 4-bit
+  adapter_path: null
+  training_framework: mlx
+  fine_tune_type: lora
+  lora_rank: 8
+  lora_layers: 8
+  max_seq_length: 2048
+
+datasets:
+  - name: fresh-eval-dev
+    license_status: approved
+    dataset_class: synthetic
+    ingestible: true
