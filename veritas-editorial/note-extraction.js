@@ -1,5 +1,6 @@
 "use strict";
 
+/* eslint-disable-next-line @typescript-eslint/no-unused-vars */
 function createNoteWorkspace({ onService, onComparison }) {
   const workspace = document.createElement("section");
   workspace.className = "extract-workspace";

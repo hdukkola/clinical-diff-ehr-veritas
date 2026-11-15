@@ -43,3 +43,8 @@ next-env.d.ts
 # Python local services
 __pycache__/
 .venv/
+
+# Local runtime persistence & generated large eval artifacts
+.data/
+tests/model-eval/cases.jsonl
+tests/model-eval/report.json
