@@ -1326,3 +1326,111 @@ export function compareNoteRegimens(
     items,
   };
 }
+
+export type EvidenceStateKind =
+  | 'resolved'
+  | 'partial'
+  | 'missing_reference'
+  | 'unavailable_document'
+  | 'documented_negative'
+  | 'conflicting_excerpts';
+
+export const EVIDENCE_STATE_LABELS: Record<EvidenceStateKind, string> = {
+  resolved: 'Resolved',
+  partial: 'Partial',
+  missing_reference: 'Missing reference',
+  unavailable_document: 'Unavailable document',
+  documented_negative: 'Documented negative',
+  conflicting_excerpts: 'Conflicting excerpts',
+};
+
+const EXPLICIT_NEGATIVE_PATTERN =
+  /\b(discontinued|stopped|held|not taking|no longer taking|documented negative|explicitly absent|denied|withheld|omitted)\b/i;
+
+function isExplicitNegativeLink(link: ResolvedEvidenceLink): boolean {
+  if (link.provenanceStatus !== 'documented') {
+    return false;
+  }
+  const text = `${link.excerpt ?? ''} ${link.note ?? ''}`.trim();
+  return text.length > 0 && EXPLICIT_NEGATIVE_PATTERN.test(text);
+}
+
+function hasConflictingExcerpts(links: ReadonlyArray<ResolvedEvidenceLink>): boolean {
+  const bySide: Record<'earlier' | 'later', Set<string>> = {
+    earlier: new Set<string>(),
+    later: new Set<string>(),
+  };
+
+  for (const link of links) {
+    const excerpt = link.excerpt?.trim().toLowerCase();
+    if (!excerpt) continue;
+    if (link.side === 'earlier' || link.side === 'later') {
+      bySide[link.side].add(excerpt);
+    }
+  }
+
+  return bySide.earlier.size > 1 || bySide.later.size > 1;
+}
+
+/**
+ * Classify a single resolved evidence link into one of the user-facing
+ * evidence states, distinguishing unavailable documents, missing references,
+ * conflicting excerpts, and documented negatives.
+ */
+export function classifyLinkEvidenceState(
+  link: ResolvedEvidenceLink,
+  change?: Pick<MedicationChange, 'kind' | 'provenance' | 'provenanceFlags' | 'evidenceLinks'>,
+): EvidenceStateKind {
+  if (link.resolutionStatus === 'unavailable') {
+    return 'unavailable_document';
+  }
+  if (
+    link.resolutionStatus === 'ambiguous' ||
+    change?.provenanceFlags?.includes('conflicting_provenance') ||
+    (change?.evidenceLinks ? hasConflictingExcerpts(change.evidenceLinks) : false)
+  ) {
+    return 'conflicting_excerpts';
+  }
+  if (link.resolutionStatus === 'unresolved') {
+    return 'missing_reference';
+  }
+  if (isExplicitNegativeLink(link)) {
+    return 'documented_negative';
+  }
+  return link.resolutionStatus === 'resolved' ? 'resolved' : 'partial';
+}
+
+/**
+ * Classify a medication change's overall evidence state for provenance-health
+ * drill-down and Snapshot review headers.
+ */
+export function classifyChangeEvidenceState(
+  change: Pick<MedicationChange, 'kind' | 'provenance' | 'provenanceFlags' | 'evidenceLinks'>,
+): EvidenceStateKind {
+  const links = change.evidenceLinks ?? [];
+  if (links.some((l) => l.resolutionStatus === 'unavailable')) {
+    return 'unavailable_document';
+  }
+  if (
+    links.some((l) => l.resolutionStatus === 'ambiguous') ||
+    change.provenance?.hasAmbiguousProvenance ||
+    change.provenanceFlags?.includes('conflicting_provenance') ||
+    hasConflictingExcerpts(links)
+  ) {
+    return 'conflicting_excerpts';
+  }
+  if (links.length === 0 || links.some((l) => l.resolutionStatus === 'unresolved')) {
+    return 'missing_reference';
+  }
+  if (
+    (change.kind === 'removed' && change.provenance?.later.status === 'documented') ||
+    (change.kind === 'added' && change.provenance?.earlier.status === 'documented') ||
+    links.some(isExplicitNegativeLink)
+  ) {
+    return 'documented_negative';
+  }
+  if (links.every((l) => l.resolutionStatus === 'resolved')) {
+    return 'resolved';
+  }
+  return 'partial';
+}

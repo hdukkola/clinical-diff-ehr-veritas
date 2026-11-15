@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { analyzeSnapshots, compareNoteRegimens, compareSnapshots, normalizeNoteText } from './diff';
+import {
+  analyzeSnapshots,
+  classifyChangeEvidenceState,
+  classifyLinkEvidenceState,
+  compareNoteRegimens,
+  compareSnapshots,
+  EVIDENCE_STATE_LABELS,
+  normalizeNoteText,
+} from './diff';
 import { earlier as fixtureEarlier, later as fixtureLater } from './fixtures';
 import type { EvidenceLink, Medication, Snapshot } from './types';
 
@@ -576,5 +584,75 @@ describe('compareNoteRegimens & normalizeNoteText', () => {
     expect(acebutolol?.status).toBe('discontinued');
     expect(acebutolol?.statusLabel).toBe('Clinically discontinued');
     expect(acebutolol?.changeCategories).toEqual(['Clinically discontinued']);
+  });
+
+  it('classifies missing reference, unavailable document, documented negative, and conflicting excerpts', () => {
+    expect(
+      classifyChangeEvidenceState({
+        kind: 'changed',
+        evidenceLinks: [
+          {
+            side: 'later',
+            resolutionStatus: 'unresolved',
+            provenanceStatus: 'unknown',
+            excerpt: null,
+          },
+        ],
+      }),
+    ).toBe('missing_reference');
+
+    expect(
+      classifyChangeEvidenceState({
+        kind: 'changed',
+        evidenceLinks: [
+          {
+            side: 'later',
+            resolutionStatus: 'unavailable',
+            provenanceStatus: 'unknown',
+            excerpt: null,
+          },
+        ],
+      }),
+    ).toBe('unavailable_document');
+
+    expect(
+      classifyChangeEvidenceState({
+        kind: 'removed',
+        evidenceLinks: [
+          {
+            side: 'later',
+            resolutionStatus: 'resolved',
+            provenanceStatus: 'documented',
+            excerpt: 'Aspirin 81 mg daily discontinued at discharge.',
+          },
+        ],
+      }),
+    ).toBe('documented_negative');
+
+    const conflictingChange = {
+      kind: 'changed' as const,
+      evidenceLinks: [
+        {
+          side: 'earlier' as const,
+          resolutionStatus: 'resolved' as const,
+          provenanceStatus: 'documented' as const,
+          excerpt: 'Furosemide 20 mg daily',
+        },
+        {
+          side: 'earlier' as const,
+          resolutionStatus: 'resolved' as const,
+          provenanceStatus: 'documented' as const,
+          excerpt: 'Furosemide 40 mg daily',
+        },
+      ],
+    };
+    expect(classifyChangeEvidenceState(conflictingChange)).toBe('conflicting_excerpts');
+    expect(classifyLinkEvidenceState(conflictingChange.evidenceLinks[0], conflictingChange)).toBe(
+      'conflicting_excerpts',
+    );
+    expect(EVIDENCE_STATE_LABELS.missing_reference).toBe('Missing reference');
+    expect(EVIDENCE_STATE_LABELS.unavailable_document).toBe('Unavailable document');
+    expect(EVIDENCE_STATE_LABELS.documented_negative).toBe('Documented negative');
+    expect(EVIDENCE_STATE_LABELS.conflicting_excerpts).toBe('Conflicting excerpts');
   });
 });

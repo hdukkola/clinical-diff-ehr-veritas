@@ -1071,13 +1071,18 @@ describe('Clinical Diff Veritas Editorial UI', () => {
     expect(aspirinEvidence).toHaveTextContent(/Later side: Not listed in Snapshot B/i);
   });
 
-  it('labels unresolved or unavailable evidence links as Source unavailable in provenance-health', async () => {
+  it('distinguishes missing reference, unavailable document, documented negative, and conflicting excerpts in provenance-health', async () => {
     const user = userEvent.setup();
     const onSelectEvidenceChange = vi.fn();
 
     render(
       <CockpitWidgets
-        snapshotEntries={[{ id: 'm-unavail', kind: 'changed', name: 'Warfarin' }]}
+        snapshotEntries={[
+          { id: 'm-missing', kind: 'changed', name: 'Metformin' },
+          { id: 'm-unavail', kind: 'changed', name: 'Warfarin' },
+          { id: 'm-neg', kind: 'onlyA', name: 'Aspirin' },
+          { id: 'm-conflict', kind: 'changed', name: 'Furosemide' },
+        ]}
         reviews={{}}
         activeReport={{
           earlierProvenance: {
@@ -1093,11 +1098,11 @@ describe('Clinical Diff Veritas Editorial UI', () => {
           },
           laterProvenance: {
             present: true,
-            status: 'unknown',
-            sourceKind: 'unknown',
-            sourceLabel: null,
+            status: 'documented',
+            sourceKind: 'discharge_summary',
+            sourceLabel: 'Discharge summary',
             attributedBy: null,
-            recordedAt: null,
+            recordedAt: '2026-10-15',
             ambiguous: false,
             flags: [],
             gaps: [],
@@ -1105,15 +1110,55 @@ describe('Clinical Diff Veritas Editorial UI', () => {
           provenanceGaps: [],
           evidenceLinks: [
             {
-              id: 'ev-1',
+              id: 'ev-missing',
+              side: 'later',
+              resolutionStatus: 'unresolved',
+              provenanceStatus: 'unknown',
+              excerpt: null,
+              span: null,
+            },
+            {
+              id: 'ev-unavail',
               side: 'later',
               resolutionStatus: 'unavailable',
               provenanceStatus: 'unknown',
               excerpt: null,
               span: null,
             },
+            {
+              id: 'ev-neg',
+              side: 'later',
+              resolutionStatus: 'resolved',
+              provenanceStatus: 'documented',
+              excerpt: 'Aspirin 81 mg daily discontinued at discharge.',
+              span: { start: 0, end: 42 },
+            },
+            {
+              id: 'ev-conf-1',
+              side: 'earlier',
+              resolutionStatus: 'ambiguous',
+              provenanceStatus: 'unknown',
+              excerpt: 'Furosemide 20 mg daily per clinic note',
+              span: { start: 0, end: 38 },
+            },
           ],
           changes: [
+            {
+              medicationId: 'm-missing',
+              name: 'Metformin',
+              kind: 'changed',
+              fields: [{ field: 'dose', before: '500 mg', after: '1000 mg' }],
+              evidenceLinks: [
+                {
+                  id: 'ev-missing',
+                  side: 'later',
+                  resolutionStatus: 'unresolved',
+                  provenanceStatus: 'unknown',
+                  excerpt: null,
+                  span: null,
+                },
+              ],
+            },
             {
               medicationId: 'm-unavail',
               name: 'Warfarin',
@@ -1121,12 +1166,44 @@ describe('Clinical Diff Veritas Editorial UI', () => {
               fields: [{ field: 'dose', before: '5 mg', after: '2.5 mg' }],
               evidenceLinks: [
                 {
-                  id: 'ev-1',
+                  id: 'ev-unavail',
                   side: 'later',
                   resolutionStatus: 'unavailable',
                   provenanceStatus: 'unknown',
                   excerpt: null,
                   span: null,
+                },
+              ],
+            },
+            {
+              medicationId: 'm-neg',
+              name: 'Aspirin',
+              kind: 'removed',
+              fields: [],
+              evidenceLinks: [
+                {
+                  id: 'ev-neg',
+                  side: 'later',
+                  resolutionStatus: 'resolved',
+                  provenanceStatus: 'documented',
+                  excerpt: 'Aspirin 81 mg daily discontinued at discharge.',
+                  span: { start: 0, end: 42 },
+                },
+              ],
+            },
+            {
+              medicationId: 'm-conflict',
+              name: 'Furosemide',
+              kind: 'changed',
+              fields: [{ field: 'dose', before: '20 mg', after: '40 mg' }],
+              evidenceLinks: [
+                {
+                  id: 'ev-conf-1',
+                  side: 'earlier',
+                  resolutionStatus: 'ambiguous',
+                  provenanceStatus: 'unknown',
+                  excerpt: 'Furosemide 20 mg daily per clinic note',
+                  span: { start: 0, end: 38 },
                 },
               ],
             },
@@ -1162,8 +1239,13 @@ describe('Clinical Diff Veritas Editorial UI', () => {
       />,
     );
 
-    const trigger = screen.getByRole('button', { name: /Warfarin.*Source unavailable/i });
-    await user.click(trigger);
+    expect(screen.getByRole('button', { name: /Metformin.*Missing reference/i })).toBeInTheDocument();
+    const unavailTrigger = screen.getByRole('button', { name: /Warfarin.*Unavailable document/i });
+    expect(unavailTrigger).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Aspirin.*Documented negative/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Furosemide.*Conflicting excerpts/i })).toBeInTheDocument();
+
+    await user.click(unavailTrigger);
     expect(onSelectEvidenceChange).toHaveBeenCalledWith('m-unavail');
   });
 });

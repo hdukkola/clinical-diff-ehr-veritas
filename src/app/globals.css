@@ -1053,6 +1053,16 @@ kbd {
   color: var(--del);
 }
 
+.e-tag.evidence-state-conflicting_excerpts {
+  border-color: color-mix(in srgb, var(--chg) 45%, transparent);
+  color: var(--chg);
+}
+
+.e-tag.evidence-state-documented_negative {
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  color: var(--accent);
+}
+
 .evidence-list {
   list-style: none;
   display: flex;

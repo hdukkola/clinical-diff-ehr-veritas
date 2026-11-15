@@ -11,6 +11,11 @@ import {
   type ReactNode,
 } from 'react';
 import type { SocketStatus } from '@/lib/ai-socket';
+import {
+  classifyChangeEvidenceState,
+  EVIDENCE_STATE_LABELS,
+  type EvidenceStateKind,
+} from '@/lib/diff';
 import type { SnapshotComparisonReport } from '@/lib/types';
 
 export type CockpitViewId = 'extract' | 'diff' | 'triage' | 'eval' | 'audit' | 'models';
@@ -923,25 +928,17 @@ export function CockpitWidgets({
               ) : (
                 <ul className="cw-evidence-list" aria-label="Source evidence drill-down by medication">
                   {changes.map((change) => {
-                    const links = change.evidenceLinks ?? [];
-                    const hasUnavailable = links.some(
-                      (l) => l.resolutionStatus === 'unavailable' || l.resolutionStatus === 'unresolved',
-                    );
-                    const allResolved =
-                      links.length > 0 && links.every((l) => l.resolutionStatus === 'resolved');
-                    const hasAmbiguous = links.some((l) => l.resolutionStatus === 'ambiguous');
-                    const statusLabel = hasUnavailable
-                      ? 'Source unavailable'
-                      : allResolved
-                        ? 'Resolved'
-                        : hasAmbiguous
-                          ? 'Ambiguous'
-                          : 'Partial';
-                    const statusTone: Tone = hasUnavailable
-                      ? 'del'
-                      : allResolved
-                        ? 'add'
-                        : 'chg';
+                    const evidenceState = classifyChangeEvidenceState(change);
+                    const statusLabel = EVIDENCE_STATE_LABELS[evidenceState];
+                    const toneByState: Record<EvidenceStateKind, Tone> = {
+                      resolved: 'add',
+                      documented_negative: 'accent',
+                      partial: 'chg',
+                      conflicting_excerpts: 'chg',
+                      missing_reference: 'del',
+                      unavailable_document: 'del',
+                    };
+                    const statusTone = toneByState[evidenceState];
                     const kindLabel =
                       change.kind === 'changed'
                         ? 'Changed'

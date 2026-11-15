@@ -12,8 +12,11 @@ import {
 } from 'react';
 import {
   analyzeSnapshots,
+  classifyChangeEvidenceState,
+  classifyLinkEvidenceState,
   compareNoteRegimens,
   compareSnapshots,
+  EVIDENCE_STATE_LABELS,
   normalizeNoteText,
   type NoteRegimenChangeCategory,
 } from '@/lib/diff';
@@ -39,7 +42,6 @@ import type {
   MedicationChange,
   ProvenanceGapReason,
   ProvenanceStatus,
-  ResolvedEvidenceLink,
   Snapshot,
 } from '@/lib/types';
 
@@ -126,14 +128,6 @@ const GAP_REASON_LABELS: Record<ProvenanceGapReason, string> = {
   missing_supporting_evidence: 'No supporting note',
   unresolved_evidence_link: 'Unresolved evidence',
   invalid_evidence_span: 'Invalid span',
-};
-
-const RESOLUTION_LABELS: Record<ResolvedEvidenceLink['resolutionStatus'], string> = {
-  resolved: 'Resolved',
-  partial: 'Partial',
-  unresolved: 'Source unavailable',
-  ambiguous: 'Ambiguous',
-  unavailable: 'Source unavailable',
 };
 
 const DIFF_GLYPHS: Record<'changed' | 'onlyA' | 'onlyB' | 'same', { glyph: string; label: string }> = {
@@ -3261,6 +3255,13 @@ export default function Home() {
                                               ? 'evidence link'
                                               : 'evidence links'}
                                           </span>
+                                          {entry.change && (
+                                            <span
+                                              className={`e-tag evidence-state-${classifyChangeEvidenceState(entry.change)}`}
+                                            >
+                                              {EVIDENCE_STATE_LABELS[classifyChangeEvidenceState(entry.change)]}
+                                            </span>
+                                          )}
                                           {evidenceReturnMedId === entry.id && (
                                             <button
                                               type="button"
@@ -3275,14 +3276,14 @@ export default function Home() {
                                         {entry.kind === 'onlyA' && (
                                           <p className="evidence-side-note">
                                             {entry.change?.provenance?.later.status === 'documented'
-                                              ? 'Later side: Documented negative (not listed in Snapshot B).'
+                                              ? 'Later side: Documented negative (explicitly absent in documented Snapshot B).'
                                               : 'Later side: Not listed in Snapshot B (not assumed stopped).'}
                                           </p>
                                         )}
                                         {entry.kind === 'onlyB' && (
                                           <p className="evidence-side-note">
                                             {entry.change?.provenance?.earlier.status === 'documented'
-                                              ? 'Earlier side: Documented negative (not listed in Snapshot A).'
+                                              ? 'Earlier side: Documented negative (explicitly absent in documented Snapshot A).'
                                               : 'Earlier side: Not listed in Snapshot A.'}
                                           </p>
                                         )}
@@ -3290,9 +3291,10 @@ export default function Home() {
                                         {entryLinks.length > 0 ? (
                                           <ul className="evidence-list">
                                             {entryLinks.map((link, idx) => {
-                                              const isUnavailable =
-                                                link.resolutionStatus === 'unavailable' ||
-                                                link.resolutionStatus === 'unresolved';
+                                              const linkState = classifyLinkEvidenceState(link, entry.change);
+                                              const isUnavailable = linkState === 'unavailable_document';
+                                              const isMissingRef = linkState === 'missing_reference';
+                                              const isConflicting = linkState === 'conflicting_excerpts';
                                               return (
                                                 <li className="evidence-item" key={idx}>
                                                   <div className="evidence-meta">
@@ -3300,9 +3302,11 @@ export default function Home() {
                                                       <span className="e-tag">{link.side}</span>
                                                     )}
                                                     <span
-                                                      className={`e-tag${isUnavailable ? ' unavailable' : ''}`}
+                                                      className={`e-tag evidence-state-${linkState}${
+                                                        isUnavailable || isMissingRef ? ' unavailable' : ''
+                                                      }`}
                                                     >
-                                                      {RESOLUTION_LABELS[link.resolutionStatus]}
+                                                      {EVIDENCE_STATE_LABELS[linkState]}
                                                     </span>
                                                     <span
                                                       className={`e-tag prov-${link.provenanceStatus}`}
@@ -3329,6 +3333,20 @@ export default function Home() {
                                                       Source unavailable
                                                       {link.note ? ` — ${link.note}` : '.'}
                                                     </p>
+                                                  ) : isMissingRef ? (
+                                                    <p className="nd">
+                                                      Missing reference
+                                                      {link.note
+                                                        ? ` — ${link.note}`
+                                                        : ' — no source citation or excerpt recorded.'}
+                                                    </p>
+                                                  ) : isConflicting ? (
+                                                    <p className="nd">
+                                                      Conflicting excerpts
+                                                      {link.note
+                                                        ? ` — ${link.note}`
+                                                        : ' — conflicting or ambiguous attribution across sources.'}
+                                                    </p>
                                                   ) : (
                                                     <p className="nd">
                                                       {link.note ?? 'No supporting excerpt attached.'}
@@ -3340,7 +3358,7 @@ export default function Home() {
                                           </ul>
                                         ) : (
                                           <p className="nd" style={{ fontSize: 12 }}>
-                                            No supporting evidence links attached to this change.
+                                            Missing reference — no supporting evidence links attached to this change.
                                           </p>
                                         )}
 
