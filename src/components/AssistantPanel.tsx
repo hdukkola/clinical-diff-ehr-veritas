@@ -2,7 +2,17 @@
 
 import { useState } from 'react';
 
-export function AssistantPanel() {
+export interface AssistantPanelProps {
+  patientLabel?: string;
+  patientId?: string;
+  encounterTitle?: string;
+}
+
+export function AssistantPanel({
+  patientLabel = 'Morgan Lee (Synthetic)',
+  patientId = 'DEMO-001',
+  encounterTitle,
+}: AssistantPanelProps) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
@@ -33,11 +43,19 @@ export function AssistantPanel() {
   return (
     <section className="assistant-panel" aria-label="Synthetic note assistant">
       <button type="button" className="assistant-toggle" aria-expanded={open} aria-controls="assistant-content" onClick={() => setOpen(!open)}>
-        <span><strong>Note assistant</strong><small>Experimental · synthetic demo only</small></span>
+        <span>
+          <strong>Note assistant</strong>
+          <small>
+            {patientLabel} · {patientId} · Experimental · synthetic demo only
+          </small>
+        </span>
         <span aria-hidden="true">{open ? '−' : '+'}</span>
       </button>
       {open && <div id="assistant-content" className="assistant-content">
-        <p>Ask which medications are explicitly named in the built-in demo notes. Edits to the notes are not sent. Review the source before relying on any result.</p>
+        <p>
+          Ask which medications are explicitly named in the built-in demo notes for {patientLabel} ({patientId})
+          {encounterTitle ? ` — ${encounterTitle}` : ''}. Edits to the notes are not sent. Review the source before relying on any result.
+        </p>
         <div className="assistant-actions">
           <button type="button" disabled={busy} onClick={() => void ask('earlier')}>Check demo earlier note</button>
           <button type="button" disabled={busy} onClick={() => void ask('later')}>Check demo discharge note</button>

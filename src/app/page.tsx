@@ -2297,18 +2297,10 @@ export default function Home() {
             </span>
             {BRAND_NAME}
           </a>
-          {view !== 'extract' && (
-            <div className="crumbs" id="crumbs">
-              {view === 'diff' || view === 'triage' ? (
-                <>
-                  {cleanPatientName(activeScenario.patientLabel)} &nbsp;/&nbsp;{' '}
-                  <b>{VIEW_NAMES[view]}</b>
-                </>
-              ) : (
-                <b>{VIEW_NAMES[view]}</b>
-              )}
-            </div>
-          )}
+          <div className="crumbs" id="crumbs">
+            {activeScenario.patientLabel} · {activeScenario.patientId} &nbsp;/&nbsp;{' '}
+            <b>{VIEW_NAMES[view]}</b>
+          </div>
         </div>
 
         <div className="top-r">
@@ -2505,7 +2497,40 @@ export default function Home() {
           </div>
 
           <div className="col">
-            <AssistantPanel />
+            <section
+              className="patient-context-bar"
+              aria-label="Active patient and encounter context"
+            >
+              <div className="patient-context-id">
+                <strong className="patient-context-name">{activeScenario.patientLabel}</strong>
+                <span className="e-tag mono">{activeScenario.patientId}</span>
+                <span className="e-tag">Synthetic · Read-only</span>
+                <span className="e-tag">
+                  {view === 'diff' && diffTab === 'timeline'
+                    ? 'Encounter timeline'
+                    : VIEW_NAMES[view]}
+                </span>
+                {selectedMedId && (
+                  <span className="e-tag evidence-state-documented_negative">
+                    Inspecting:{' '}
+                    {snapshotEntries.find((e) => e.id === selectedMedId)?.name ?? selectedMedId}
+                  </span>
+                )}
+              </div>
+              <div className="patient-context-enc">
+                <span className="patient-context-title">{activeScenario.title}</span>
+                <span className="patient-context-window">
+                  Earlier: {activeScenario.earlier.source} (
+                  {activeScenario.earlier.recordedAt ?? 'Undated'}) → Later:{' '}
+                  {activeScenario.later.source} ({activeScenario.later.recordedAt ?? 'Undated'})
+                </span>
+              </div>
+            </section>
+            <AssistantPanel
+              patientLabel={activeScenario.patientLabel}
+              patientId={activeScenario.patientId}
+              encounterTitle={activeScenario.title}
+            />
             <CockpitWidgets
               snapshotEntries={snapshotEntries}
               reviews={reviews}

@@ -1314,4 +1314,39 @@ describe('Clinical Diff Veritas Editorial UI', () => {
     const evidenceRegion = screen.getByLabelText('Evidence and provenance for Lisinopril');
     await waitFor(() => expect(evidenceRegion).toHaveFocus());
   });
+
+  it('reconciles patient identity and active encounter display across chart views', async () => {
+    const user = userEvent.setup();
+    render(<Home />);
+
+    const contextBar = screen.getByRole('region', { name: 'Active patient and encounter context' });
+    expect(contextBar).toHaveTextContent('Morgan Lee (Synthetic)');
+    expect(contextBar).toHaveTextContent('DEMO-001');
+    expect(contextBar).toHaveTextContent('Synthetic · Read-only');
+    expect(contextBar).toHaveTextContent('Outpatient intake to hospital discharge baseline');
+    expect(contextBar).toHaveTextContent('2026-10-01');
+    expect(contextBar).toHaveTextContent('2026-10-15');
+    expect(contextBar).toHaveTextContent('Compare notes');
+
+    // Note assistant also carries reconciled Morgan Lee (Synthetic) · DEMO-001 context
+    const assistantSection = screen.getByRole('region', { name: 'Synthetic note assistant' });
+    expect(assistantSection).toHaveTextContent('Morgan Lee (Synthetic) · DEMO-001');
+
+    // Switch to Snapshot review -> Encounter timeline -> Review suggestions: identity & encounter stay reconciled
+    await user.click(within(getPatientsGroup()).getAllByRole('button')[0]);
+    expect(contextBar).toHaveTextContent('Snapshot review');
+    expect(contextBar).toHaveTextContent('Morgan Lee (Synthetic)');
+    expect(contextBar).toHaveTextContent('DEMO-001');
+
+    const tablist = screen.getByRole('tablist', { name: 'Snapshot review tabs' });
+    await user.click(within(tablist).getByRole('tab', { name: 'Encounter timeline' }));
+    expect(contextBar).toHaveTextContent('Encounter timeline');
+    expect(contextBar).toHaveTextContent('2026-10-01');
+    expect(contextBar).toHaveTextContent('2026-10-15');
+
+    await user.click(within(getWorkspaceNav()).getByRole('button', { name: /^Review suggestions/i }));
+    expect(contextBar).toHaveTextContent('Review suggestions');
+    expect(contextBar).toHaveTextContent('Morgan Lee (Synthetic)');
+    expect(contextBar).toHaveTextContent('DEMO-001');
+  });
 });
