@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   analyzeSnapshots,
+  buildEncounterTimeline,
   classifyChangeEvidenceState,
   classifyLinkEvidenceState,
   compareNoteRegimens,
@@ -654,5 +655,51 @@ describe('compareNoteRegimens & normalizeNoteText', () => {
     expect(EVIDENCE_STATE_LABELS.unavailable_document).toBe('Unavailable document');
     expect(EVIDENCE_STATE_LABELS.documented_negative).toBe('Documented negative');
     expect(EVIDENCE_STATE_LABELS.conflicting_excerpts).toBe('Conflicting excerpts');
+  });
+
+  it('builds chronological encounter timeline and separates undated records', () => {
+    const earlierSnap: Snapshot = {
+      id: 'snap-undated',
+      source: 'Synthetic unattributed intake list',
+      recordedAt: null,
+      medications: [med('Lisinopril', '10 mg')],
+    };
+    const laterSnap: Snapshot = {
+      id: 'snap-dated',
+      source: 'Synthetic discharge summary',
+      recordedAt: '2026-10-15',
+      medications: [
+        med('Lisinopril', '20 mg', {
+          evidenceLinks: [
+            {
+              id: 'ev-note-1',
+              noteId: 'note-1',
+              sourceKind: 'clinical_note',
+              sourceLabel: 'Clinic follow-up note',
+              section: 'Assessment',
+              excerpt: 'Increase Lisinopril to 20 mg daily',
+              recordedAt: '2026-10-08',
+            },
+          ],
+        }),
+      ],
+    };
+
+    const report = analyzeSnapshots(earlierSnap, laterSnap);
+    const timeline = buildEncounterTimeline(earlierSnap, laterSnap, report);
+
+    expect(timeline.undated).toHaveLength(1);
+    expect(timeline.undated[0]).toMatchObject({
+      kind: 'encounter',
+      recordedAt: null,
+      sourceLabel: 'Synthetic unattributed intake list',
+    });
+
+    expect(timeline.dated.map((d) => d.recordedAt)).toEqual([
+      '2026-10-08',
+      '2026-10-15',
+      '2026-10-15',
+    ]);
+    expect(timeline.dated.map((d) => d.kind)).toEqual(['note', 'encounter', 'change']);
   });
 });

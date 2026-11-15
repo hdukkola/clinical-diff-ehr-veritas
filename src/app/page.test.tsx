@@ -1287,4 +1287,31 @@ describe('Clinical Diff Veritas Editorial UI', () => {
     expect(noteNav).toHaveTextContent('Fictional outpatient medication list');
     expect(items[0]).toHaveAttribute('aria-current', 'true');
   });
+
+  it('renders chronological Encounter timeline and separate Undated records in Snapshot review', async () => {
+    const user = userEvent.setup();
+    render(<Home />);
+
+    await user.click(within(getPatientsGroup()).getAllByRole('button')[0]);
+    const tablist = screen.getByRole('tablist', { name: 'Snapshot review tabs' });
+    const timelineTab = within(tablist).getByRole('tab', { name: 'Encounter timeline' });
+    await user.click(timelineTab);
+    expect(timelineTab).toHaveAttribute('aria-selected', 'true');
+
+    const datedSec = screen.getByRole('region', { name: 'Chronological encounter timeline' });
+    const datedItems = within(datedSec).getAllByRole('listitem');
+    expect(datedItems[0]).toHaveTextContent('2026-10-01');
+    expect(datedItems[0]).toHaveTextContent('Fictional outpatient medication list');
+    expect(datedItems[1]).toHaveTextContent('2026-10-15');
+    expect(datedItems[1]).toHaveTextContent('Fictional discharge medication list');
+
+    const undatedSec = screen.getByRole('region', { name: 'Undated records' });
+    expect(undatedSec).toHaveTextContent('No undated records in this comparison.');
+
+    // Inspect change button jumps directly to the expanded medication evidence
+    const inspectBtns = within(datedSec).getAllByRole('button', { name: 'Inspect change' });
+    await user.click(inspectBtns[0]);
+    const evidenceRegion = screen.getByLabelText('Evidence and provenance for Lisinopril');
+    await waitFor(() => expect(evidenceRegion).toHaveFocus());
+  });
 });

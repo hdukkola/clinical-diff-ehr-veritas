@@ -1434,3 +1434,147 @@ export function classifyChangeEvidenceState(
   }
   return 'partial';
 }
+
+export type EncounterTimelineKind = 'encounter' | 'note' | 'change';
+
+export interface EncounterTimelineEntry {
+  id: string;
+  kind: EncounterTimelineKind;
+  recordedAt: string | null;
+  title: string;
+  sourceLabel: string;
+  detail: string;
+  medicationId?: string;
+}
+
+export interface EncounterTimelineResult {
+  dated: EncounterTimelineEntry[];
+  undated: EncounterTimelineEntry[];
+}
+
+const TIMELINE_KIND_ORDER: Record<EncounterTimelineKind, number> = {
+  encounter: 0,
+  note: 1,
+  change: 2,
+};
+
+function formatTimelineChangeDetail(change: MedicationChange): string {
+  if (change.kind === 'changed' && change.fields.length > 0) {
+    return change.fields
+      .map((f) => `${f.field}: ${f.before ?? 'Not documented'} → ${f.after ?? 'Not documented'}`)
+      .join(' · ');
+  }
+  if (change.kind === 'removed') {
+    return 'Not listed in later snapshot';
+  }
+  return 'Added in later snapshot';
+}
+
+/**
+ * Lay out synthetic encounters, cited notes, and documented changes
+ * chronologically, keeping undated records in a separate bucket without
+ * fabricating dates.
+ */
+export function buildEncounterTimeline(
+  earlier: Snapshot,
+  later: Snapshot,
+  report: Pick<SnapshotComparisonReport, 'changes'>,
+): EncounterTimelineResult {
+  const entries: EncounterTimelineEntry[] = [];
+
+  entries.push({
+    id: `enc-earlier-${earlier.id}`,
+    kind: 'encounter',
+    recordedAt: normalizeOptionalText(earlier.recordedAt),
+    title: 'Earlier snapshot',
+    sourceLabel: earlier.source,
+    detail: `${earlier.medications.length} documented ${
+      earlier.medications.length === 1 ? 'medication' : 'medications'
+    }`,
+  });
+
+  const seenNotes = new Set<string>();
+  for (const change of report.changes) {
+    for (const link of change.evidenceLinks ?? []) {
+      if (!link.noteId && !link.excerpt) continue;
+      const recordedAt = normalizeOptionalText(
+        link.recordedAt ??
+          (link.side === 'earlier'
+            ? earlier.recordedAt
+            : link.side === 'later'
+              ? later.recordedAt
+              : null),
+      );
+      const noteIdentity = link.sourceLabel ?? link.noteId ?? 'Synthetic clinical note';
+      const dedupeKey = `${change.medicationId}|${noteIdentity}|${recordedAt ?? 'undated'}|${link.excerpt ?? ''}`;
+      if (seenNotes.has(dedupeKey)) continue;
+      seenNotes.add(dedupeKey);
+
+      entries.push({
+        id: `note-${change.medicationId}-${seenNotes.size}`,
+        kind: 'note',
+        recordedAt,
+        title: `${change.name} · ${
+          link.section ??
+          (link.side === 'earlier'
+            ? 'Earlier note'
+            : link.side === 'later'
+              ? 'Later note'
+              : 'Clinical note')
+        }`,
+        sourceLabel: noteIdentity,
+        detail: link.excerpt ?? link.note ?? 'Cited note reference',
+        medicationId: change.medicationId,
+      });
+    }
+  }
+
+  entries.push({
+    id: `enc-later-${later.id}`,
+    kind: 'encounter',
+    recordedAt: normalizeOptionalText(later.recordedAt),
+    title: 'Later snapshot',
+    sourceLabel: later.source,
+    detail: `${later.medications.length} documented ${
+      later.medications.length === 1 ? 'medication' : 'medications'
+    }`,
+  });
+
+  const laterDate = normalizeOptionalText(later.recordedAt);
+  for (const change of report.changes) {
+    entries.push({
+      id: `chg-${change.medicationId}`,
+      kind: 'change',
+      recordedAt: laterDate,
+      title: `${change.name} (${change.kind})`,
+      sourceLabel: later.source,
+      detail: formatTimelineChangeDetail(change),
+      medicationId: change.medicationId,
+    });
+  }
+
+  const dated: EncounterTimelineEntry[] = [];
+  const undated: EncounterTimelineEntry[] = [];
+
+  for (const entry of entries) {
+    if (entry.recordedAt) {
+      dated.push(entry);
+    } else {
+      undated.push(entry);
+    }
+  }
+
+  dated.sort((a, b) => {
+    const timeA = Date.parse(a.recordedAt!);
+    const timeB = Date.parse(b.recordedAt!);
+    if (!Number.isNaN(timeA) && !Number.isNaN(timeB) && timeA !== timeB) {
+      return timeA - timeB;
+    }
+    if (a.recordedAt !== b.recordedAt) {
+      return (a.recordedAt ?? '').localeCompare(b.recordedAt ?? '');
+    }
+    return TIMELINE_KIND_ORDER[a.kind] - TIMELINE_KIND_ORDER[b.kind];
+  });
+
+  return { dated, undated };
+}

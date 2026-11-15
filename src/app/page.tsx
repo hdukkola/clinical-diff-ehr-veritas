@@ -12,6 +12,7 @@ import {
 } from 'react';
 import {
   analyzeSnapshots,
+  buildEncounterTimeline,
   classifyChangeEvidenceState,
   classifyLinkEvidenceState,
   compareNoteRegimens,
@@ -53,7 +54,7 @@ type PaletteId = 'void' | 'dimmed' | 'obsidian' | 'forest';
 type DiffFilter = 'all' | 'changed' | 'onlyA' | 'onlyB' | 'same';
 type ReviewDecision = 'verified' | 'flagged' | 'deferred';
 type NoteReviewDecision = 'clarify' | 'reviewed';
-type DiffTab = 'diff' | 'snapshots' | 'method';
+type DiffTab = 'diff' | 'timeline' | 'snapshots' | 'method';
 type ModelsTab = 'connections' | 'add' | 'contracts';
 
 const VIEW_NAMES: Record<ViewId, string> = {
@@ -1003,6 +1004,11 @@ export default function Home() {
   const snapshotEntries = useMemo(
     () => buildSnapshotEntries(activeScenario.earlier, activeScenario.later),
     [activeScenario],
+  );
+
+  const encounterTimeline = useMemo(
+    () => buildEncounterTimeline(activeScenario.earlier, activeScenario.later, activeReport),
+    [activeReport, activeScenario.earlier, activeScenario.later],
   );
 
   const activeDbConn = useMemo(
@@ -2915,6 +2921,7 @@ export default function Home() {
                   {(
                     [
                       ['diff', 'Differences'],
+                      ['timeline', 'Encounter timeline'],
                       ['snapshots', 'Source snapshots'],
                       ['method', 'Method & limits'],
                     ] as const
@@ -3601,6 +3608,88 @@ export default function Home() {
                       </ol>
                     </section>
                   </>
+                )}
+
+                {diffTab === 'timeline' && (
+                  <div className="timeline-wrap">
+                    <section className="sec timeline-sec" aria-label="Chronological encounter timeline">
+                      <h2 className="sec-h">
+                        Chronological timeline · {encounterTimeline.dated.length}{' '}
+                        {encounterTimeline.dated.length === 1 ? 'record' : 'records'}
+                      </h2>
+                      {encounterTimeline.dated.length === 0 ? (
+                        <p className="nd">No dated encounters, notes, or changes in this comparison.</p>
+                      ) : (
+                        <ol className="timeline-list">
+                          {encounterTimeline.dated.map((item) => (
+                            <li key={item.id} className="timeline-item">
+                              <div className="timeline-head">
+                                <span className="e-tag mono">{item.recordedAt}</span>
+                                <span className={`e-tag timeline-kind-${item.kind}`}>
+                                  {item.kind === 'encounter'
+                                    ? 'Encounter'
+                                    : item.kind === 'note'
+                                      ? 'Synthetic note'
+                                      : 'Documented change'}
+                                </span>
+                                <strong className="timeline-title">{item.title}</strong>
+                                {item.medicationId && (
+                                  <button
+                                    type="button"
+                                    className="timeline-inspect-btn"
+                                    onClick={() => handleSelectEvidenceChange(item.medicationId!)}
+                                  >
+                                    Inspect change
+                                  </button>
+                                )}
+                              </div>
+                              <p className="timeline-source">{item.sourceLabel}</p>
+                              <p className="timeline-detail">{item.detail}</p>
+                            </li>
+                          ))}
+                        </ol>
+                      )}
+                    </section>
+
+                    <section className="sec timeline-undated" aria-label="Undated records">
+                      <h2 className="sec-h">
+                        Undated records · {encounterTimeline.undated.length}{' '}
+                        {encounterTimeline.undated.length === 1 ? 'record' : 'records'}
+                      </h2>
+                      {encounterTimeline.undated.length === 0 ? (
+                        <p className="nd">No undated records in this comparison.</p>
+                      ) : (
+                        <ul className="timeline-list">
+                          {encounterTimeline.undated.map((item) => (
+                            <li key={item.id} className="timeline-item is-undated">
+                              <div className="timeline-head">
+                                <span className="e-tag unavailable">Undated</span>
+                                <span className={`e-tag timeline-kind-${item.kind}`}>
+                                  {item.kind === 'encounter'
+                                    ? 'Encounter'
+                                    : item.kind === 'note'
+                                      ? 'Synthetic note'
+                                      : 'Documented change'}
+                                </span>
+                                <strong className="timeline-title">{item.title}</strong>
+                                {item.medicationId && (
+                                  <button
+                                    type="button"
+                                    className="timeline-inspect-btn"
+                                    onClick={() => handleSelectEvidenceChange(item.medicationId!)}
+                                  >
+                                    Inspect change
+                                  </button>
+                                )}
+                              </div>
+                              <p className="timeline-source">{item.sourceLabel}</p>
+                              <p className="timeline-detail">{item.detail}</p>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </section>
+                  </div>
                 )}
 
                 {diffTab === 'snapshots' && (
