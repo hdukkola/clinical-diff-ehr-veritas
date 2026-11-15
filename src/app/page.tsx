@@ -33,6 +33,7 @@ import { WorkspaceWidgets, type WorkspaceWidget } from '@/components/WorkspaceWi
 import { EncounterNoteDraft } from '@/components/EncounterNoteDraft';
 import { ASPIRIN_TRANSCRIPT_LINK_ID, EncounterTranscript } from '@/components/EncounterTranscript';
 import { AssistantPanel } from '@/components/AssistantPanel';
+import { EncounterAudioNote } from '@/components/EncounterAudioNote';
 import { SYNTHETIC_ASSISTANT_NOTES } from '@/lib/assistant-evidence';
 import {
   DEFAULT_MLX_MODEL_ID,
@@ -2997,6 +2998,7 @@ export default function Home() {
                       onTraceMedication={(medId) => handleSelectEvidenceChange(medId, 'patient')}
                     />
                     <EncounterNoteDraft />
+                    <EncounterAudioNote />
                     <AssistantPanel
                       patientLabel={cleanPatientName(activeScenario.patientLabel)}
                       patientId={activeScenario.patientId}
