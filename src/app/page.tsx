@@ -2457,12 +2457,12 @@ export default function Home() {
     });
   }
 
-  function openEncounterNotes() {
+  function openEncounterNotes(targetId: 'earlier-note' | 'later-note' = 'earlier-note') {
     if (earlierNoteText !== DEFAULT_EARLIER_NOTE || laterNoteText !== DEFAULT_LATER_NOTE) {
       handleSelectPreset('default');
     }
     navigateTo('extract', false);
-    focusSection('earlier-note');
+    focusSection(targetId);
   }
 
   function openSnapshot(tab: DiffTab, filter: DiffFilter = 'all', focusId?: string) {
@@ -2971,7 +2971,11 @@ export default function Home() {
                 {pageWidgets}
                 {view === 'patient' && (
                   <>
-                    <EncounterTranscript onCompare={openEncounterNotes} />
+                    <EncounterTranscript
+                      onCompare={() => openEncounterNotes('earlier-note')}
+                      onTraceNote={(targetId) => openEncounterNotes(targetId)}
+                      onTraceMedication={(medId) => handleSelectEvidenceChange(medId, true)}
+                    />
                     <AssistantPanel
                       patientLabel={cleanPatientName(activeScenario.patientLabel)}
                       patientId={activeScenario.patientId}
