@@ -6,6 +6,15 @@ Modes:
 - evaluate-only: evaluate existing saved results or explicitly approved checkpoints
 - train-once: execute one approved bounded experiment (requires --approve-training)
 - scheduled: run the approved workflow periodically (dry-run + evaluate-only only)
+
+Controls:
+- status: show current scheduler status
+- pause: pause the scheduler (no new training jobs)
+- resume: resume the scheduler
+- stop: stop safely (pause + disable, prevents additional jobs)
+- disable: disable scheduled training entirely
+- enable: re-enable scheduled training
+- dashboard: generate local HTML or CLI dashboard
 """
 
 from __future__ import annotations
@@ -51,6 +60,37 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Print CLI text dashboard",
     )
+    # Phase 9 controls
+    parser.add_argument(
+        "--status",
+        action="store_true",
+        help="Show current scheduler status",
+    )
+    parser.add_argument(
+        "--pause",
+        action="store_true",
+        help="Pause the scheduler (no new training jobs)",
+    )
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help="Resume the scheduler (allows new training jobs subject to gates)",
+    )
+    parser.add_argument(
+        "--stop",
+        action="store_true",
+        help="Stop safely (pause + disable, prevents additional jobs)",
+    )
+    parser.add_argument(
+        "--disable",
+        action="store_true",
+        help="Disable scheduled training entirely",
+    )
+    parser.add_argument(
+        "--enable",
+        action="store_true",
+        help="Re-enable scheduled training",
+    )
     return parser
 
 
@@ -66,6 +106,43 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     scheduler = ExperimentScheduler(config, args.work_dir)
     dashboard = Dashboard(args.work_dir)
+
+    # Phase 9 controls (executed before mode dispatch)
+    if args.status:
+        status = scheduler.get_status()
+        print(json.dumps({
+            "mode": status.mode,
+            "paused": status.paused,
+            "disabled": status.disabled,
+            "last_run": status.last_run,
+            "total_experiments": status.total_experiments,
+            "consecutive_failures": status.consecutive_failures,
+            "last_status": status.last_status,
+            "last_rejection_reason": status.last_rejection_reason,
+            "ingestible_datasets": status.ingestible_datasets,
+            "blocked_datasets": status.blocked_datasets,
+        }, indent=2))
+        return 0
+
+    if args.pause:
+        print(scheduler.pause())
+        return 0
+
+    if args.resume:
+        print(scheduler.resume())
+        return 0
+
+    if args.stop:
+        print(scheduler.stop_safely())
+        return 0
+
+    if args.disable:
+        print(scheduler.disable())
+        return 0
+
+    if args.enable:
+        print(scheduler.enable())
+        return 0
 
     # Dashboard generation (independent of execution mode)
     if args.dashboard:

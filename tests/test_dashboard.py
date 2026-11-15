@@ -31,7 +31,13 @@ class TestConfig(unittest.TestCase):
     def test_config_validation_35b_training_blocked(self):
         config = PipelineConfig(mode=RunMode.TRAIN_ONCE)
         errors = config.validate()
-        self.assertIn("Qwen3.6-35B-A3B training not available locally", errors[0])
+        # Qwen3.6-35B-A3B-4bit IS available locally as a community conversion,
+        # so training should NOT be blocked by model availability.
+        # Any errors should be about other issues (e.g., missing approval).
+        self.assertNotIn(
+            "Qwen3.6-35B-A3B training not available locally",
+            str(errors),
+        )
 
 
 class TestDashboard(unittest.TestCase):

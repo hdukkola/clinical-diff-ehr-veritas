@@ -1,5 +1,5 @@
 """
-Continuous experiment scheduler (Phase 5).
+Continuous experiment scheduler (Phase 5 + Phase 9).
 
 macOS-compatible local scheduler using launchd-compatible plist templates.
 Supports modes: dry-run, evaluate-only, train-once, scheduled.
@@ -10,6 +10,12 @@ Operator approval is required for any training job.
 Automatic comparison (Phase 5):
 - Compares base model vs adapter using frozen, disjoint evaluation data
 - Detects safety-critical regressions before any promotion
+
+Persistent operation controls (Phase 9):
+- Status, start, pause, resume, stop safely, disable scheduled training
+- View latest training metrics, checkpoint comparison, resource alerts
+- Stop request prevents additional training jobs
+- Scheduler survives terminal closure (via launchd), subject to macOS sleep
 """
 
 from __future__ import annotations
@@ -53,6 +59,24 @@ class SchedulerState:
     experiments: list[ExperimentRecord] = field(default_factory=list)
     last_run: str | None = None
     next_scheduled: str | None = None
+    paused: bool = False
+    disabled: bool = False
+    total_consecutive_failures: int = 0
+
+
+@dataclass
+class SchedulerStatus:
+    """Current scheduler status for CLI status command."""
+    mode: str
+    paused: bool
+    disabled: bool
+    last_run: str | None
+    total_experiments: int
+    consecutive_failures: int
+    last_status: str | None
+    last_rejection_reason: str | None
+    ingestible_datasets: list[str]
+    blocked_datasets: list[str]
 
 
 class ExperimentScheduler:
@@ -79,6 +103,9 @@ class ExperimentScheduler:
                     ],
                     last_run=data.get("last_run"),
                     next_scheduled=data.get("next_scheduled"),
+                    paused=data.get("paused", False),
+                    disabled=data.get("disabled", False),
+                    total_consecutive_failures=data.get("total_consecutive_failures", 0),
                 )
             except (json.JSONDecodeError, TypeError):
                 pass
@@ -91,10 +118,66 @@ class ExperimentScheduler:
                     "experiments": [asdict(e) for e in self.state.experiments],
                     "last_run": self.state.last_run,
                     "next_scheduled": self.state.next_scheduled,
+                    "paused": self.state.paused,
+                    "disabled": self.state.disabled,
+                    "total_consecutive_failures": self.state.total_consecutive_failures,
                 },
                 indent=2,
             )
         )
+
+    # ------------------------------------------------------------------
+    # Phase 9: CLI controls
+    # ------------------------------------------------------------------
+    def get_status(self) -> SchedulerStatus:
+        """Return current scheduler status."""
+        last_exp = self.state.experiments[-1] if self.state.experiments else None
+        blocked = self.check_licenses()
+        return SchedulerStatus(
+            mode=self.config.mode.value,
+            paused=self.state.paused,
+            disabled=self.state.disabled,
+            last_run=self.state.last_run,
+            total_experiments=len(self.state.experiments),
+            consecutive_failures=self.state.total_consecutive_failures,
+            last_status=last_exp.status if last_exp else None,
+            last_rejection_reason=last_exp.rejection_reason if last_exp else None,
+            ingestible_datasets=[e.name for e in self.registry.ingestible()],
+            blocked_datasets=blocked,
+        )
+
+    def pause(self) -> str:
+        """Pause the scheduler — prevents new training jobs."""
+        self.state.paused = True
+        self._save_state()
+        return "Scheduler paused — no new training jobs will be started."
+
+    def resume(self) -> str:
+        """Resume the scheduler — allows new training jobs (subject to all other gates)."""
+        self.state.paused = False
+        self._save_state()
+        return "Scheduler resumed — new training jobs may start subject to gates."
+
+    def disable(self) -> str:
+        """Disable scheduled training entirely."""
+        self.state.disabled = True
+        self.state.paused = True
+        self._save_state()
+        return "Scheduled training disabled."
+
+    def enable(self) -> str:
+        """Re-enable scheduled training."""
+        self.state.disabled = False
+        self.state.paused = False
+        self._save_state()
+        return "Scheduled training enabled."
+
+    def stop_safely(self) -> str:
+        """Stop safely — equivalent to pause + disable, prevents additional jobs."""
+        self.state.disabled = True
+        self.state.paused = True
+        self._save_state()
+        return "Scheduler stopped safely — no additional training jobs will run."
 
     # ------------------------------------------------------------------
     # Pre-flight checks (Phase 2 + Phase 3 integration)
@@ -132,20 +215,15 @@ class ExperimentScheduler:
     def check_evaluation_leakage(self) -> list[str]:
         """Check for article/patient ID leakage between training and eval sets."""
         issues = []
-        # The dev set is development data only; no training data is present locally.
-        # Verify that evaluation data does not contain training IDs.
         from .evaluator import check_evaluation_leakage
 
         dev_cases = load_dev_cases("fresh-eval/seed-v2.jsonl")
         result = check_evaluation_leakage(
-            training_data=None,  # No local training data
+            training_data=None,
             evaluation_data=dev_cases,
             config=self.config.leakage,
         )
-        if not result.passed:
-            issues.extend(result.reasons)
-        else:
-            issues.extend(result.reasons)  # Informational
+        issues.extend(result.reasons)
         return issues
 
     def check_resources(self) -> list[str]:
@@ -155,7 +233,7 @@ class ExperimentScheduler:
         return engine.check_resources()
 
     # ------------------------------------------------------------------
-    # Modes
+    # Phase 5: Modes
     # ------------------------------------------------------------------
     def run_dry_run(self) -> dict[str, Any]:
         """Validate everything without inference or training."""
@@ -167,20 +245,12 @@ class ExperimentScheduler:
             finished_at=datetime.now(timezone.utc).isoformat(),
         )
 
-        # License check
         blocked = self.check_licenses()
         record.dataset_names = [e.name for e in self.registry.list_all()]
 
-        # Config validation
         config_errors = self.config.validate()
-
-        # Evaluation integrity
         integrity_issues = self.check_evaluation_integrity()
-
-        # Evaluation leakage
         leakage_issues = self.check_evaluation_leakage()
-
-        # Resource check
         resource_issues = self.check_resources()
 
         all_issues = blocked + config_errors + integrity_issues + leakage_issues + resource_issues
@@ -215,19 +285,9 @@ class ExperimentScheduler:
         dev_cases = load_dev_cases("fresh-eval/seed-v2.jsonl")
         dev_responses = load_dev_results("fresh-eval/development-results.json")
 
-        # Evaluate base and adapter separately
-        base_responses = {
-            k: v for k, v in dev_responses.items()
-        }
-        # The development-results.json has separate "base" and "adapter" lists.
-        # We need to split responses by variant.
         raw = json.loads(Path("fresh-eval/development-results.json").read_text())
-        base_responses = {
-            row["id"]: row["response"] for row in raw.get("base", [])
-        }
-        adapter_responses = {
-            row["id"]: row["response"] for row in raw.get("adapter", [])
-        }
+        base_responses = {row["id"]: row["response"] for row in raw.get("base", [])}
+        adapter_responses = {row["id"]: row["response"] for row in raw.get("adapter", [])}
 
         base_eval = evaluate_all(dev_cases, base_responses)
         adapter_eval = evaluate_all(dev_cases, adapter_responses)
@@ -307,6 +367,33 @@ class ExperimentScheduler:
                 "experiment_id": record.id,
             }
 
+        # Check if scheduler is paused/disabled
+        if self.state.paused:
+            record.status = "blocked"
+            record.rejection_reason = "Scheduler is paused — resume before training"
+            self.state.experiments.append(record)
+            self.state.last_run = record.started_at
+            self._save_state()
+            return {
+                "mode": "train-once",
+                "status": "blocked",
+                "rejection_reason": record.rejection_reason,
+                "experiment_id": record.id,
+            }
+
+        if self.state.disabled:
+            record.status = "blocked"
+            record.rejection_reason = "Scheduled training is disabled — enable before training"
+            self.state.experiments.append(record)
+            self.state.last_run = record.started_at
+            self._save_state()
+            return {
+                "mode": "train-once",
+                "status": "blocked",
+                "rejection_reason": record.rejection_reason,
+                "experiment_id": record.id,
+            }
+
         # License check — only ingestible datasets may be used
         blocked = self.check_licenses()
         if blocked:
@@ -349,14 +436,15 @@ class ExperimentScheduler:
             "error_message": smoke_result.error_message,
             "blocked_reason": smoke_result.blocked_reason,
             "recovered_from_checkpoint": smoke_result.recovered_from_checkpoint,
+            "memory_pressure_events": smoke_result.memory_pressure_events,
         }
 
         if smoke_result.status != TrainingStatus.COMPLETED:
             record.status = "failed"
             record.rejection_reason = smoke_result.error_message or smoke_result.blocked_reason
+            self.state.total_consecutive_failures += 1
         else:
             record.status = "completed"
-            # After smoke test passes, a larger job would require separate approval
             record.rejection_reason = "Smoke test completed. Larger training job requires separate operator approval."
 
         record.finished_at = datetime.now(timezone.utc).isoformat()
@@ -373,13 +461,57 @@ class ExperimentScheduler:
         }
 
     def run_scheduled(self) -> dict[str, Any]:
-        """Run the approved workflow periodically. Does NOT auto-train."""
+        """Run the approved workflow periodically. Does NOT auto-train.
+
+        Cycle:
+        1. Check system resources
+        2. Check for approved, unused training experiments
+        3. Validate data provenance and frozen evaluation exclusions
+        4. Run one bounded training experiment (only if approved)
+        5. Save and verify the checkpoint
+        6. Evaluate the checkpoint
+        7. Compare results with original base and previous adapter
+        8. Reject regressions
+        9. Log metrics, failures, resource consumption
+        10. Select another approved experiment if available
+
+        Pauses if too hot, memory pressure, disk insufficient, or conflicts.
+        """
         record = ExperimentRecord(
             id=self._new_id("scheduled"),
             mode=RunMode.SCHEDULED.value,
             status="running",
             started_at=datetime.now(timezone.utc).isoformat(),
         )
+
+        # If paused or disabled, just record and return
+        if self.state.paused:
+            record.status = "blocked"
+            record.rejection_reason = "Scheduler is paused"
+            record.finished_at = datetime.now(timezone.utc).isoformat()
+            self.state.experiments.append(record)
+            self.state.last_run = record.started_at
+            self._save_state()
+            return {
+                "mode": "scheduled",
+                "status": "blocked",
+                "rejection_reason": "Scheduler is paused",
+                "experiment_id": record.id,
+            }
+
+        if self.state.disabled:
+            record.status = "blocked"
+            record.rejection_reason = "Scheduled training is disabled"
+            record.finished_at = datetime.now(timezone.utc).isoformat()
+            self.state.experiments.append(record)
+            self.state.last_run = record.started_at
+            self._save_state()
+            return {
+                "mode": "scheduled",
+                "status": "blocked",
+                "rejection_reason": "Scheduled training is disabled",
+                "experiment_id": record.id,
+            }
 
         # Check licenses and evaluation integrity
         blocked = self.check_licenses()
@@ -389,7 +521,49 @@ class ExperimentScheduler:
 
         issues = blocked + integrity + leakage + resources
 
-        # Scheduled mode only runs dry-run + evaluate-only, NEVER train
+        # Auto-pause on resource issues
+        if resources:
+            self.state.paused = True
+            self._save_state()
+            record.status = "blocked"
+            record.rejection_reason = f"Auto-paused: resource issues: {'; '.join(resources)}"
+            record.finished_at = datetime.now(timezone.utc).isoformat()
+            self.state.experiments.append(record)
+            self.state.last_run = record.started_at
+            self._save_state()
+            return {
+                "mode": "scheduled",
+                "status": "blocked",
+                "rejection_reason": record.rejection_reason,
+                "blocked_datasets": blocked,
+                "integrity_issues": integrity,
+                "leakage_issues": leakage,
+                "resource_issues": resources,
+                "experiment_id": record.id,
+            }
+
+        # Check consecutive failure limit
+        engine = TrainingEngine(self.config, self.work_dir)
+        if engine.consecutive_failures() >= self.config.resources.max_consecutive_failures:
+            self.state.paused = True
+            self._save_state()
+            record.status = "blocked"
+            record.rejection_reason = (
+                f"Auto-paused: {engine.consecutive_failures()} consecutive failures. "
+                "Operator intervention required."
+            )
+            record.finished_at = datetime.now(timezone.utc).isoformat()
+            self.state.experiments.append(record)
+            self.state.last_run = record.started_at
+            self._save_state()
+            return {
+                "mode": "scheduled",
+                "status": "blocked",
+                "rejection_reason": record.rejection_reason,
+                "experiment_id": record.id,
+            }
+
+        # Scheduled mode only runs dry-run + evaluate-only, NEVER auto-trains
         dry_run = self.run_dry_run()
         evaluate = self.run_evaluate_only()
 
@@ -430,7 +604,7 @@ class ExperimentScheduler:
         <string>-m</string>
         <string>mlx_runner.cli</string>
         <string>--mode</string>
-        <string>dry-run</string>
+        <string>scheduled</string>
     </array>
     <key>RunAtLoad</key>
     <false/>
@@ -453,3 +627,33 @@ class ExperimentScheduler:
 
     def list_experiments(self) -> list[dict[str, Any]]:
         return [asdict(e) for e in self.state.experiments]
+
+    def get_latest_comparison(self) -> dict[str, Any] | None:
+        """Return the latest evaluation comparison, if any."""
+        for exp in reversed(self.state.experiments):
+            if exp.comparison:
+                return exp.comparison
+        return None
+
+    def get_latest_training(self) -> dict[str, Any] | None:
+        """Return the latest training record, if any."""
+        for exp in reversed(self.state.experiments):
+            if exp.training:
+                return exp.training
+        return None
+
+    def get_recent_checkpoints(self) -> list[dict[str, Any]]:
+        """Return recent checkpoint info from training records."""
+        ckpts = []
+        for exp in reversed(self.state.experiments):
+            if exp.training and exp.training.get("checkpoint_path"):
+                ckpts.append({
+                    "experiment_id": exp.id,
+                    "checkpoint_path": exp.training["checkpoint_path"],
+                    "checkpoint_sha256": exp.training.get("checkpoint_sha256"),
+                    "steps_completed": exp.training.get("steps_completed"),
+                    "status": exp.training.get("status"),
+                })
+                if len(ckpts) >= 5:
+                    break
+        return ckpts

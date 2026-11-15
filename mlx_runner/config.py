@@ -1,19 +1,25 @@
 """
-Pipeline configuration for the Safe ML Experiment Runner.
+Pipeline configuration for the Safe ML Experiment Runner (continuous 35B ML pipeline).
 
 All configuration is defined in code (dataclasses) with optional YAML overrides.
 No model weights, adapters, credentials, or restricted data are referenced here.
 
-Model identity (corrected):
-- Qwen3.6-35B-A3B is the TARGET base model per the research plan. It is NOT
-  available locally; downloading it (~70 GB BF16 / ~17.5 GB 4-bit) is prohibited
-  without explicit operator approval.
-- The only locally available base model is Qwen2.5-7B-Instruct-4bit
-  (/Users/himnishdukkola/Documents/tds-agent/tds-model-qwen/), 7.6B params,
-  4-bit quantized, ~4 GB on disk.
-- Local adapters (tds-agent, tds-agent-qwen) are LoRA adapters trained on
-  Qwen2.5-7B-Instruct-4bit, NOT on Qwen3.6-35B-A3B.
-- There is NO Qwen3.6-35B-A3B adapter and NO step-360 checkpoint locally.
+Model identity (verified from local artifacts):
+- Base model: mlx-community/Qwen3.6-35B-A3B-4bit (community conversion)
+  Local snapshot: ~/.cache/huggingface/hub/models--mlx-community--Qwen3.6-35B-A3B-4bit/
+  Revision: 38740b847e4cb78f352aba30aa41c76e08e6eb46
+  Quantization: 4-bit (QLoRA-style, NOT CUDA/bitsandbytes NF4)
+  Upstream source correspondence: NOT independently verified
+- Official model: Qwen/Qwen3.6-35B-A3B at revision 995ad96eacd98c81ed38be0c5b274b04031597b0
+  (~35.95B BF16 params, ~67 GiB storage) — NOT downloaded locally
+- Training framework: mlx-lm 0.31.3, mlx 0.32.0, Python 3.14.7
+- Hardware: Apple M5 Pro, 18 CPU cores, ~48 GB unified memory
+
+Hardware constraints (measured from prior runs):
+- Peak training memory: 24.960 GB (35B 4-bit LoRA, rank 8, 2 layers, seq 1024)
+- Safe memory ceiling on 48 GB unified: 40 GB (leaves headroom for macOS + other processes)
+- Max sequence length used previously: 1024 tokens
+- Conservative defaults: max_seq_length=512, batch_size=1, grad_accumulation=4
 """
 
 from __future__ import annotations
@@ -41,6 +47,15 @@ class DatasetClass(str, Enum):
 class LicenseStatus(str, Enum):
     APPROVED = "approved"
     REVIEW_REQUIRED = "review_required"
+    BLOCKED = "blocked"
+
+
+class TrainingStatus(str, Enum):
+    PENDING = "pending"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    ABORTED = "aborted"
     BLOCKED = "blocked"
 
 
@@ -76,7 +91,11 @@ class DatasetEntry:
 
 @dataclass
 class ResourceLimits:
-    """Resource safeguards for training (Phase 4)."""
+    """Resource safeguards for training on Apple M5 Pro with 48 GB unified memory.
+
+    Conservative defaults measured from prior 35B 4-bit LoRA training runs
+    (peak 24.960 GB). Limits leave headroom for macOS and other processes.
+    """
 
     max_memory_gb: float = 40.0  # Leave headroom on 48 GB unified memory
     max_disk_gb: float = 100.0
@@ -85,25 +104,70 @@ class ResourceLimits:
     max_concurrent_training: int = 1
     smoke_test_max_steps: int = 10
     smoke_test_max_duration_minutes: int = 5
+    # Memory pressure: warn at this fraction of unified memory, abort above it
+    memory_warn_fraction: float = 0.75   # 36 GB
+    memory_abort_fraction: float = 0.85  # 40.8 GB
+    # Free disk minimum before starting any experiment
+    min_free_disk_gb: float = 20.0
+    # Max consecutive failed experiments before scheduler pauses
+    max_consecutive_failures: int = 3
+
+
+@dataclass
+class TrainingEnvConfig:
+    """Conservative training environment for Apple Silicon MLX.
+
+    These settings are designed to avoid memory swapping, keep the Mac usable,
+    and allow frequent recoverable checkpoints.
+    """
+
+    base_model_id: str = "mlx-community/Qwen3.6-35B-A3B-4bit"
+    base_model_local_path: str | None = (
+        "/Users/himnishdukkola/.cache/huggingface/hub/"
+        "models--mlx-community--Qwen3.6-35B-A3B-4bit/"
+        "snapshots/38740b847e4cb78f352aba30aa41c76e08e6eb46"
+    )
+    base_model_available_locally: bool = True
+    base_model_revision: str = "38740b847e4cb78f352aba30aa41c76e08e6eb46"
+    base_model_quantization: str = "4-bit"
+
+    # Fine-tuning
+    fine_tune_type: str = "lora"
+    lora_rank: int = 8
+    lora_layers: int = 2  # Conservative: final two layers only
+    max_seq_length: int = 512  # Conservative: half of prior 1024
+    batch_size: int = 1  # Microbatch size = 1
+    gradient_accumulation_steps: int = 4  # Effective batch = 4
+    learning_rate: float = 1e-5
+    seed: int = 2026
+    grad_checkpoint: bool = True  # Reduce memory at compute cost
+    mask_prompt: bool = True  # Only train on assistant responses
+
+    # Checkpointing
+    save_every: int = 60  # Checkpoint every N steps
+    steps_per_eval: int = 60  # Evaluate every N steps
+    max_checkpoints: int = 5  # Avoid uncontrolled accumulation
+
+    # Optimizer
+    optimizer: str = "adam"
+    weight_decay: float = 0.01
+
+    # Safety
+    never_overwrite_checkpoint: bool = True  # New run dirs, never overwrite
+    max_consecutive_failures: int = 3
+    no_auto_retry: bool = True  # No automatic retry loops after failures
 
 
 @dataclass
 class EvaluationLeakageConfig:
-    """Configuration for evaluation/training leakage prevention (Phase 3).
-
-    Ensures article-level and patient-level disjointness between training and
-    held-out evaluation sets. Never fabricates gold labels or treats
-    model-generated annotations as clinical ground truth.
-    """
+    """Configuration for evaluation/training leakage prevention (Phase 3)."""
 
     enabled: bool = True
     check_article_id_overlap: bool = True
     check_patient_id_overlap: bool = True
     exclude_training_ids_from_eval: bool = True
     eval_split_must_be_disjoint: bool = True
-    # Article/patient IDs that must never appear in evaluation (from training data)
     forced_exclusion_ids: list[str] = field(default_factory=list)
-    # IDs observed in training data that are automatically excluded from eval
     observed_training_ids: list[str] = field(default_factory=list)
 
 
@@ -111,36 +175,33 @@ class EvaluationLeakageConfig:
 class ModelConfig:
     """Model configuration.
 
-    Qwen3.6-35B-A3B is the target base model but is NOT available locally.
-    The local model is Qwen2.5-7B-Instruct-4bit.
+    References the locally available Qwen3.6-35B-A3B-4bit community conversion.
+    The official Qwen/Qwen3.6-35B-A3B is NOT downloaded locally (~67 GiB BF16).
     """
 
-    # Target base model (per research plan) - NOT available locally
-    base_model_id: str = "Qwen/Qwen3.6-35B-A3B"
-    base_model_available_locally: bool = False
+    training_env: TrainingEnvConfig = field(default_factory=TrainingEnvConfig)
+
+    # Legacy fields (kept for compatibility with existing scheduler/evaluator)
+    base_model_id: str = "mlx-community/Qwen3.6-35B-A3B-4bit"
+    base_model_available_locally: bool = True
     base_model_download_size_gb_4bit: float = 17.5
     base_model_download_size_gb_bf16: float = 70.0
-
-    # Locally available base model
-    local_model_path: str | None = "/Users/himnishdukkola/Documents/tds-agent/tds-model-qwen"
-    local_model_id: str = "mlx-community/Qwen2.5-7B-Instruct-4bit"
-    local_model_params: int = 7_615_616_512
-    local_model_quantization: str = "4-bit"
-    local_model_architecture: str = "Qwen2ForCausalLM"
-
-    # Adapter configuration
     adapter_path: str | None = None
     training_framework: str = "mlx"
     fine_tune_type: str = "lora"
     lora_rank: int = 8
-    lora_layers: int = 8
-    max_seq_length: int = 2048
+    lora_layers: int = 2
+    max_seq_length: int = 512
 
-    # Local adapters (trained on Qwen2.5-7B-Instruct-4bit, NOT Qwen3.6-35B-A3B)
+    # Local adapters from prior runs (baseline, not for production use)
     local_adapters: dict[str, str] = field(
         default_factory=lambda: {
-            "tds-agent": "/Users/himnishdukkola/Documents/tds-agent/adapters/tds-agent",
-            "tds-agent-qwen": "/Users/himnishdukkola/Documents/tds-agent/adapters/tds-agent-qwen",
+            "medication-v1-step360": "/Users/himnishdukkola/.codex/.chatgpt-projects/"
+            "g-p-6ae2a77388348191821395e8101c3408/model-development/"
+            "local-35b-medication-v1/adapter",
+            "research-pilot-step5": "/Users/himnishdukkola/.codex/.chatgpt-projects/"
+            "g-p-6ae2a77388348191821395e8101c3408/model-development/"
+            "local-35b-research/adapter",
         }
     )
 
@@ -183,16 +244,13 @@ class PipelineConfig:
         if self.resources.max_memory_gb > 44.0:
             errors.append("max_memory_gb should not exceed 44 GB on 48 GB unified memory")
 
-        # No 35B training locally (target model not available, would exceed memory)
-        if self.model.base_model_id == "Qwen/Qwen3.6-35B-A3B" and self.mode in (
-            RunMode.TRAIN_ONCE,
-            RunMode.SCHEDULED,
-        ):
-            errors.append(
-                "Qwen3.6-35B-A3B training not available locally "
-                f"({self.model.base_model_download_size_gb_4bit} GB 4-bit > 48 GB memory). "
-                "Use the local Qwen2.5-7B-Instruct-4bit model instead."
-            )
+        # Training env sanity
+        if self.model.training_env.max_seq_length > 2048:
+            errors.append("max_seq_length should not exceed 2048 on 48 GB unified memory")
+        if self.model.training_env.batch_size < 1:
+            errors.append("batch_size must be at least 1")
+        if self.model.training_env.gradient_accumulation_steps < 1:
+            errors.append("gradient_accumulation_steps must be at least 1")
 
         # Leakage config must be enabled
         if not self.leakage.enabled:
@@ -208,5 +266,4 @@ def load_config(path: str | Path | None = None) -> PipelineConfig:
     """Load configuration. YAML override support is reserved for future use."""
     if path is None:
         return DEFAULT_CONFIG
-    # YAML loading reserved; for now return defaults with a note
     raise NotImplementedError("YAML config loading not yet implemented; use code defaults")
