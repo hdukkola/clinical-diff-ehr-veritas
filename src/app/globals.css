@@ -1048,6 +1048,50 @@ kbd {
   margin: 0 0 8px;
 }
 
+.evidence-conflicts {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.evidence-conflicts h3 {
+  color: var(--strong);
+  font-size: 12px;
+  margin: 0;
+}
+
+.evidence-conflict-pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  overflow-wrap: anywhere;
+}
+
+.evidence-conflict-pair figure {
+  margin: 0;
+  padding: 9px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--raised);
+}
+
+.evidence-conflict-pair figcaption {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.evidence-conflict-pair blockquote {
+  color: var(--strong);
+  margin: 5px 0 0;
+  white-space: pre-wrap;
+}
+
+@media (max-width: 600px) {
+  .evidence-conflict-pair {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 .e-tag.unavailable {
   border-color: color-mix(in srgb, var(--del) 45%, transparent);
   color: var(--del);

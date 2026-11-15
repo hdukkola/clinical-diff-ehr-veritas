@@ -22,6 +22,7 @@ import {
   compareNoteRegimens,
   compareSnapshots,
   EVIDENCE_STATE_LABELS,
+  getConflictingEvidencePairs,
   normalizeNoteText,
   searchChartRecords,
   type ChartSearchMatch,
@@ -3291,6 +3292,7 @@ export default function Home() {
                             const provStatus: ProvenanceStatus =
                               entry.change?.provenance?.overallStatus ?? 'unknown';
                             const entryLinks = entry.change?.evidenceLinks ?? [];
+                            const evidenceConflicts = sel ? getConflictingEvidencePairs(entryLinks) : [];
                             const entryGaps = entry.change?.provenanceGaps ?? [];
 
                             return (
@@ -3778,6 +3780,26 @@ export default function Home() {
                                             {!entryLinks.some(link => link.side === 'earlier' || link.side === 'both') &&
                                               ' Missing reference for this side.'}
                                           </p>
+                                        )}
+
+                                        {evidenceConflicts.length > 0 && (
+                                          <section className="evidence-conflicts" aria-label={`Conflicting source excerpts for ${entry.name}`}>
+                                            <h3>Conflicting source excerpts</h3>
+                                            {evidenceConflicts.map(([first, second], index) => (
+                                              <div className="evidence-conflict-pair" key={index}>
+                                                {[first, second].map((link, sideIndex) => (
+                                                  <figure key={sideIndex}>
+                                                    <figcaption>
+                                                      {link.side === 'earlier' ? 'Earlier' : link.side === 'later' ? 'Later' : link.side === 'both' ? 'Both snapshots' : 'Snapshot unspecified'}
+                                                      {' · '}{link.sourceLabel ?? link.noteId ?? link.sourceId ?? 'Source label unavailable'}
+                                                      {link.recordedAt && ` · ${link.recordedAt}`}
+                                                    </figcaption>
+                                                    <blockquote>{link.excerpt}</blockquote>
+                                                  </figure>
+                                                ))}
+                                              </div>
+                                            ))}
+                                          </section>
                                         )}
 
                                         {entryLinks.length > 0 ? (

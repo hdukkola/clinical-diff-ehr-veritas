@@ -1136,6 +1136,21 @@ describe('Clinical Diff Veritas Editorial UI', () => {
         if (hiddenExcerpt) {
           expect(evidence).not.toHaveTextContent(hiddenExcerpt);
         }
+        const conflicts = within(evidence).queryByRole('region', { name: /Conflicting source excerpts/ });
+        if (name === 'Lisinopril') {
+          expect(conflicts).toBeInTheDocument();
+          const [clinic, pharmacy] = within(conflicts!).getAllByRole('figure');
+          expect(clinic).toHaveTextContent('Earlier · Clinic note');
+          expect(clinic).toHaveTextContent('Lisinopril 10 mg daily.');
+          expect(pharmacy).toHaveTextContent('Earlier · Pharmacy note');
+          expect(pharmacy).toHaveTextContent('Lisinopril 20 mg daily.');
+          const group = screen.getByRole('group', { name: 'Review Lisinopril' });
+          const flag = within(group).getByRole('button', { name: 'Flag' });
+          await user.click(flag);
+          expect(flag).toHaveAttribute('aria-pressed', 'true');
+        } else {
+          expect(conflicts).not.toBeInTheDocument();
+        }
         await user.click(within(evidence).getByRole('button', { name: 'Back to evidence widget' }));
         await waitFor(() => expect(trigger).toHaveFocus());
       }

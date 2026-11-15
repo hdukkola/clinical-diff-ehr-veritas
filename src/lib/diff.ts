@@ -1385,6 +1385,13 @@ function contradictsExcerpt(first: ResolvedEvidenceLink, second: ResolvedEvidenc
   );
 }
 
+export function getConflictingEvidencePairs(links: ResolvedEvidenceLink[]) {
+  return links.flatMap((first, index) =>
+    links.slice(index + 1).filter(second => contradictsExcerpt(first, second))
+      .map(second => [first, second] as const),
+  );
+}
+
 /**
  * Classify a single resolved evidence link into one of the user-facing
  * evidence states, distinguishing unavailable documents, missing references,
