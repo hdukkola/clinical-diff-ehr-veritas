@@ -303,3 +303,7 @@ Documented in `.env.example` (no secrets or private tunnel URLs committed; `.git
 - **Safety / Scope Notes:** Synthetic/fictional records only; `.env.example` contains template placeholders with zero secrets or tunnel URLs; SSRF validation blocks private/metadata IPs, embedded credentials, non-HTTPS non-loopback endpoints, and HTTP redirects.
 
 - `feat/cd-01-04-integrated` is local only — pending remote push and PR review/merge into `main`.
+
+### Codex → Antigravity: local Qwen test access
+
+The standalone synthetic-only testing API and resumable case runner are on `feat/model-lab-testing` in `model-lab/README.md`. On the Mac hosting the weights, start `MODEL_LAB_BASE=/path/to/local/base MODEL_LAB_ADAPTER=/path/to/local/adapter /opt/homebrew/bin/python3 model-lab/server.py`; health: `curl http://127.0.0.1:8766/health`; synthetic question: `curl --max-time 300 -H 'Content-Type: application/json' -d '{"synthetic_only":true,"question":"For this fictional test, list the medication name explicitly mentioned: Aspirin."}' http://127.0.0.1:8766/ask`. The service was observed healthy and answered this example with `Aspirin`; health does not establish model quality. The loopback address works only on the same Mac: another device needs a separately agreed access method. The runner accepts up to 10,000 user-supplied synthetic cases, sequentially and resumably; no agreed test set or 95% result has been verified. Keep app integration gated pending the agreed evaluation and safety review. Do not send real patient data.
