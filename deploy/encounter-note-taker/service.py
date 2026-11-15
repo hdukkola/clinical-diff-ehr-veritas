@@ -22,6 +22,9 @@ BASE = Path(__file__).resolve().parent
 AUDIO = BASE / "medication-follow-up.wav"
 TURNS = json.loads((BASE / "fixture.json").read_text())
 FINGERPRINT = hashlib.sha256(json.dumps(TURNS, ensure_ascii=False, separators=(",", ":")).encode()).hexdigest()
+COMPARE_NOTES = json.loads((BASE / "compare-fixture.json").read_text())
+COMPARE_ID = "morgan-lee-medication-list-v1"
+COMPARE_HASH = hashlib.sha256(json.dumps(COMPARE_NOTES, ensure_ascii=False, separators=(",", ":")).encode()).hexdigest()
 LLAMA_PORT = int(os.environ.get("LLAMA_PORT", "18080"))
 THREADS = str(int(os.environ.get("INFERENCE_THREADS", "2")))
 BACKEND = f"http://127.0.0.1:{LLAMA_PORT}"
@@ -50,14 +53,13 @@ def llama_ready():
         return False
 
 
-def select_turns(turns, deadline):
-    text = "\n".join(f"{turn_id} {speaker}: {content}" for turn_id, speaker, content in turns)
+def ask_qwen(system, text, deadline):
     request = urllib.request.Request(
         BACKEND + "/v1/chat/completions",
         data=json.dumps({
             "messages": [
-                {"role": "system", "content": SYSTEM},
-                {"role": "user", "content": "Transcript:\n" + text},
+                {"role": "system", "content": system},
+                {"role": "user", "content": text},
             ],
             "temperature": 0,
             "max_tokens": 80,
@@ -68,7 +70,12 @@ def select_turns(turns, deadline):
     )
     with urllib.request.urlopen(request, timeout=max(0.1, deadline - time.monotonic())) as response:
         result = json.load(response)
-    selection = json.loads(result["choices"][0]["message"]["content"])
+    return json.loads(result["choices"][0]["message"]["content"])
+
+
+def select_turns(turns, deadline):
+    text = "\n".join(f"{turn_id} {speaker}: {content}" for turn_id, speaker, content in turns)
+    selection = ask_qwen(SYSTEM, "Transcript:\n" + text, deadline)
     valid_ids = {turn[0] for turn in turns}
     ids = selection.get("turn_ids") if isinstance(selection, dict) and set(selection) == {"turn_ids"} else None
     if (not isinstance(ids, list) or not ids or len(ids) > len(turns)
@@ -76,6 +83,23 @@ def select_turns(turns, deadline):
         or len(set(ids)) != len(ids)):
         raise ValueError("invalid selection")
     return [turn[0] for turn in turns if turn[0] in ids]
+
+
+def extract_comparison(deadline):
+    result = ask_qwen(
+        'Extract only medication names explicitly present in each fictional note. '
+        'Return a JSON object with string arrays named "earlier" and "later". '
+        'Use the spelling from the corresponding note. Omit doses and avoid inference.',
+        f"Earlier note:\n{COMPARE_NOTES[0]}\n\nLater note:\n{COMPARE_NOTES[1]}",
+        deadline,
+    )
+    if not isinstance(result, dict) or set(result) != {"earlier", "later"}:
+        raise ValueError("invalid extraction")
+    for values in result.values():
+        if (not isinstance(values, list) or not 0 < len(values) <= 8
+            or any(not isinstance(value, str) or not 0 < len(value) <= 64 for value in values)):
+            raise ValueError("invalid extraction")
+    return result
 
 
 def transcribe(deadline):
@@ -139,12 +163,14 @@ class Handler(BaseHTTPRequestHandler):
             "artifact_sha256": MODEL_HASH, "quantization": "Q4_K_M", "adapter": None,
             "backend": "llama.cpp-cpu", "transcript_sha256": FINGERPRINT, "synthetic_only": True,
             "audio_id": AUDIO_ID, "audio_sha256": AUDIO_HASH, "whisper_sha256": WHISPER_HASH,
+            "comparison_id": COMPARE_ID, "comparison_sha256": COMPARE_HASH,
         })
 
     def do_POST(self):
         expected = {
             "/select": {"transcript_id": TRANSCRIPT_ID, "transcript_sha256": FINGERPRINT},
             "/audio-draft": {"audio_id": AUDIO_ID, "audio_sha256": AUDIO_HASH},
+            "/compare-example": {"comparison_id": COMPARE_ID, "comparison_sha256": COMPARE_HASH},
         }.get(self.path)
         if expected is None:
             return self.respond(404, {"error": "not_found"})
@@ -162,23 +188,31 @@ class Handler(BaseHTTPRequestHandler):
             cached = self.path in CACHE
             if not cached:
                 deadline = started + 43
-                speech = self.path == "/audio-draft"
-                phase = "transcription"
-                segments = transcribe(deadline) if speech else []
-                if speech:
-                    print(f"Audio transcription finished in {time.monotonic() - started:.1f}s")
-                turns = [(s["id"], "Speech", s["text"]) for s in segments] if speech else TURNS
-                mismatches = check_sample_facts(segments) if speech else []
-                phase = "selection"
-                selected = [] if mismatches else select_turns(turns, deadline)
-                omissions = check_sample_facts([s for s in segments if s["id"] in selected]) if speech and selected else []
-                if omissions:
-                    selected = []
-                data = {**expected, "turn_ids": selected, "review_required": True, "synthetic_only": True}
-                if speech:
-                    data["segments"] = segments
-                    data["transcription_checks_failed"] = mismatches
-                    data["draft_checks_failed"] = omissions
+                if self.path == "/compare-example":
+                    phase = "medication extraction"
+                    data = {
+                        **expected, **extract_comparison(deadline),
+                        "review_required": True, "synthetic_only": True,
+                    }
+                    print(f"Note comparison extraction finished in {time.monotonic() - started:.1f}s")
+                else:
+                    speech = self.path == "/audio-draft"
+                    phase = "transcription"
+                    segments = transcribe(deadline) if speech else []
+                    if speech:
+                        print(f"Audio transcription finished in {time.monotonic() - started:.1f}s")
+                    turns = [(s["id"], "Speech", s["text"]) for s in segments] if speech else TURNS
+                    mismatches = check_sample_facts(segments) if speech else []
+                    phase = "selection"
+                    selected = [] if mismatches else select_turns(turns, deadline)
+                    omissions = check_sample_facts([s for s in segments if s["id"] in selected]) if speech and selected else []
+                    if omissions:
+                        selected = []
+                    data = {**expected, "turn_ids": selected, "review_required": True, "synthetic_only": True}
+                    if speech:
+                        data["segments"] = segments
+                        data["transcription_checks_failed"] = mismatches
+                        data["draft_checks_failed"] = omissions
                 CACHE[self.path] = data
                 print(f"Encounter request finished in {time.monotonic() - started:.1f}s")
             data = {**CACHE[self.path], "cached": cached}

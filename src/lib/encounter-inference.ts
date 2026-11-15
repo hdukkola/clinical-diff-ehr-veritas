@@ -1,4 +1,6 @@
 import { createHash } from 'node:crypto';
+import { buildNormalizedCompareResponse, groundMedicationMentions } from './ai-socket';
+import { SYNTHETIC_ASSISTANT_NOTES, type SyntheticAssistantNote } from './assistant-evidence';
 import { AUDIO_SAMPLE, AUDIO_TRANSCRIPTION_CHECKS, type AudioDraft } from './encounter-audio';
 import { ENCOUNTER_TRANSCRIPT_ID, encounterTurns } from './encounter-transcript';
 
@@ -10,6 +12,10 @@ const REMOTE_ARTIFACT_SHA256 = '217002fa8008ef4fc6d548353a3aebef055a96e6ff8e0e2c
 const WHISPER_ARTIFACT_SHA256 = 'a03779c86df3323075f5e796cb2ce5029f00ec8869eee3fdfb897afe36c6d002';
 const fingerprint = createHash('sha256')
   .update(JSON.stringify(encounterTurns.map(({ id, speaker, quote }) => [id, speaker, quote])))
+  .digest('hex');
+const comparisonId = 'morgan-lee-medication-list-v1';
+const comparisonFingerprint = createHash('sha256')
+  .update(JSON.stringify([SYNTHETIC_ASSISTANT_NOTES.earlier.text, SYNTHETIC_ASSISTANT_NOTES.later.text]))
   .digest('hex');
 
 export type EncounterInferenceStatus = 'unavailable' | 'timeout' | 'provider-error' | 'busy';
@@ -72,7 +78,7 @@ async function withEncounterProvider<T>(
     run: 'hosted' | 'local';
     select: (pathname: string, payload: unknown, maxBytes: number) => Promise<Record<string, unknown>>;
   }) => Promise<T>,
-  audio = false,
+  requireHosted = false,
 ) {
   const configured = process.env.CLINICAL_DIFF_ENCOUNTER_URL;
   if (!configured) throw new EncounterInferenceError('unavailable');
@@ -84,7 +90,7 @@ async function withEncounterProvider<T>(
   }
   const loopback = url.protocol === 'http:' && url.hostname === '127.0.0.1';
   const cloudRun = url.protocol === 'https:' && url.hostname.endsWith('.run.app') && !url.port;
-  if (!(cloudRun || (loopback && !process.env.K_SERVICE && !audio)) || url.pathname !== '/' ||
+  if (!(cloudRun || (loopback && !process.env.K_SERVICE && !requireHosted)) || url.pathname !== '/' ||
       url.search || url.hash || url.username || url.password) {
     throw new EncounterInferenceError('unavailable');
   }
@@ -141,6 +147,49 @@ async function withEncounterProvider<T>(
   } finally {
     selectionInProgress = false;
   }
+}
+
+function groundComparisonSide(candidates: unknown, side: SyntheticAssistantNote) {
+  const source = SYNTHETIC_ASSISTANT_NOTES[side];
+  if (!Array.isArray(candidates) || candidates.length > 8 ||
+      candidates.some((item) => typeof item !== 'string' || !item.trim() || item.length > 64)) {
+    throw new EncounterInferenceError('provider-error');
+  }
+  const grounded = groundMedicationMentions(candidates, `${side}-note`, source.text);
+  const actual = new Set(grounded.mentions.map(({ name }) => name.toLowerCase()));
+  // A missed medication would appear to have changed between the two notes.
+  if (grounded.unsupported.length || actual.size !== source.medications.length ||
+      source.medications.some((name) => !actual.has(name.toLowerCase()))) {
+    throw new EncounterInferenceError('provider-error');
+  }
+  return grounded.mentions;
+}
+
+export async function compareBundledNotes(requestSignal: AbortSignal) {
+  return withEncounterProvider(requestSignal, async ({ health, model, revision, select }) => {
+    const sample = { comparison_id: comparisonId, comparison_sha256: comparisonFingerprint };
+    if (health.comparison_id !== sample.comparison_id || health.comparison_sha256 !== sample.comparison_sha256) {
+      throw new EncounterInferenceError('unavailable');
+    }
+    const result = await select('/compare-example', sample, 4096);
+    if (result.comparison_id !== sample.comparison_id || result.comparison_sha256 !== sample.comparison_sha256 ||
+        result.synthetic_only !== true || result.review_required !== true || typeof result.cached !== 'boolean') {
+      throw new EncounterInferenceError('provider-error');
+    }
+    return {
+      ...buildNormalizedCompareResponse({
+        earlierSourceId: 'earlier-note',
+        laterSourceId: 'later-note',
+        earlierMentions: groundComparisonSide(result.earlier, 'earlier'),
+        laterMentions: groundComparisonSide(result.later, 'later'),
+        earlierUnsupported: [], laterUnsupported: [],
+        mode: 'openai_compatible', provider: 'openai_compatible',
+        simulated: false, liveAi: true, model, adapter: null,
+      }),
+      cached: result.cached,
+      revision,
+    };
+  }, true);
 }
 
 export async function selectEncounterTurns(requestSignal: AbortSignal) {
