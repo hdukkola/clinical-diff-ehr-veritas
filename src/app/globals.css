@@ -499,6 +499,12 @@ kbd {
   line-height: 1.5;
 }
 
+.rail-foot .privacy-link {
+  color: var(--muted);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
 /* ---------- Main Canvas ---------- */
 .canvas {
   overflow-y: auto;

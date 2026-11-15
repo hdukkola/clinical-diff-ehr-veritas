@@ -30,6 +30,8 @@ import {
 } from '@/lib/diff';
 import { BRAND_NAME } from '@/lib/branding';
 import { WorkspaceWidgets, type WorkspaceWidget } from '@/components/WorkspaceWidgets';
+import Link from 'next/link';
+import { EncounterDocumentationNotice } from '@/components/EncounterDocumentationNotice';
 import { EncounterNoteDraft } from '@/components/EncounterNoteDraft';
 import { ASPIRIN_TRANSCRIPT_LINK_ID, EncounterTranscript } from '@/components/EncounterTranscript';
 import { AssistantPanel } from '@/components/AssistantPanel';
@@ -2883,7 +2885,10 @@ export default function Home() {
             </div>
           )}
 
-          <div className="rail-foot">Example records only</div>
+          <div className="rail-foot">
+            <div>Example records only</div>
+            <Link href="/privacy" prefetch={false} className="privacy-link">Privacy and cookies</Link>
+          </div>
         </aside>
 
         {/* Main Canvas */}
@@ -2996,6 +3001,7 @@ export default function Home() {
                       onTraceNote={(targetId) => openEncounterNotes(targetId)}
                       onTraceMedication={(medId) => handleSelectEvidenceChange(medId, 'patient')}
                     />
+                    <EncounterDocumentationNotice />
                     <EncounterNoteDraft />
                     <AssistantPanel
                       patientLabel={cleanPatientName(activeScenario.patientLabel)}
@@ -4800,8 +4806,8 @@ export default function Home() {
                       <p>
                         Clinical Diff compares two medication snapshots for one person and shows
                         where the documentation differs. It is a retrospective review aid built on{' '}
-                        <b>fictional and synthetic records</b>. It is not a prescribing tool, a
-                        medical device, or a complete audit trail.
+                        <b>fictional and synthetic records</b>. Use this workspace for demo review and keep
+                        prescribing and official audit documentation in your clinical systems.
                       </p>
                     </section>
                     <section className="sec" id="o-rules">
@@ -4824,7 +4830,7 @@ export default function Home() {
                     <section className="sec" id="o-limits">
                       <h2 className="h2">Limits</h2>
                       <p>
-                        Review decisions are held in this browser session only and reset on reload.
+                        A session cookie links your demo review decisions to the server-side review store.
                         No clinician has validated the fixtures or the wording. Placeholder
                         connectors require an implementation before use.
                       </p>

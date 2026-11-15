@@ -1,0 +1,36 @@
+.page {
+  max-width: 760px;
+  min-height: 100%;
+  margin-inline: auto;
+  padding: clamp(24px, 6vw, 64px) clamp(18px, 5vw, 36px) 170px;
+  line-height: 1.65;
+}
+
+.page a {
+  color: var(--accent-ink);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.page h1,
+.page h2 {
+  color: var(--strong);
+  font-weight: 650;
+  line-height: 1.25;
+}
+
+.page h1 {
+  margin-block: 24px 12px;
+  font-size: clamp(28px, 5vw, 39px);
+}
+
+.page h2 { font-size: 18px; }
+
+.page section {
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid var(--line);
+}
+
+.page p + p,
+.page h2 + p { margin-top: 8px; }
