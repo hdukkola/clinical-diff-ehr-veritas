@@ -4228,10 +4228,21 @@ pre.code .c {
 
 .page-widgets {
   scroll-margin-top: 24px;
+  margin-bottom: 28px;
 }
 
+.page-widgets-header, .page-widget-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+}
+
+.page-widgets-header { margin-bottom: 12px; }
+.page-widget-head { width: 100%; align-items: flex-start; }
+
 .page-widgets-title {
-  margin: 0 0 12px;
+  margin: 0;
   color: var(--strong);
   font-size: 14px;
   font-weight: 650;
@@ -4239,13 +4250,8 @@ pre.code .c {
 
 .page-widget-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 8px;
-}
-
-.overview-widgets .page-widget-grid {
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
+  gap: 10px;
 }
 
 .page-widget {
@@ -4260,14 +4266,6 @@ pre.code .c {
   overflow-wrap: anywhere;
 }
 
-.overview-widgets .page-widget {
-  padding: 16px 18px;
-}
-
-.page-widget-wide {
-  grid-column: span 2;
-}
-
 .page-widget h3 {
   color: var(--muted);
   font-weight: 600;
@@ -4280,11 +4278,7 @@ pre.code .c {
   font-weight: 650;
   font-variant-numeric: tabular-nums;
   line-height: 1.25;
-  font-size: 17px;
-}
-
-.overview-widgets .page-widget-value {
-  font-size: clamp(19px, 2vw, 26px);
+  font-size: clamp(17px, 2vw, 23px);
 }
 
 .page-widget-detail {
@@ -4388,10 +4382,6 @@ pre.code .c {
   margin-top: 22px;
 }
 
-.page-tools-jump {
-  display: none;
-}
-
 @media (max-width: 1050px) {
   .workspace-canvas.has-workspace-tools {
     grid-template-columns: minmax(0, 1fr);
@@ -4406,13 +4396,7 @@ pre.code .c {
     border: 0;
   }
 
-  .page-tools-jump {
-    display: inline-flex;
-    margin: 0 0 12px;
-  }
-
-  .page-widget-grid,
-  .overview-widgets .page-widget-grid {
+  .page-widget-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
@@ -4424,9 +4408,7 @@ pre.code .c {
 }
 
 @media (max-width: 440px) {
-  .overview-widgets .page-widget {
-    padding: 12px 13px;
-  }
+  .page-widget { padding: 12px 11px; }
 
   .encounter-transcript > header {
     flex-wrap: wrap;
@@ -4483,3 +4465,110 @@ pre.code .c {
 .encounter-note-omitted a + a {
   margin-inline-start: 8px;
 }
+
+.page-widget[data-dragging] { opacity: .5; }
+.page-widget[data-drop-target], .cw-card[data-drop-target] { outline: 2px solid var(--accent-ink); outline-offset: -2px; }
+.page-widget-grip { cursor: grab; color: var(--muted); padding: 0 3px; font-size: 19px; line-height: 1; }
+.page-widget-grip:active { cursor: grabbing; }
+.page-widget-catalog {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 185px), 1fr));
+  gap: 8px 16px;
+  min-width: 0;
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--widget-radius-sm);
+}
+.page-widget-catalog legend { padding-inline: 6px; color: var(--strong); font-size: 13px; }
+.page-widget-catalog label { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.page-widget-catalog input[type='checkbox'], .patient-chat-confirm input { appearance: auto; accent-color: var(--accent-ink); }
+.page-widget-move { display: flex; flex-wrap: wrap; gap: 5px; width: 100%; margin-top: 8px; }
+.page-widget-move .btn { font-size: 11px; padding: 3px 6px; }
+
+.patient-chat { display: grid; gap: 14px; width: min(100%, 940px); }
+.patient-chat header p, .patient-chat-scope, .patient-chat-status { color: var(--muted); font-size: 13px; }
+.patient-chat-context { display: flex; flex-wrap: wrap; gap: 10px; }
+.patient-chat label { display: grid; gap: 4px; min-width: 0; color: var(--muted); font-size: 13px; }
+.patient-chat-context label { flex: 1 1 160px; }
+.patient-chat select, .patient-chat input:not([type='checkbox']) {
+  width: 100%;
+  min-width: 0;
+  min-height: 40px;
+  padding: 8px 10px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--widget-radius-sm);
+  background: var(--sunk);
+  color: var(--text);
+  font: inherit;
+}
+.patient-chat-log {
+  overflow: auto;
+  max-height: min(52vh, 480px);
+  min-height: 105px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--widget-radius);
+  background: var(--sunk);
+  color: var(--text);
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+.patient-chat-turn + .patient-chat-turn { margin-top: 15px; }
+.patient-chat-question {
+  width: fit-content;
+  max-width: 95%;
+  margin-left: auto;
+  padding: 7px 10px;
+  border-radius: var(--widget-radius-sm);
+  background: var(--sel);
+  color: var(--strong);
+}
+.patient-chat-answer { margin-top: 8px; }
+.patient-chat-reply-typing > span {
+  animation: patient-chat-reveal 90ms var(--reply-word-delay) ease-out both;
+}
+.patient-chat-thinking {
+  width: fit-content;
+  color: var(--muted);
+  animation: patient-chat-reveal 120ms 140ms ease-out both;
+}
+@supports (background-clip: text) {
+  .patient-chat-thinking {
+    background: linear-gradient(100deg, var(--muted) 38%, var(--strong) 50%, var(--muted) 62%) 110% 50% / 260% 100%;
+    background-clip: text;
+    color: transparent;
+    animation: patient-chat-reveal 120ms 140ms ease-out both, patient-chat-shimmer 1.6s 140ms linear infinite;
+  }
+}
+@keyframes patient-chat-reveal { from { opacity: 0; } to { opacity: 1; } }
+@keyframes patient-chat-shimmer { to { background-position: -10% 50%; } }
+@media (prefers-reduced-motion: reduce), (forced-colors: active) {
+  .patient-chat-reply-typing > span { animation: none; }
+  .patient-chat-thinking {
+    background: none;
+    color: var(--muted);
+    animation: patient-chat-reveal 1ms 140ms steps(1, end) both;
+  }
+}
+.patient-chat-answer ul { display: grid; gap: 8px; padding-top: 8px; list-style: none; }
+.patient-chat-answer li { padding-left: 10px; border-left: 2px solid var(--line-2); }
+.patient-chat-answer small { display: block; color: var(--muted); }
+.patient-chat-compose { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 5px 8px; }
+.patient-chat-compose label { grid-column: 1 / -1; }
+.patient-chat-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.patient-chat-status:empty { display: none; }
+.patient-chat-review {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--widget-radius);
+  background: var(--raised);
+  scroll-margin-top: 28px;
+}
+.patient-chat-review h2 { color: var(--strong); font-size: 17px; }
+.patient-chat-review form { display: grid; gap: 10px; }
+.patient-chat-review dl { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 16px; overflow-wrap: anywhere; }
+.patient-chat-review dt { color: var(--muted); }
+.patient-chat-review .patient-chat-confirm { display: flex; align-items: center; gap: 8px; }

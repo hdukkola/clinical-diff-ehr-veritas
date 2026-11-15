@@ -553,7 +553,7 @@ export function CockpitWidgets({
     () => controlledOrder ?? DEFAULT_COCKPIT_WIDGET_ORDER,
   );
   const [draggedId, setDraggedId] = useState<CockpitWidgetId | null>(null);
-  const [dragStartOrder, setDragStartOrder] = useState<CockpitWidgetId[]>([]);
+  const [dropTarget, setDropTarget] = useState<CockpitWidgetId | null>(null);
   const [hiddenWidgets, setHiddenWidgets] = useState<CockpitWidgetId[]>([]);
   const [placementOpen, setPlacementOpen] = useState(false);
   const [liveStatus, setLiveStatus] = useState<string>('');
@@ -561,8 +561,6 @@ export function CockpitWidgets({
   const moveBtnRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const gridRef = useRef<HTMLDivElement>(null);
   const previousRects = useRef<Map<string, DOMRect> | null>(null);
-  const dragDirection = useRef<-1 | 0 | 1>(0);
-  const lastDragMove = useRef<{ x: number; y: number; axis: 'x' | 'y' } | null>(null);
 
   const order = controlledOrder ?? internalOrder;
   const orderRef = useRef(order);
@@ -571,14 +569,14 @@ export function CockpitWidgets({
     orderRef.current = order;
     const before = previousRects.current;
     previousRects.current = null;
-    if (!before || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    if (!before || window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
     gridRef.current?.querySelectorAll<HTMLElement>('[data-widget-id]').forEach((card) => {
       const old = before.get(card.dataset.widgetId ?? '');
       if (!old) return;
       const now = card.getBoundingClientRect();
       const x = old.left - now.left;
       const y = old.top - now.top;
-      if (x || y) card.animate([{ transform: `translate(${x}px, ${y}px)` }, { transform: 'translate(0, 0)' }], { duration: 260, easing: 'cubic-bezier(.2,.8,.2,1)' });
+      if (x || y) card.animate?.([{ transform: `translate(${x}px, ${y}px)` }, { transform: 'translate(0, 0)' }], { duration: 260, easing: 'cubic-bezier(.2,.8,.2,1)' });
     });
   }, [order]);
 
@@ -671,74 +669,36 @@ export function CockpitWidgets({
     });
   }, [updateOrder]);
 
-  const handleDragStart = useCallback(
-    (id: CockpitWidgetId, e: DragEvent<HTMLElement>) => {
-      // Keep the dragged DOM node mounted in place until the native drag ends.
-      setDragStartOrder([...orderRef.current]);
-      dragDirection.current = 0;
-      lastDragMove.current = null;
-      setDraggedId(id);
-      e.dataTransfer.effectAllowed = 'move';
-      e.dataTransfer.setData('text/plain', id);
-    },
-    [],
-  );
+  function handleDragStart(id: CockpitWidgetId, event: DragEvent<HTMLElement>) {
+    setDraggedId(id);
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/plain', id);
+  }
 
-  const handleDragOver = useCallback(
-    (targetId: CockpitWidgetId, e: DragEvent<HTMLElement>) => {
-      e.preventDefault();
-      e.dataTransfer.dropEffect = 'move';
-      const current = orderRef.current;
-      const from = draggedId ? current.indexOf(draggedId) : -1;
-      const to = current.indexOf(targetId);
-      if (from >= 0 && to >= 0 && from !== to) {
-        const target = e.currentTarget.getBoundingClientRect();
-        const source = gridRef.current?.querySelector<HTMLElement>(`[data-widget-id="${draggedId}"]`)?.getBoundingClientRect();
-        if (source && target.width && target.height) {
-          const sameRow = Math.abs(source.top - target.top) < Math.min(source.height, target.height) / 2;
-          const direction = from < to ? 1 : -1;
-          const axis = sameRow ? 'x' : 'y';
-          const coordinate = axis === 'x' ? e.clientX : e.clientY;
-          const lastMove = lastDragMove.current;
-          if (lastMove && lastMove.axis === axis && dragDirection.current !== direction &&
-              (coordinate - lastMove[axis]) * direction < 12) return;
-          // Require a deeper move to reverse direction, preventing jitter at a boundary.
-          const distance = dragDirection.current && dragDirection.current !== direction ? 0.65 : 0.55;
-          const threshold = direction === 1 ? distance : 1 - distance;
-          const pastThreshold = sameRow
-            ? (from < to ? e.clientX > target.left + target.width * threshold : e.clientX < target.left + target.width * threshold)
-            : (from < to ? e.clientY > target.top + target.height * threshold : e.clientY < target.top + target.height * threshold);
-          if (!pastThreshold) return;
-        }
-        const next = [...current];
-        const [moved] = next.splice(from, 1);
-        next.splice(to, 0, moved);
-        dragDirection.current = from < to ? 1 : -1;
-        const sameRow = source && target && Math.abs(source.top - target.top) < Math.min(source.height, target.height) / 2;
-        lastDragMove.current = { x: e.clientX, y: e.clientY, axis: sameRow ? 'x' : 'y' };
-        updateOrder(next);
-      }
-    },
-    [draggedId, updateOrder],
-  );
+  function handleDragOver(target: CockpitWidgetId, event: DragEvent<HTMLElement>) {
+    if (!draggedId) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+    setDropTarget(target === draggedId ? null : target);
+  }
 
-  const handleDrop = useCallback(
-    (e: DragEvent<HTMLElement>) => {
-      e.preventDefault();
-      const sourceId =
-        draggedId ?? (e.dataTransfer.getData('text/plain') as CockpitWidgetId | '');
-      setDraggedId(null);
-      const position = sourceId ? orderRef.current.indexOf(sourceId) : -1;
-      if (sourceId && position >= 0) {
-        setLiveStatus(`Moved ${WIDGET_TITLES[sourceId]} to position ${position + 1} of ${orderRef.current.length}.`);
-      }
-    },
-    [draggedId],
-  );
-
-  const handleDragEnd = useCallback(() => {
+  function handleDragEnd() {
     setDraggedId(null);
-  }, []);
+    setDropTarget(null);
+  }
+
+  function handleDrop(target: CockpitWidgetId, event: DragEvent<HTMLElement>) {
+    if (!draggedId) return;
+    event.preventDefault();
+    const current = orderRef.current;
+    const index = current.indexOf(target);
+    if (index >= 0 && draggedId !== target) {
+      const next = current.filter((id) => id !== draggedId);
+      next.splice(index, 0, draggedId);
+      updateOrder(next, `Moved ${WIDGET_TITLES[draggedId]} to position ${index + 1} of ${next.length}.`);
+    }
+    handleDragEnd();
+  }
 
   const diffCounts = useMemo(() => {
     let changed = 0;
@@ -884,8 +844,8 @@ export function CockpitWidgets({
   const isCustomOrder = !arraysEqual(order, DEFAULT_COCKPIT_WIDGET_ORDER);
   const hasCustomPlacement = isCustomOrder || hiddenWidgets.length > 0;
   const visibleOrder = useMemo(
-    () => (draggedId ? dragStartOrder : order).filter((id) => !hiddenWidgets.includes(id)),
-    [dragStartOrder, draggedId, hiddenWidgets, order],
+    () => order.filter((id) => !hiddenWidgets.includes(id)),
+    [hiddenWidgets, order],
   );
 
   const renderWidgetBody = (id: CockpitWidgetId) => {
@@ -1397,11 +1357,11 @@ export function CockpitWidgets({
               key={id}
               role="listitem"
               data-widget-id={id}
-              style={draggedId ? { order: index } : undefined}
+              data-drop-target={dropTarget === id || undefined}
               draggable
               onDragStart={(e) => handleDragStart(id, e)}
               onDragOver={(e) => handleDragOver(id, e)}
-              onDrop={handleDrop}
+              onDrop={(event) => handleDrop(id, event)}
               onDragEnd={handleDragEnd}
               className={`cw-card cw-w-${WIDGET_SPAN[id]}${isDragging ? ' is-dragging' : ''}`}
             >

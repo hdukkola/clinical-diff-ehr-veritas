@@ -34,7 +34,9 @@ import Link from 'next/link';
 import { EncounterDocumentationNotice } from '@/components/EncounterDocumentationNotice';
 import { EncounterNoteDraft } from '@/components/EncounterNoteDraft';
 import { ASPIRIN_TRANSCRIPT_LINK_ID, EncounterTranscript } from '@/components/EncounterTranscript';
+import { PatientChat, type ChatThreads } from '@/components/PatientChat';
 import { AssistantPanel } from '@/components/AssistantPanel';
+import { applyChartCorrections, chartCorrectionsFor, type ChartAspect, type ChartCorrection } from '@/lib/patient-chat';
 import { SYNTHETIC_ASSISTANT_NOTES } from '@/lib/assistant-evidence';
 import {
   DEFAULT_MLX_MODEL_ID,
@@ -63,7 +65,7 @@ import type {
 /* ------------------------------------------------------------------
    Constants & Palettes
    ------------------------------------------------------------------ */
-type ViewId = 'home' | 'patient' | 'extract' | 'diff' | 'triage' | 'eval' | 'audit' | 'models';
+type ViewId = 'home' | 'patient' | 'extract' | 'diff' | 'triage' | 'eval' | 'audit' | 'chat' | 'models';
 type PaletteId = 'void' | 'dimmed' | 'obsidian' | 'forest';
 type DiffFilter = 'all' | 'changed' | 'onlyA' | 'onlyB' | 'same';
 type ReviewDecision = 'verified' | 'flagged' | 'deferred';
@@ -79,7 +81,8 @@ const VIEW_NAMES: Record<ViewId, string> = {
   triage: 'Review suggestions',
   eval: 'Evaluations',
   audit: 'Session activity',
-  models: 'Models & data',
+  chat: 'AI chat',
+  models: 'Developer settings',
 };
 
 const WORKSPACE_VIEWS: { id: ViewId; label: string }[] = [
@@ -89,7 +92,13 @@ const WORKSPACE_VIEWS: { id: ViewId; label: string }[] = [
   { id: 'triage', label: 'Review suggestions' },
   { id: 'eval', label: 'Evaluations' },
   { id: 'audit', label: 'Session activity' },
+  { id: 'chat', label: 'AI chat' },
 ];
+
+const CHAT_RECORDS = syntheticScenarios.filter((scenario) => !scenario.provenance).filter(
+  (scenario, index, scenarios) => scenarios.findIndex((item) => item.patientId === scenario.patientId) === index,
+);
+const WIDGET_EDIT_PAGES = [...WORKSPACE_VIEWS, { id: 'patient', label: 'Patient overview' }, { id: 'models', label: 'Developer settings' }];
 
 const PALETTES: {
   id: PaletteId;
@@ -950,6 +959,12 @@ export default function Home() {
   const [announcement, setAnnouncement] = useState('');
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const [focusHeadingNonce, setFocusHeadingNonce] = useState(0);
+  const [chatChartId, setChatChartId] = useState(CHAT_RECORDS[0].id);
+  const [chatAspect, setChatAspect] = useState<ChartAspect>('timeline');
+  const [chatThreads, setChatThreads] = useState<ChatThreads>({});
+  const [chartCorrections, setChartCorrections] = useState<ChartCorrection[]>([]);
+  const [widgetNotes, setWidgetNotes] = useState<Partial<Record<ViewId, string>>>({});
+  const [widgetEditPage, setWidgetEditPage] = useState<ViewId>();
   const [widgetOrder, setWidgetOrder] = useState<CockpitWidgetId[]>(DEFAULT_COCKPIT_WIDGET_ORDER);
   const [pinnedOpen, setPinnedOpen] = useState(false);
   const [backlogOpen, setBacklogOpen] = useState(false);
@@ -1125,7 +1140,8 @@ export default function Home() {
   useEffect(() => {
     if (focusHeadingNonce === 0) return;
     requestAnimationFrame(() => {
-      headingRef.current?.focus();
+      headingRef.current?.focus({ preventScroll: true });
+      if (canvasRef.current) canvasRef.current.scrollTop = 0;
     });
   }, [focusHeadingNonce]);
 
@@ -1266,6 +1282,7 @@ export default function Home() {
 
   const navigateTo = useCallback((nextView: ViewId, focusHeading = true) => {
     setView(nextView);
+    setWidgetEditPage(undefined);
     setSelectedMedId(null);
     setEvidenceReturn(null);
     setMobileNavOpen(false);
@@ -2149,7 +2166,7 @@ export default function Home() {
       })),
       {
         id: 'view-models',
-        label: 'Go to Models & data',
+        label: 'Go to Developer settings',
         hint: 'page',
         action: 'view' as const,
         target: 'models' as ViewId,
@@ -2359,9 +2376,6 @@ export default function Home() {
     return WORKSPACE_VIEWS.filter((v) => v.label.toLowerCase().includes(normalizedRailFilter));
   }, [normalizedRailFilter]);
 
-  const showSystemModels =
-    !normalizedRailFilter || 'models & data'.includes(normalizedRailFilter);
-
   /* ---- Outline for Right Rail ---- */
   const outlineSections = useMemo((): Array<[string, string]> => {
     if (view === 'diff') {
@@ -2504,6 +2518,25 @@ export default function Home() {
   const jump = (title: string, value: string | number, next: ViewId, text: string, detail?: string) =>
     metric(title, value, detail, text, () => navigateTo(next));
 
+  const chatChart = CHAT_RECORDS.find((chart) => chart.id === chatChartId) ?? CHAT_RECORDS[0];
+
+  function openChartChat() {
+    if (!CHAT_RECORDS.some((chart) => chart.id === activeScenario.id)) return;
+    setChatChartId(activeScenario.id);
+    setChatAspect('timeline');
+    navigateTo('chat');
+  }
+
+  function openWidgetEdit(page: ViewId) {
+    navigateTo('chat', false);
+    setWidgetEditPage(page);
+    focusSection('chat-proposal-title');
+  }
+
+  function approveChartCorrection(change: ChartCorrection) {
+    setChartCorrections((current) => [...current, change]);
+  }
+
   let widgetTitle: string;
   let widgets: WorkspaceWidget[];
 
@@ -2511,13 +2544,13 @@ export default function Home() {
     case 'home':
       widgetTitle = 'Workspace overview';
       widgets = [
-        { ...metric('Patient workspace', patientName, `${activeScenario.patientId} · Outpatient to discharge`, 'Open patient', () => selectPatient(activeScenario.id)), wide: true },
+        metric('Patient workspace', patientName, `${activeScenario.patientId} · Outpatient to discharge`, 'Open patient', () => selectPatient(activeScenario.id)),
         jump('Medication review', pendingReviews, 'diff', 'Open snapshot review', 'Changes awaiting a decision'),
         jump('Note comparison', compareStatus, 'extract', 'Open Compare notes', 'Compare the earlier and discharge notes'),
+        metric('Ask about a patient', patientName, undefined, 'Open AI chat', openChartChat),
         jump('Suggestion queue', openTriageCount, 'triage', 'Open suggestions', 'Decisions pending'),
         jump('Comparison checks', evaluationDone ?? 'Ready', 'eval', 'Open evaluations', 'Cases in the latest run'),
         jump('Activity log', audit.length, 'audit', 'Open session activity', audit[0]?.action),
-        jump('Model connection', serviceStatus, 'models', 'Open connections'),
         metric('Encounter record', 'October 15', 'Discharge conversation and recording consent', 'Read encounter', () => {
           navigateTo('patient', false);
           focusSection('transcript-title');
@@ -2529,10 +2562,12 @@ export default function Home() {
     case 'patient':
       widgetTitle = 'Patient summary';
       widgets = [
-        { ...metric('Latest medication list', activeScenario.later.medications.length,
-          <ul className="widget-medications">{activeScenario.later.medications.map((med) => (
-            <li key={med.id}><span>{med.name}</span><span>{med.dose ?? 'Dose unavailable'}</span></li>
-          ))}</ul>, 'View both lists', () => openSnapshot('snapshots')), wide: true },
+        metric('Latest medication list', activeScenario.later.medications.length,
+          <ul className="widget-medications">{activeScenario.later.medications.map((med) => {
+            const reviewed = chartCorrectionsFor(chartCorrections, activeScenario.id, activeScenario.later.id, med.id);
+            const documented = applyChartCorrections(med, reviewed);
+            return <li key={med.id}><span>{documented.name}</span><span>{documented.dose ?? 'Dose undocumented'}{reviewed.some((item) => item.field === 'dose') ? ' · Reviewed' : ''}</span></li>;
+          })}</ul>, 'View both lists', () => openSnapshot('snapshots')),
         metric('Review due', pendingReviews, 'Medication changes awaiting a decision', 'Review changes', () => openSnapshot('diff')),
         metric('Medication timeline', encounterTimeline.dated.length + encounterTimeline.undated.length, 'Encounters and medication changes', 'Open timeline', () => openSnapshot('timeline')),
         metric('Earlier snapshot', activeScenario.earlier.recordedAt ?? 'Undated', `${activeScenario.earlier.medications.length} recorded medications`),
@@ -2541,6 +2576,7 @@ export default function Home() {
         metric('Outside records', outsideCount, 'Imported chart records', 'View outside records', () => openSnapshot('documents', 'all', 'outside-reports')),
         metric('Medication plan in notes', 'Earlier / discharge', 'Read the two notes mentioned in the conversation', 'Load encounter notes', openEncounterNotes),
         metric('Recorded decisions', `${reviewedCount} / ${reviewableCount}`, 'Verified, flagged or deferred', 'View worklist', () => openSnapshot('worklist')),
+        metric('Ask about a patient', patientName, undefined, 'Open AI chat', openChartChat),
         metric('Discharge conversation', '01:02', 'Recording consent included', 'Read transcript', () => focusSection('transcript-title')),
       ];
       break;
@@ -2622,6 +2658,17 @@ export default function Home() {
         metric('Structured export', 'JSON', undefined, 'Download JSON', () => exportAudit('json')),
       ];
       break;
+    case 'chat':
+      widgetTitle = 'Chat widgets';
+      widgets = [
+        metric('Selected chart', cleanPatientName(chatChart.patientLabel), chatChart.patientId, 'Choose patient', () => focusSection('chat-patient-select')),
+        metric('Records in scope', chatAspect === 'encounters' ? 'Encounter dates and sources' : chatAspect === 'timeline' ? 'Both snapshots' : chatAspect === 'earlier' ? 'Earlier snapshot' : 'Later snapshot',
+          chatAspect === 'earlier' || chatAspect === 'later' ? chatChart[chatAspect].source : chatChart.title,
+          'Change scope', () => focusSection('chat-scope-select')),
+        metric('Reviewed corrections', chartCorrections.filter((item) => item.scenarioId === chatChart.id).length,
+          'Corrections in this demo session', 'Open chat', () => focusSection('patient-chat-title')),
+      ];
+      break;
     case 'models':
       widgetTitle = 'Connection tools';
       widgets = [
@@ -2639,7 +2686,9 @@ export default function Home() {
       break;
   }
 
-  const pageWidgets = <WorkspaceWidgets title={widgetTitle} widgets={widgets} overview={isOverview} />;
+  const pageNote = widgetNotes[view];
+  const pageWidgets = <WorkspaceWidgets key={view} pageId={view} title={widgetTitle} hasPageNote={Boolean(pageNote)}
+    widgets={[...widgets, metric('Page note', undefined, pageNote ?? 'Add a note for this page.', 'Edit page note', () => openWidgetEdit(view))]} />;
 
   /* ---- FHIR Preview Bundle ---- */
   const fhirBundleJson = useMemo(() => {
@@ -2719,18 +2768,16 @@ export default function Home() {
             Menu
           </button>
 
-          {view !== 'extract' && (
             <button
               type="button"
               className="ghost health-btn"
               id="health"
-              title="Connection health"
+              title="Developer connection settings"
               onClick={() => navigateTo('models')}
             >
               <span className="dot degraded" aria-hidden="true" />
               Local standby
             </button>
-          )}
 
           <div className="menu-wrap" ref={paletteWrapRef}>
             <button
@@ -2866,25 +2913,6 @@ export default function Home() {
             </nav>
           </div>
 
-          {showSystemModels && (
-            <div className="grp">
-              <div className="grp-h" id="system-nav-label">
-                System
-              </div>
-              <div className="grp-list" role="group" aria-labelledby="system-nav-label">
-                <button
-                  type="button"
-                  className="item"
-                  aria-current={view === 'models' ? 'page' : undefined}
-                  onClick={() => navigateTo('models')}
-                >
-                  <span className="item-label">Models &amp; data</span>
-                  <small>{connections.length}</small>
-                </button>
-              </div>
-            </div>
-          )}
-
           <div className="rail-foot">
             <div>Example records only</div>
             <Link href="/privacy" prefetch={false} className="privacy-link">Privacy and cookies</Link>
@@ -2892,12 +2920,13 @@ export default function Home() {
         </aside>
 
         {/* Main Canvas */}
-        <main className={isOverview ? "canvas workspace-canvas" : "canvas workspace-canvas has-workspace-tools"} id="main-content" tabIndex={-1} ref={canvasRef}>
+        <main className={outlineSections.length ? "canvas workspace-canvas has-workspace-tools" : "canvas workspace-canvas"} id="main-content" tabIndex={-1} ref={canvasRef}>
           <div className="sr-only" aria-live="polite" aria-atomic="true">
             {announcement}
           </div>
 
           <div className={isOverview ? "col overview-col" : "col"}>
+            {pageWidgets}
             {isPatientWorkflow && <section
               className="patient-context-bar"
               aria-label="Active patient and encounter context"
@@ -2993,7 +3022,6 @@ export default function Home() {
                     <button type="button" className="btn" onClick={() => navigateTo('extract')}>Start comparison</button>
                   )}
                 </header>
-                {pageWidgets}
                 {view === 'patient' && (
                   <>
                     <EncounterTranscript
@@ -3003,11 +3031,22 @@ export default function Home() {
                     />
                     <EncounterDocumentationNotice />
                     <EncounterNoteDraft />
+                    <button className="btn" type="button" onClick={openChartChat}>Ask AI about {patientName}</button>
                     <AssistantPanel
                       patientLabel={cleanPatientName(activeScenario.patientLabel)}
                       patientId={activeScenario.patientId}
                       encounterTitle={activeScenario.title}
                     />
+                    {chartCorrections.some((item) => item.scenarioId === activeScenario.id) && (
+                      <section className="encounter-transcript" aria-label="Reviewed chart corrections">
+                        <h2>Reviewed chart corrections</h2>
+                        <ul>{chartCorrections.filter((item) => item.scenarioId === activeScenario.id).map((item, index) => {
+                          const source = item.snapshotId === activeScenario.earlier.id ? activeScenario.earlier : activeScenario.later;
+                          const medication = source.medications.find((entry) => entry.id === item.medicationId);
+                          return <li key={index}>{medication?.name} {item.field} · {item.before || 'Undocumented'} → {item.value} · {source.source} · {item.source}</li>;
+                        })}</ul>
+                      </section>
+                    )}
                   </>
                 )}
               </section>
@@ -3041,10 +3080,13 @@ export default function Home() {
               <button ref={backlogTriggerRef} type="button" className="btn quiet"
                 onClick={() => setBacklogOpen(true)}>Widget library</button>
             </details>
-            {!isOverview && (
-              <button className="btn quiet page-tools-jump" type="button" onClick={() => focusSection('page-widgets')}>
-                {widgetTitle}
-              </button>
+            {view === 'chat' && (
+              <PatientChat key={widgetEditPage ?? 'chat'} headingRef={headingRef} charts={CHAT_RECORDS}
+                chart={chatChart} onChartChange={setChatChartId} aspect={chatAspect} onAspectChange={setChatAspect}
+                threads={chatThreads} setThreads={setChatThreads}
+                corrections={chartCorrections} widgetPages={WIDGET_EDIT_PAGES} widgetNotes={widgetNotes}
+                openWidgetPage={widgetEditPage} onChartApproval={approveChartCorrection}
+                onWidgetApproval={({ pageId, value }) => setWidgetNotes((current) => ({ ...current, [pageId]: value }))} />
             )}
 
             {/* ==================== COMPARE NOTES (DEFAULT) ==================== */}
@@ -5267,11 +5309,11 @@ export default function Home() {
               </section>
             )}
 
-            {/* ==================== MODELS & DATA ==================== */}
+            {/* ==================== DEVELOPER SETTINGS ==================== */}
             {view === 'models' && (
-              <section aria-label="Models and data">
+              <section aria-label="Developer settings">
                 <h1 className="h1" ref={headingRef} tabIndex={-1}>
-                  Models and data
+                  Developer settings
                 </h1>
                 <p className="lede">
                   Check service availability, data sources and connection settings.
@@ -5778,11 +5820,8 @@ export interface DataAdapter {
             )}
           </div>
 
-        {!isOverview && (
+        {outlineSections.length > 0 && (
           <aside className="rail-r workspace-tools" id="rail-r" aria-label="Page outline and context">
-            {pageWidgets}
-            {outlineSections.length > 0 && (
-              <>
                 <div className="rr-h">On this page</div>
                 <div className="toc">
                   {outlineSections.map(([id, label]) => (
@@ -5799,9 +5838,6 @@ export interface DataAdapter {
                     </button>
                   ))}
                 </div>
-              </>
-            )}
-
           </aside>
         )}
         </main>

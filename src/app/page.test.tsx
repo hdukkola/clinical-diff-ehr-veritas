@@ -149,7 +149,10 @@ describe('Clinical Diff Veritas Editorial UI', () => {
     const recordWidgets = (name: string) => {
       const grid = screen.getByRole('region', { name });
       const titles = within(grid).getAllByRole('heading', { level: 3 });
-      expect(titles).toHaveLength(10);
+      expect(titles).toHaveLength(3);
+      expect(within(grid).getByRole('button', { name: 'Add widgets' })).toBeVisible();
+      expect(grid.compareDocumentPosition(screen.getByRole('heading', { level: 1 })) &
+        Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
       signatures.add(titles.map((title) => title.textContent).join('|'));
     };
     recordWidgets('Workspace overview');
@@ -173,7 +176,7 @@ describe('Clinical Diff Veritas Editorial UI', () => {
       ['Review suggestions', 'Suggestion tools'],
       ['Evaluations', 'Evaluation results'],
       ['Session activity', 'Activity tools'],
-      ['Models & data', 'Connection tools'],
+      ['AI chat', 'Chat widgets'],
     ]) {
       await user.click(within(getLeftNav()).getByRole('button', { name: new RegExp('^' + page) }));
       recordWidgets(widgets);
@@ -554,8 +557,8 @@ describe('Clinical Diff Veritas Editorial UI', () => {
       await user.click(screen.getByRole('button', { name: 'Everyone' }));
 
       // Models & data: HF dataset provenance/licenses, Test all, New connection, Contracts
-      await user.click(within(getLeftNav()).getByRole('button', { name: /Models & data/i }));
-      const modelsH1 = screen.getByRole('heading', { level: 1, name: 'Models and data' });
+      await user.click(screen.getByTitle('Developer connection settings'));
+      const modelsH1 = screen.getByRole('heading', { level: 1, name: 'Developer settings' });
       await waitFor(() => expect(modelsH1).toHaveFocus());
 
       expect(screen.getByText(`${hfDatasetSources.length} open-licensed sources`)).toBeInTheDocument();
@@ -642,20 +645,20 @@ describe('Clinical Diff Veritas Editorial UI', () => {
     expect(navButtons[0]).toHaveFocus();
 
     await user.keyboard('{ArrowUp}');
-    expect(navButtons[navButtons.length - 1]).toHaveFocus(); // Wraps to Models & data
+    expect(navButtons[navButtons.length - 1]).toHaveFocus(); // Wraps to AI chat
 
     await user.keyboard('{ArrowLeft}');
     expect(navButtons[navButtons.length - 2]).toHaveFocus(); // Session activity
 
     await user.keyboard('{End}');
-    expect(navButtons[navButtons.length - 1]).toHaveFocus(); // Models & data
+    expect(navButtons[navButtons.length - 1]).toHaveFocus(); // AI chat
 
     await user.keyboard('{ArrowDown}');
     expect(navButtons[0]).toHaveFocus(); // Wraps back to first patient
 
-    // Activate Models & data via End + Enter
+    // Activate AI chat via End + Enter
     await user.keyboard('{End}{Enter}');
-    expect(screen.getByRole('heading', { level: 1, name: 'Models and data' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1, name: 'AI chat' })).toBeInTheDocument();
 
     // Filter navigation input narrows patient list cleanly
     const railSearch = screen.getByRole('searchbox', { name: 'Filter navigation' });
@@ -774,7 +777,7 @@ describe('Clinical Diff Veritas Editorial UI', () => {
         'Live AI · mlx-community/Qwen3.5-4B-4bit · adapter /adapters/med-lora',
       );
 
-      await user.click(within(getLeftNav()).getByRole('button', { name: /Models & data/i }));
+      await user.click(screen.getByTitle('Developer connection settings'));
       const modelsCard = screen.getByLabelText('Note comparison service and model socket');
       expect(within(modelsCard).getByTestId('models-socket-readiness')).toHaveTextContent('live');
       expect(modelsCard).toHaveTextContent('mlx_service');
@@ -838,7 +841,7 @@ describe('Clinical Diff Veritas Editorial UI', () => {
       }) as unknown as typeof fetch;
 
       render(<Home />);
-      await user.click(within(getLeftNav()).getByRole('button', { name: /Models & data/i }));
+      await user.click(screen.getByTitle('Developer connection settings'));
       const card = screen.getByLabelText('Note comparison service and model socket');
       expect(within(card).getByTestId('models-socket-readiness')).toHaveTextContent('standby');
 
@@ -927,36 +930,19 @@ describe('Clinical Diff Veritas Editorial UI', () => {
         return this.data[type] ?? '';
       },
     };
-    const targetRect = { left: 0, top: 0, width: 100, height: 100, right: 100, bottom: 100, x: 0, y: 0, toJSON() {} } as DOMRect;
-    const sourceRect = { ...targetRect, left: 100, right: 200, x: 100 } as DOMRect;
-    vi.spyOn(diffCard, 'getBoundingClientRect').mockReturnValue(targetRect);
-    vi.spyOn(evalCard, 'getBoundingClientRect').mockReturnValue(sourceRect);
+    const originalOrder = getWidgetOrder();
     fireEvent.dragStart(evalCard, { dataTransfer });
-    const dragOverAt = (clientX: number) => {
-      const event = new MouseEvent('dragover', { bubbles: true, cancelable: true, clientX });
-      Object.defineProperty(event, 'dataTransfer', { value: dataTransfer });
-      fireEvent(diffCard, event);
-    };
-    dragOverAt(90);
-    expect(evalCard.style.order).toBe('5');
-    dragOverAt(44);
-    expect(evalCard.style.order).toBe('0');
-    dragOverAt(50);
-    expect(evalCard.style.order).toBe('0'); // A small reversal must not jitter back.
-    dragOverAt(56);
-    expect(evalCard.style.order).toBe('0'); // Layout motion alone must not reverse the move.
-    dragOverAt(96);
-    expect(evalCard.style.order).toBe('1');
-    dragOverAt(24);
-    expect(evalCard.style.order).toBe('0');
+    fireEvent.dragOver(diffCard, { dataTransfer });
+    expect(diffCard).toHaveAttribute('data-drop-target', 'true');
+    expect(getWidgetOrder()).toEqual(originalOrder);
     fireEvent.drop(diffCard, { dataTransfer });
     fireEvent.dragEnd(evalCard);
     expect(getWidgetOrder()[0]).toBe('eval-metrics');
 
-    // Dropping without crossing the live-reorder threshold does not swap cards.
+    // Canceling a drag leaves the layout unchanged.
     await user.click(within(cockpit).getByRole('button', { name: 'Reset layout' }));
     fireEvent.dragStart(evalCard, { dataTransfer });
-    fireEvent.drop(diffCard, { dataTransfer });
+    fireEvent.dragOver(diffCard, { dataTransfer });
     fireEvent.dragEnd(evalCard);
     expect(getWidgetOrder()[0]).toBe('diff-breakdown');
 
@@ -1016,7 +1002,7 @@ describe('Clinical Diff Veritas Editorial UI', () => {
     await openCockpit(user);
     await user.click(within(cockpit).getByRole('button', { name: 'Note Extraction & Model Socket' }));
     await waitFor(() =>
-      expect(screen.getByRole('heading', { level: 1, name: 'Models and data' })).toHaveFocus(),
+      expect(screen.getByRole('heading', { level: 1, name: 'Developer settings' })).toHaveFocus(),
     );
   });
 
@@ -1356,6 +1342,49 @@ describe('Clinical Diff Veritas Editorial UI', () => {
     await user.click(inspectBtns[0]);
     const evidenceRegion = screen.getByLabelText('Evidence and provenance for Lisinopril');
     await waitFor(() => expect(evidenceRegion).toHaveFocus());
+  });
+
+  it('keeps chat proposals in their own patient and waits for fresh manual review before applying', async () => {
+    const user = userEvent.setup();
+    render(<Home />);
+    await user.click(within(getWorkspaceNav()).getByRole('button', { name: 'AI chat' }));
+    const chat = within(screen.getByRole('region', { name: 'AI chat' }));
+    const patient = chat.getByRole('combobox', { name: 'Patient' });
+    const ask = async (text: string) => {
+      await user.type(chat.getByRole('textbox', { name: /^Ask about/ }), text);
+      await user.click(chat.getByRole('button', { name: 'Send' }));
+    };
+    const preview = async () => {
+      expect(chat.getByRole('textbox', { name: 'Documented value' })).toHaveValue('15 mg');
+      await user.type(chat.getByRole('textbox', { name: 'Source reference' }), 'Signed demo reconciliation');
+      await user.click(chat.getByRole('button', { name: 'Review proposal' }));
+      expect(chat.getByRole('button', { name: 'Approve and apply' })).toBeDisabled();
+      expect(chat.getByRole('region', { name: 'Chart correction' })).toHaveTextContent('20 mg');
+    };
+
+    await ask('Correct the chart: Lisinopril dose to 15 mg');
+    await preview();
+    await user.click(chat.getByRole('checkbox', { name: /I verified/ }));
+    await user.selectOptions(patient, 'scenario-polypharmacy-discharge-followup');
+    expect(chat.queryByRole('button', { name: 'Approve and apply' })).not.toBeInTheDocument();
+    await ask('What dose of Furosemide is documented?');
+    const jordan = chat.getByRole('log', { name: 'Conversation for Jordan Patel' });
+    expect(jordan).toHaveTextContent('Furosemide');
+    expect(jordan).not.toHaveTextContent('Lisinopril');
+
+    await user.selectOptions(patient, 'scenario-morgan-lee-baseline');
+    await ask('Correct the chart: Lisinopril dose to 15 mg');
+    await preview();
+    await user.click(chat.getByRole('checkbox', { name: /I verified/ }));
+    await user.click(chat.getByRole('button', { name: 'Edit proposal' }));
+    await user.click(chat.getByRole('button', { name: 'Review proposal' }));
+    expect(chat.getByRole('button', { name: 'Approve and apply' })).toBeDisabled();
+    await user.click(chat.getByRole('checkbox', { name: /I verified/ }));
+    await user.click(chat.getByRole('button', { name: 'Approve and apply' }));
+    await ask('What dose of Lisinopril is documented?');
+    const morgan = chat.getByRole('log', { name: 'Conversation for Morgan Lee' });
+    expect(within(morgan).getByRole('list', { name: 'Chart sources' })).toHaveTextContent('Reviewed dose correction from 20 mg to 15 mg');
+    expect(morgan).not.toHaveTextContent('Furosemide');
   });
 
   it('keeps the same patient and date window across chart workflows', async () => {
