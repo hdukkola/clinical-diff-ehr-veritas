@@ -216,3 +216,24 @@ The draft now runs the editorial interface and comparison service from one check
   - All records and scenarios are 100% synthetic/fictional; differences are observations only, not confirmed errors or treatment recommendations.
   - UI/E2E tests (`src/app/page.test.tsx`, `scripts/sim/ui_workflow.sim.test.tsx`) and `scripts/sim/editorial_js.sim.test.ts` executed in JSDOM rather than live Chromium/Playwright.
   - `feat/cd-01-04-integrated` is local only — pending remote push and PR review/merge into `main`.
+
+### LIVE-MODEL-001 — Connecting Himnish's Trained MLX Model to the Next.js UI
+
+**From:** Antigravity (Utkarsh's session) | **To:** Codex / Himnish's Mac session | **Status:** action requested | **Timestamp:** 2026-11-14T20:32:01-06:00
+
+To run Himnish's trained Apple MLX model/adapter inside the Next.js Veritas Editorial UI (`src/app/`, running on Windows without Apple MLX) while respecting `HANDOFF-001` (*keep weights, credentials, and raw data local — do not commit weights or private URLs to GitHub*):
+
+1. **Option 1 (Recommended — Live Mac inference via private tunnel):**
+   - **Step 1 (Verify adapter & prompt on Mac):** Confirm which model + trained adapter is active for `Compare notes` (`Qwen3.5-4B-4bit` or the approved QLoRA adapter), and push any updated `fresh-backend/service.py` / `SYSTEM` prompt / adapter-path config flag (e.g. `MLX_ADAPTER_PATH` env var) to GitHub so the contract is in sync.
+   - **Step 2 (Keep `/health` & `/compare` contract intact):** Ensure `fresh-backend/service.py` serves:
+     - `GET /health` → `{ "status": "ok", "mode": "local_mlx", "simulated": false, "model": "..." }`
+     - `POST /compare` taking `{ "earlier_note": { "source_id": "...", "text": "..." }, "later_note": { "source_id": "...", "text": "..." } }` and returning `{ "mode": "local_mlx", "simulated": false, "mentions": ..., "evidence": ..., "differences": ..., "unsupported_outputs": ... }`.
+   - **Step 3 (Start & tunnel privately):** Start `python3 fresh-backend/service.py` on Himnish's Mac and expose its loopback port via a private tunnel (`cloudflared tunnel --url http://127.0.0.1:<port>`, `ngrok`, or Tailscale). Share the tunnel URL privately with Utkarsh (never commit it to GitHub).
+   - **Step 4 (Next.js proxy on Windows / Vercel):** Utkarsh's session will add `src/app/api/compare/route.ts` reading `CLINICAL_DIFF_BACKEND_URL` from `.env.local` to proxy `GET /health` and `POST /compare`, switching `Compare notes` to `Live AI` when reachable and falling back cleanly to `Simulated replay · deterministic local extractor` when offline.
+
+2. **Option 2 (Alternative — Share converted adapter outside GitHub for Windows/HF):**
+   - Because Apple MLX LoRA adapters (`adapters.safetensors` + `adapter_config.json`) do not run directly on Windows, fuse/convert the adapter on the Mac (`mlx_lm.fuse` / GGUF or HF PEFT conversion) and upload to a **private Hugging Face model repo** or Drive (not GitHub).
+   - Push only the exact inference `SYSTEM` prompt and JSON schema changes to GitHub so `src/app/api/compare/route.ts` can call a local Windows runtime (Ollama / LM Studio) or HF endpoint with the same contract.
+
+3. **Option 3 (Static/frozen evaluation outputs for UI demo):**
+   - Run the trained Mac model against the 8 `hfNoteComparisonPairs` in `src/lib/hf-fixtures.ts` and commit the resulting JSON predictions (like `fresh-eval/development-results.json`, text/JSON only — no weights, no PHI) so the UI can also display verified recorded model outputs offline.
