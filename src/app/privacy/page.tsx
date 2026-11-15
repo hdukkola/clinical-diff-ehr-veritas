@@ -17,12 +17,13 @@ export default function PrivacyPage() {
       <section aria-labelledby="privacy-browser">
         <h2 id="privacy-browser">What stays in your browser</h2>
         <p>
-          Case references, note drafts and widget layouts are stored in this browser. Your DiffMD tabs can
-          access that storage. Clear this site&apos;s browser storage to remove saved data and preferences.
+          Case references, note drafts, medication review decisions and widget layouts are stored in this
+          browser. Your DiffMD tabs can access that storage. Clear this site&apos;s browser storage to remove
+          saved data and preferences.
         </p>
         <p>
-          Comparison results, review decisions, activity and chat history are kept in the current tab.
-          Reload the page and compare your saved notes again to rebuild the results.
+          Comparison results, activity and chat history are kept in the current tab. Reload the page and
+          compare your saved notes again to rebuild the results and recover decisions for that exact note pair.
         </p>
       </section>
 
