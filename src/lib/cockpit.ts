@@ -1,8 +1,7 @@
 /**
- * Phase 1 Repository Foundation & Core Contracts for the Clinical Cockpit.
+ * Core Contracts & Safety Gates for the Clinical Cockpit.
  *
- * Aligns with `docs/TECHNICAL_ARCHITECTURE.md`, `docs/MVP_SPECIFICATION.md`,
- * and `docs/WIDGET_CATALOG.md`. All clinical records are 100% synthetic.
+ * Aligns with `docs/TECHNICAL_ARCHITECTURE.md` and `docs/WIDGET_CATALOG.md`.
  * AI proposes; humans commit. No auto-commit path is permitted.
  */
 
@@ -126,10 +125,13 @@ export interface WidgetDimensions {
   height: number;
 }
 
+export type WidgetPriorityTier = 'CORE' | 'STANDARD' | 'EXTENDED';
+
 export interface WidgetDefinition {
   id: string;
   displayName: string;
   category: WidgetCategory;
+  priorityTier?: WidgetPriorityTier;
   supportedSizes: WidgetSize[];
   defaultSize: WidgetSize;
   minDimensions: WidgetDimensions;
@@ -300,7 +302,7 @@ export interface FhirMedicationStatement {
     doseAndRate?: string;
     timing?: string;
   }>;
-  simulatedPreviewOnly: true;
+  previewOnly: true;
 }
 
 export interface ReviewDisposition {
@@ -380,7 +382,7 @@ export interface ClinicalContext {
 export interface ServiceHealth {
   ok: boolean;
   mode: 'deterministic_replay' | 'local_mlx' | 'unavailable' | string;
-  simulated: boolean;
+  deterministicFallback: boolean;
   liveAi: boolean;
   detail?: string;
 }
@@ -404,10 +406,10 @@ export interface AIService {
 }
 
 // ---------------------------------------------------------------------------
-// Curated 10-widget MVP registry
+// Curated 10-widget core registry
 // ---------------------------------------------------------------------------
 
-export const MVP_WIDGET_IDS = [
+export const CORE_WIDGET_IDS = [
   'patient-overview',
   'problem-list',
   'medication-workspace',
@@ -420,15 +422,16 @@ export const MVP_WIDGET_IDS = [
   'encounter-completion',
 ] as const;
 
-export type MvpWidgetId = (typeof MVP_WIDGET_IDS)[number];
+export type CoreWidgetId = (typeof CORE_WIDGET_IDS)[number];
 
 export const GRID_COLUMN_COUNT = 12;
 
-export const MVP_WIDGET_DEFINITIONS: readonly WidgetDefinition[] = [
+export const CORE_WIDGET_DEFINITIONS: readonly WidgetDefinition[] = [
   {
     id: 'patient-overview',
     displayName: 'Patient Overview',
     category: 'patient-context',
+    priorityTier: 'CORE',
     supportedSizes: ['medium', 'large', 'full'],
     defaultSize: 'medium',
     minDimensions: { width: 4, height: 2 },
@@ -441,7 +444,7 @@ export const MVP_WIDGET_DEFINITIONS: readonly WidgetDefinition[] = [
       showAlertsBanner: { type: 'boolean', default: true },
     },
     supportedActions: ['view', 'refresh', 'navigate'],
-    safetyRequirements: ['synthetic-only-banner', 'always-visible-allergy-alert'],
+    safetyRequirements: ['clinical-safety-banner', 'always-visible-allergy-alert'],
     version: '1.0.0',
     featureFlags: [],
   },
@@ -449,6 +452,7 @@ export const MVP_WIDGET_DEFINITIONS: readonly WidgetDefinition[] = [
     id: 'problem-list',
     displayName: 'Problem List',
     category: 'patient-context',
+    priorityTier: 'STANDARD',
     supportedSizes: ['medium', 'large'],
     defaultSize: 'medium',
     minDimensions: { width: 4, height: 2 },
@@ -663,7 +667,7 @@ function hasDataDependency(dependency: string, context: ClinicalContext): boolea
 }
 
 export function createWidgetRegistry(
-  initialDefinitions: readonly WidgetDefinition[] = MVP_WIDGET_DEFINITIONS,
+  initialDefinitions: readonly WidgetDefinition[] = CORE_WIDGET_DEFINITIONS,
 ): WidgetRegistry {
   const definitions = new Map<string, WidgetDefinition>();
   for (const def of initialDefinitions) {
@@ -715,7 +719,7 @@ export function createWidgetRegistry(
   };
 }
 
-let defaultWidgetRegistry: WidgetRegistry = createWidgetRegistry(MVP_WIDGET_DEFINITIONS);
+let defaultWidgetRegistry: WidgetRegistry = createWidgetRegistry(CORE_WIDGET_DEFINITIONS);
 
 export function registerWidget(definition: WidgetDefinition): void {
   defaultWidgetRegistry.registerWidget(definition);
@@ -730,7 +734,7 @@ export function getAllWidgets(): WidgetDefinition[] {
 }
 
 export function resetWidgetRegistry(): void {
-  defaultWidgetRegistry = createWidgetRegistry(MVP_WIDGET_DEFINITIONS);
+  defaultWidgetRegistry = createWidgetRegistry(CORE_WIDGET_DEFINITIONS);
 }
 
 export function canRender(widgetId: string, context: ClinicalContext): boolean {
@@ -748,7 +752,7 @@ export const LAYOUT_PRESET_IDS = [
 
 function makeInstance(
   presetId: LayoutPresetId,
-  definitionId: MvpWidgetId,
+  definitionId: CoreWidgetId,
   position: WidgetPosition,
 ): WidgetInstance {
   return {
@@ -763,7 +767,7 @@ function makeInstance(
   };
 }
 
-export const MVP_LAYOUT_PRESETS: Record<LayoutPresetId, LayoutPreset> = {
+export const DEFAULT_LAYOUT_PRESETS: Record<LayoutPresetId, LayoutPreset> = {
   'default-ambulatory': {
     id: 'default-ambulatory',
     name: 'Default Ambulatory',
@@ -806,15 +810,15 @@ export const MVP_LAYOUT_PRESETS: Record<LayoutPresetId, LayoutPreset> = {
 
 export function getLayoutPreset(id: string): LayoutPreset | undefined {
   if (id === 'default-ambulatory' || id === 'medication-reconciliation') {
-    return MVP_LAYOUT_PRESETS[id];
+    return DEFAULT_LAYOUT_PRESETS[id];
   }
   return undefined;
 }
 
 export function getAllLayoutPresets(): LayoutPreset[] {
   return [
-    MVP_LAYOUT_PRESETS['default-ambulatory'],
-    MVP_LAYOUT_PRESETS['medication-reconciliation'],
+    DEFAULT_LAYOUT_PRESETS['default-ambulatory'],
+    DEFAULT_LAYOUT_PRESETS['medication-reconciliation'],
   ];
 }
 

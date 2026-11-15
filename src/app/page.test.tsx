@@ -46,7 +46,7 @@ describe('Clinical Diff Veritas Editorial UI', () => {
       screen.getByRole('heading', { level: 1, name: 'Discharge medication review' }),
     ).toBeInTheDocument();
     expect(document.getElementById('extraction-status')).toHaveTextContent(
-      'Simulated replay · deterministic local extractor',
+      'Standby · local extractor',
     );
     expect(screen.getByRole('button', { name: 'Palette · Graphite' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Open command menu' })).toBeInTheDocument();
@@ -60,8 +60,8 @@ describe('Clinical Diff Veritas Editorial UI', () => {
 
     // Check service button announces status
     await user.click(screen.getByRole('button', { name: 'Check service' }));
-    expect(getLiveNavAnnouncement()).toHaveTextContent('Local deterministic extractor ready');
-    expect(screen.getByText('Deterministic local extractor ready')).toBeInTheDocument();
+    expect(getLiveNavAnnouncement()).toHaveTextContent('Local rule-based extractor ready');
+    expect(document.getElementById('toast')).toHaveTextContent('Local rule-based extractor ready');
   });
 
   it('supports Compare notes presets (default + HF synthetic pairs), validation, quote highlights, review decisions, and Session activity logging', async () => {
@@ -83,10 +83,10 @@ describe('Clinical Diff Veritas Editorial UI', () => {
       'Each note needs between 1 and 12,000 characters of fictional text.',
     );
 
-    // Load example restores default synthetic notes
+    // Load example restores default notes
     await user.click(screen.getByRole('button', { name: 'Load example' }));
     expect(earlierBox).toHaveValue(
-      'Fictional outpatient medication list for a demo patient. The note explicitly lists Lisinopril 10 mg daily, Metformin 500 mg twice daily, and Aspirin 81 mg daily.',
+      'Sample outpatient medication list. The note explicitly lists Lisinopril 10 mg daily, Metformin 500 mg twice daily, and Aspirin 81 mg daily.',
     );
 
     // Compare default notes -> highlights <mark> quotes and enables Flag/Mark reviewed controls
@@ -165,7 +165,7 @@ describe('Clinical Diff Veritas Editorial UI', () => {
     expect(screen.getByText('Flagged mention for clarification')).toBeInTheDocument();
     expect(screen.getByText('Reviewed mention')).toBeInTheDocument();
     expect(screen.getByText('Cleared mention review')).toBeInTheDocument();
-    expect(screen.getAllByText('Simulated replay').length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText('Local standby').length).toBeGreaterThanOrEqual(2);
   });
 
   it('exports flagged discharge follow-ups as clinical-diff-follow-ups.txt and reflects changed or cleared flags', async () => {
@@ -220,7 +220,7 @@ describe('Clinical Diff Veritas Editorial UI', () => {
       expect(exportedBlobs[0].type).toBe('text/plain;charset=utf-8');
       const firstText = await exportedBlobs[0].text();
       expect(firstText).toContain('Discharge medication follow-ups');
-      expect(firstText).toContain('Simulated replay · Fictional notes only');
+      expect(firstText).toContain('Local standby · Review required before chart commit');
       expect(firstText).toContain('Aspirin');
       expect(firstText).toContain('Source excerpts from earlier note:');
       expect(firstText).toContain('Aspirin 81 mg daily');
@@ -274,7 +274,7 @@ describe('Clinical Diff Veritas Editorial UI', () => {
 
     const morganHeading = screen.getByRole('heading', { level: 1, name: 'Morgan Lee' });
     await waitFor(() => expect(morganHeading).toHaveFocus());
-    expect(screen.getByRole('note', { name: 'Prototype disclaimer' })).toBeInTheDocument();
+    expect(screen.getByRole('note', { name: 'Clinical review notice' })).toBeInTheDocument();
     expect(
       screen.getByRole('complementary', { name: 'Page outline and context' }),
     ).toBeInTheDocument();

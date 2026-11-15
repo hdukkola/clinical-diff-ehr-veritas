@@ -16,7 +16,7 @@ const jetbrainsMono = JetBrains_Mono({
 
 export const metadata: Metadata = {
   title: 'Clinical Diff · Veritas',
-  description: 'Synthetic medication record and note comparison workspace',
+  description: 'Clinical Diff EHR medication reconciliation and note comparison workspace',
 };
 
 export default function RootLayout({ children }: LayoutProps<'/'>) {

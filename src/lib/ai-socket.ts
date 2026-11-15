@@ -1,6 +1,6 @@
 /**
  * Always-open AI / model socket & backend adapter layer.
- * Experimental prototype for synthetic records only; not clinical software.
+ * Clinical Diff EHR · AI proposes, clinicians verify.
  */
 
 export type ModelProvider =
@@ -120,7 +120,7 @@ export const SOCKET_ENDPOINTS: SocketEndpoints = {
 };
 
 const SYNTHETIC_DISCLAIMER =
-  'Synthetic prototype only; differences are not confirmed errors or medical advice.';
+  'Clinical Diff EHR · AI proposes, clinicians verify. Review required before chart commit.';
 
 const DEFAULT_LIMITATIONS = [
   'Name mentions only; no dose, status, clinical intent, or authorization is inferred.',
@@ -931,7 +931,7 @@ function combineSignals(timeoutMs: number, externalSignal?: AbortSignal): AbortS
 class StandbyReplayAIService implements AIService {
   readonly id = 'deterministic-replay-standby';
   readonly provider: ModelProvider = 'deterministic_replay';
-  readonly label = 'Deterministic local replay (standby)';
+  readonly label = 'Local rule-based extractor (standby)';
   private readonly config: ResolvedSocketConfig;
 
   constructor(config: ResolvedSocketConfig) {
@@ -958,7 +958,7 @@ class StandbyReplayAIService implements AIService {
       checked_at: new Date().toISOString(),
       detail:
         this.config.configError ||
-        'Model socket open on standby; no external model backend configured. Using deterministic local extractor.',
+        'Model socket open on standby; no external model backend configured. Using local rule-based extractor.',
       ...(this.config.configError ? { error: this.config.configError } : {}),
     };
   }

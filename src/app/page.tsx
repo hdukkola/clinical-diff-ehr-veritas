@@ -129,9 +129,9 @@ const DIFF_GLYPHS: Record<'changed' | 'onlyA' | 'onlyB' | 'same', { glyph: strin
 };
 
 const DEFAULT_EARLIER_NOTE =
-  'Fictional outpatient medication list for a demo patient. The note explicitly lists Lisinopril 10 mg daily, Metformin 500 mg twice daily, and Aspirin 81 mg daily.';
+  'Sample outpatient medication list. The note explicitly lists Lisinopril 10 mg daily, Metformin 500 mg twice daily, and Aspirin 81 mg daily.';
 const DEFAULT_LATER_NOTE =
-  'Fictional discharge medication list for a demo patient. The note explicitly lists Lisinopril 20 mg daily, Metformin 500 mg twice daily, and Atorvastatin 20 mg nightly.';
+  'Sample discharge medication list. The note explicitly lists Lisinopril 20 mg daily, Metformin 500 mg twice daily, and Atorvastatin 20 mg nightly.';
 
 /* ------------------------------------------------------------------
    Deterministic Local Medication-Mention Extractor
@@ -516,7 +516,7 @@ function runDeterministicNoteComparison(
       quotes: laterMentions.map((ev) => buildQuoteSnippet(ev, laterText)),
       unsupported: [],
     },
-    modeLabel: 'Simulated replay · deterministic local extractor',
+    modeLabel: 'Standby · local extractor',
     simulated: true,
   };
 }
@@ -911,7 +911,7 @@ export default function Home() {
   const [laterNoteLabel, setLaterNoteLabel] = useState<string>('Discharge note');
   const [extractError, setExtractError] = useState<string>('');
   const [extractStatusText, setExtractStatusText] = useState<string>(
-    'Simulated replay · deterministic local extractor',
+    'Standby · local extractor',
   );
   const [extractStatusState, setExtractStatusState] = useState<'replay' | 'live' | 'error'>('replay');
   const [socketStatus, setSocketStatus] = useState<SocketStatus>(INITIAL_SOCKET_STATUS);
@@ -1192,7 +1192,7 @@ export default function Home() {
       setExtractStatusText(`Live AI · ${modelName}${adapterSuffix}`);
       setExtractStatusState('live');
     } else {
-      setExtractStatusText('Simulated replay · deterministic local extractor');
+      setExtractStatusText('Standby · local extractor');
       setExtractStatusState('replay');
     }
     return normalized;
@@ -1236,13 +1236,13 @@ export default function Home() {
         setAnnouncement(`Live AI socket ready: ${modelName}`);
         return;
       }
-      showToast('Deterministic local extractor ready');
-      setAnnouncement('Local deterministic extractor ready');
+      showToast('Local rule-based extractor ready');
+      setAnnouncement('Local rule-based extractor ready');
       return;
     }
     applySocketStatus(INITIAL_SOCKET_STATUS);
-    showToast('Deterministic local extractor ready');
-    setAnnouncement('Local deterministic extractor ready');
+    showToast('Local rule-based extractor ready');
+    setAnnouncement('Local rule-based extractor ready');
   }, [applySocketStatus, probeSocketHealth, showToast]);
 
   useEffect(() => {
@@ -1378,7 +1378,7 @@ export default function Home() {
           setExtractStatusText('Live AI unavailable · check service');
           return;
         } catch {
-          setExtractError('Unable to reach live Qwen backend. Click Check service or switch to Simulated replay.');
+          setExtractError('Unable to reach live Qwen backend. Click Check service or switch to Local standby.');
           setExtractStatusState('error');
           setExtractStatusText('Live AI unavailable · check service');
           return;
@@ -1404,7 +1404,7 @@ export default function Home() {
       const count = res.differences.length;
       addAudit(
         'Comparison',
-        'Simulated replay',
+        'Local standby',
         `${count} mention ${count === 1 ? 'difference' : 'differences'}`,
       );
       setAnnouncement(
@@ -1463,7 +1463,7 @@ export default function Home() {
       (entry) => noteReviewDecisions[entry.key] === 'clarify',
     );
     if (flagged.length === 0) return;
-    const mode = extractResult.simulated ? 'Simulated replay' : 'Local model';
+    const mode = extractResult.simulated ? 'Local standby' : 'Local model';
     const sections = flagged.map((entry) =>
       [
         `Can you confirm whether ${entry.name} belongs on the discharge medication list?`,
@@ -1476,7 +1476,7 @@ export default function Home() {
     const text =
       [
         'Discharge medication follow-ups',
-        `${mode} · Fictional notes only`,
+        `${mode} · Review required before chart commit`,
         ...sections,
         'Review both source notes before recording a medication decision.',
       ].join('\n\n') + '\n';
@@ -2033,7 +2033,7 @@ export default function Home() {
               onClick={() => navigateTo('models')}
             >
               <span className="dot degraded" aria-hidden="true" />
-              Simulated replay
+              Local standby
             </button>
           )}
 
@@ -2552,9 +2552,8 @@ export default function Home() {
                   </div>
                 )}
 
-                <div className="editorial-notice warning" role="note" aria-label="Prototype disclaimer">
-                  Prototype only · Differences are observations, not confirmed errors or treatment
-                  recommendations.
+                <div className="editorial-notice warning" role="note" aria-label="Clinical review notice">
+                  Clinical Diff EHR · AI proposes, clinicians verify. Review required before chart commit.
                 </div>
 
                 <div className="tabs" role="tablist" aria-label="Snapshot review tabs">
@@ -3916,7 +3915,7 @@ export default function Home() {
                           />
                           <span className="help">
                             Do not paste secrets here. Credentials belong in server-side environment
-                            variables; this prototype stores nothing.
+                            variables; this workspace stores nothing.
                           </span>
                         </div>
 

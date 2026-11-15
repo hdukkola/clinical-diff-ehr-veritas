@@ -9,7 +9,7 @@ import {
   getLayoutPreset,
   getWidget,
   LAYOUT_PRESET_IDS,
-  MVP_WIDGET_IDS,
+  CORE_WIDGET_IDS,
   registerWidget,
   resetWidgetRegistry,
   validateLayoutPreset,
@@ -31,8 +31,8 @@ import {
 
 function buildSamplePatient(): PatientContext {
   return {
-    id: 'DEMO-001',
-    name: 'Morgan Lee (Synthetic)',
+    id: 'PAT-1001',
+    name: 'Morgan Lee',
     age: 64,
     sex: 'F',
     activeProblems: [
@@ -41,7 +41,7 @@ function buildSamplePatient(): PatientContext {
         name: 'Hypertension',
         status: 'active',
         onsetDate: '2018-04-12',
-        sourceLabel: 'Synthetic outpatient problem list',
+        sourceLabel: 'Outpatient problem list',
         sourceVersion: 'v1',
         recordedAt: '2026-10-01',
         relatedMedicationIds: ['m1'],
@@ -51,7 +51,7 @@ function buildSamplePatient(): PatientContext {
         name: 'Type 2 diabetes',
         status: 'active',
         onsetDate: '2020-02-01',
-        sourceLabel: 'Synthetic outpatient problem list',
+        sourceLabel: 'Outpatient problem list',
         sourceVersion: 'v1',
         recordedAt: '2026-10-01',
         relatedMedicationIds: ['m2'],
@@ -64,7 +64,7 @@ function buildSamplePatient(): PatientContext {
         reaction: 'Urticaria',
         severity: 'high',
         verificationStatus: 'confirmed',
-        sourceLabel: 'Synthetic allergy record',
+        sourceLabel: 'Outpatient allergy record',
         sourceVersion: 'v1',
         recordedAt: '2025-05-10',
       },
@@ -81,10 +81,10 @@ function buildSamplePatient(): PatientContext {
 function buildSampleEncounter(overrides: Partial<EncounterContext> = {}): EncounterContext {
   return {
     id: 'enc-2026-11-15',
-    patientId: 'DEMO-001',
+    patientId: 'PAT-1001',
     date: '2026-11-15',
     kind: 'outpatient-follow-up',
-    summary: 'Follow-up after hospital discharge (synthetic)',
+    summary: 'Follow-up after hospital discharge',
     sourceRef: 's2',
     medications: [
       { id: 'm1', name: 'Lisinopril', dose: '20 mg', route: 'oral', frequency: 'daily' },
@@ -118,7 +118,7 @@ function buildClinicalContext(overrides: Partial<ClinicalContext> = {}): Clinica
   return {
     patient: buildSamplePatient(),
     encounter: buildSampleEncounter(),
-    clinician: { id: 'clin-1', name: 'Dr. Jordan Avery (Synthetic)', role: 'clinician' },
+    clinician: { id: 'clin-1', name: 'Dr. Jordan Avery', role: 'clinician' },
     dataPermissions: {
       grantedPermissions: [
         'read:patient',
@@ -137,10 +137,10 @@ function buildClinicalContext(overrides: Partial<ClinicalContext> = {}): Clinica
 }
 
 describe('cockpit core data contracts', () => {
-  it('supports all Phase 1 domain contracts and AIService interface shape', async () => {
+  it('supports all core domain contracts and AIService interface shape', async () => {
     const sourceRef: ClinicalSourceReference = {
       sourceId: 's2',
-      sourceLabel: 'Fictional discharge medication list',
+      sourceLabel: 'Hospital discharge medication list',
       sourceType: 'discharge_summary',
       recordedAt: '2026-10-15',
       textSpan: { start: 0, end: 29 },
@@ -238,12 +238,12 @@ describe('cockpit core data contracts', () => {
     };
 
     const aiService: AIService = {
-      id: 'replay-ai',
-      label: 'Deterministic Replay Service',
+      id: 'clinical-ai',
+      label: 'Clinical AI Service',
       health: async () => ({
         ok: true,
         mode: 'deterministic_replay',
-        simulated: true,
+        deterministicFallback: true,
         liveAi: false,
       }),
       summarizeChart: async () => summary,
@@ -256,19 +256,19 @@ describe('cockpit core data contracts', () => {
     expect(summary.status).toBe('pending_clinician_review');
     expect(metadata.safetyChecks).toContain('no-auto-commit');
     expect(audit.after).toBe('accepted');
-    expect((await aiService.health()).simulated).toBe(true);
+    expect((await aiService.health()).deterministicFallback).toBe(true);
     expect((await aiService.proposeActions(buildSampleEncounter()))).toHaveLength(1);
   });
 });
 
-describe('curated 10-widget MVP registry', () => {
-  it('registers all 10 curated MVP widgets with required metadata', () => {
+describe('curated 10-widget core registry', () => {
+  it('registers all 10 curated core widgets with required metadata', () => {
     resetWidgetRegistry();
     const widgets = getAllWidgets();
     expect(widgets).toHaveLength(10);
-    expect(widgets.map((w) => w.id)).toEqual([...MVP_WIDGET_IDS]);
+    expect(widgets.map((w) => w.id)).toEqual([...CORE_WIDGET_IDS]);
 
-    for (const id of MVP_WIDGET_IDS) {
+    for (const id of CORE_WIDGET_IDS) {
       const def = getWidget(id);
       expect(def).toBeDefined();
       expect(def?.supportedSizes).toContain(def?.defaultSize);
@@ -307,7 +307,7 @@ describe('curated 10-widget MVP registry', () => {
 
   it('enforces roles, permissions, and data dependencies in canRender', () => {
     const fullContext = buildClinicalContext();
-    for (const id of MVP_WIDGET_IDS) {
+    for (const id of CORE_WIDGET_IDS) {
       expect(canRender(id, fullContext)).toBe(true);
     }
 
@@ -347,7 +347,7 @@ describe('layout presets', () => {
 
       const definedIds = new Set(preset!.widgetInstances.map((w) => w.definitionId));
       expect(definedIds.size).toBe(10);
-      for (const widgetId of MVP_WIDGET_IDS) {
+      for (const widgetId of CORE_WIDGET_IDS) {
         expect(definedIds.has(widgetId)).toBe(true);
       }
 
