@@ -157,6 +157,19 @@ export default function DesignPreviewPage() {
         <WidgetShell id="h-status" title="Review status" icon="◔" span="standard" provenance="mocked" source="Mock review fixture" freshness="Mock" actionLabel="Open Snapshot review">
           <DonutBody />
         </WidgetShell>
+        <WidgetShell
+          id="h-med-changes"
+          title="Medication changes to review"
+          icon="⇄"
+          span="standard"
+          provenance="mocked"
+          context={`${MOCK_PATIENT.label} · 7 of 12 documented differences unresolved (fictional count — not confirmed medication errors)`}
+          source="Mock snapshot comparison"
+          freshness="Mock — last updated 2026-11-15"
+          actionLabel="Open medication review"
+        >
+          <EvidenceListBody />
+        </WidgetShell>
         <WidgetShell id="h-changes" title="Recent source-backed changes" icon="⇄" span="wide" provenance="proposed" source="Mock snapshot comparison" freshness="Mock" actionLabel="Open change explorer">
           <EvidenceListBody />
         </WidgetShell>
