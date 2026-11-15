@@ -3,7 +3,9 @@ import http.client
 import json
 import os
 import socket
+import sys
 import threading
+import types
 import urllib.request
 import urllib.error
 from http.server import ThreadingHTTPServer
@@ -397,6 +399,152 @@ class HardeningTests(unittest.TestCase):
                 self.assertTrue(resp.getheader('Content-Type', '').startswith('application/json'))
                 self.assertTrue(err['simulated'])
                 self.assertFalse(err['live_ai'])
+        finally:
+            self._stop(server, worker)
+
+
+class EnvConfigAndReadyTests(unittest.TestCase):
+    def _serve(self):
+        server = ThreadingHTTPServer(('127.0.0.1', 0), service.Handler)
+        worker = threading.Thread(target=server.serve_forever, daemon=True)
+        worker.start()
+        return server, worker
+
+    def _stop(self, server, worker):
+        server.shutdown()
+        server.server_close()
+        worker.join()
+
+    def test_env_parameterization_defaults_and_overrides(self):
+        self.assertEqual(service.get_model_id({}), service.DEFAULT_MODEL_ID)
+        self.assertEqual(service.get_model_revision({}), service.DEFAULT_MODEL_REVISION)
+        self.assertIsNone(service.get_adapter_path({}))
+        self.assertEqual(service.get_bind_host({}), '127.0.0.1')
+        self.assertEqual(service.get_bind_port({}), 8765)
+
+        custom_env = {
+            'MLX_MODEL_ID': 'mlx-community/Qwen3.5-35B-A3B-4bit',
+            'MLX_MODEL_REVISION': '',
+            'MLX_ADAPTER_PATH': '/tmp/lora-adapter',
+            'CLINICAL_DIFF_HOST': '0.0.0.0',
+            'CLINICAL_DIFF_PORT': '9876',
+            'CLINICAL_DIFF_ALLOWED_ORIGINS': 'https://preview.example.com/, http://127.0.0.1:4173',
+        }
+        self.assertEqual(service.get_model_id(custom_env), 'mlx-community/Qwen3.5-35B-A3B-4bit')
+        self.assertIsNone(service.get_model_revision(custom_env))
+        self.assertEqual(service.get_adapter_path(custom_env), '/tmp/lora-adapter')
+        self.assertEqual(service.get_bind_host(custom_env), '0.0.0.0')
+        self.assertEqual(service.get_bind_port(custom_env), 9876)
+        origins = service.get_allowed_origins(custom_env)
+        self.assertIn('https://preview.example.com', origins)
+        self.assertIn('http://127.0.0.1:4173', origins)
+        self.assertIn('http://localhost:3000', origins)
+
+        with self.assertRaises(ValueError):
+            service.get_bind_port({'CLINICAL_DIFF_PORT': '70000'})
+
+    def test_local_model_passes_adapter_path_and_optional_revision(self):
+        load_calls = []
+        download_calls = []
+
+        class FakeTokenizer:
+            def apply_chat_template(self, messages, **_kwargs):
+                return messages[-1]['content']
+
+        def fake_snapshot_download(model_id, **kwargs):
+            download_calls.append((model_id, kwargs))
+            return '/fake/snapshot/dir'
+
+        def fake_load(path, **kwargs):
+            load_calls.append((path, kwargs))
+            return object(), FakeTokenizer()
+
+        def fake_generate(_model, _tok, **_kwargs):
+            return '{"medications":[]}'
+
+        fake_mlx_lm = types.ModuleType('mlx_lm')
+        fake_mlx_lm.load = fake_load
+        fake_mlx_lm.generate = fake_generate
+        fake_sample_utils = types.ModuleType('mlx_lm.sample_utils')
+        fake_sample_utils.make_sampler = lambda **_kwargs: None
+        fake_hf_hub = types.ModuleType('huggingface_hub')
+        fake_hf_hub.snapshot_download = fake_snapshot_download
+
+        with patch.dict(
+            sys.modules,
+            {
+                'mlx_lm': fake_mlx_lm,
+                'mlx_lm.sample_utils': fake_sample_utils,
+                'huggingface_hub': fake_hf_hub,
+            },
+        ):
+            with patch.dict(
+                os.environ,
+                {
+                    'MLX_MODEL_ID': 'mlx-community/Custom-Med-Model',
+                    'MLX_MODEL_REVISION': 'rev-42',
+                    'MLX_ADAPTER_PATH': '/adapters/clinical-qlora',
+                },
+                clear=False,
+            ):
+                lm = service.LocalModel()
+                out = lm('Take Aspirin.')
+                self.assertEqual(out, '{"medications":[]}')
+                self.assertEqual(download_calls[-1], ('mlx-community/Custom-Med-Model', {'revision': 'rev-42'}))
+                self.assertEqual(load_calls[-1], ('/fake/snapshot/dir', {'adapter_path': '/adapters/clinical-qlora'}))
+
+            # Empty revision & adapter omits both kwargs.
+            with patch.dict(
+                os.environ,
+                {
+                    'MLX_MODEL_ID': 'mlx-community/Custom-Med-Model',
+                    'MLX_MODEL_REVISION': '',
+                    'MLX_ADAPTER_PATH': '',
+                },
+                clear=False,
+            ):
+                lm_plain = service.LocalModel()
+                lm_plain('Take Aspirin.')
+                self.assertEqual(download_calls[-1], ('mlx-community/Custom-Med-Model', {}))
+                self.assertEqual(load_calls[-1], ('/fake/snapshot/dir', {}))
+
+    def test_health_ready_and_extra_allowed_origins_over_http(self):
+        server, worker = self._serve()
+        port = server.server_port
+        try:
+            clean_env = {k: v for k, v in os.environ.items() if k != 'CLINICAL_DIFF_REPLAY'}
+            clean_env.update({
+                'MLX_MODEL_ID': 'mlx-community/Qwen3.5-35B-A3B-4bit',
+                'MLX_ADAPTER_PATH': '/tmp/qwen-adapter',
+                'CLINICAL_DIFF_ALLOWED_ORIGINS': 'https://app.example.com',
+            })
+            with patch.dict(os.environ, clean_env, clear=True):
+                with urllib.request.urlopen(f'http://127.0.0.1:{port}/health', timeout=3) as r1:
+                    health = json.load(r1)
+                with urllib.request.urlopen(f'http://127.0.0.1:{port}/ready', timeout=3) as r2:
+                    ready = json.load(r2)
+                self.assertEqual(health, ready)
+                self.assertTrue(health['socket_open'])
+                self.assertEqual(health['model'], 'mlx-community/Qwen3.5-35B-A3B-4bit')
+                self.assertEqual(health['adapter_path'], '/tmp/qwen-adapter')
+                self.assertEqual(health['mode'], 'local_mlx')
+                self.assertTrue(health['live_ai'])
+                self.assertFalse(health['simulated'])
+
+                conn = http.client.HTTPConnection('127.0.0.1', port, timeout=3)
+                conn.request('OPTIONS', '/compare', headers={'Origin': 'https://app.example.com'})
+                opt_resp = conn.getresponse()
+                opt_resp.read()
+                conn.close()
+                self.assertEqual(opt_resp.status, 204)
+                self.assertEqual(opt_resp.getheader('Access-Control-Allow-Origin'), 'https://app.example.com')
+
+                conn = http.client.HTTPConnection('127.0.0.1', port, timeout=3)
+                conn.request('OPTIONS', '/compare', headers={'Origin': 'https://evil.example.com'})
+                bad_opt = conn.getresponse()
+                bad_opt.read()
+                conn.close()
+                self.assertEqual(bad_opt.status, 403)
         finally:
             self._stop(server, worker)
 
