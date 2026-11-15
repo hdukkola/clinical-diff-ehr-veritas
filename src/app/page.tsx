@@ -1037,6 +1037,7 @@ export default function Home() {
   /* ---- Refs ---- */
   const headingRef = useRef<HTMLHeadingElement>(null);
   const extractResultHeadingRef = useRef<HTMLHeadingElement>(null);
+  const focusExtractResult = useRef(false);
   const railSearchRef = useRef<HTMLInputElement>(null);
   const cmdInputRef = useRef<HTMLInputElement>(null);
   const canvasRef = useRef<HTMLElement>(null);
@@ -1140,6 +1141,12 @@ export default function Home() {
   useEffect(() => {
     if (canvasRef.current) canvasRef.current.scrollTop = 0;
   }, [view]);
+
+  useEffect(() => {
+    if (!extractResult || !focusExtractResult.current) return;
+    focusExtractResult.current = false;
+    if (view === 'extract') extractResultHeadingRef.current?.focus();
+  }, [extractResult, view]);
 
   useEffect(() => {
     if (focusHeadingNonce === 0) return;
@@ -1807,6 +1814,7 @@ export default function Home() {
             if (hostedExample) {
               hostedResult = res;
             } else {
+              focusExtractResult.current = true;
               setExtractResult(res);
               setNoteReviewDecisions({});
               setExtractStatusText(res.modeLabel);
@@ -1814,7 +1822,6 @@ export default function Home() {
               const count = res.differences.length;
               addAudit('Comparison', `Live AI (${modelName})`, `${count} mention ${count === 1 ? 'difference' : 'differences'}`);
               setAnnouncement(`Comparison complete: ${count} mention ${count === 1 ? 'difference' : 'differences'} found.`);
-              requestAnimationFrame(() => extractResultHeadingRef.current?.focus());
               return;
             }
           } else if (!hostedExample) {
@@ -1925,6 +1932,7 @@ export default function Home() {
         differences: enrichedDifferences,
       };
 
+      focusExtractResult.current = true;
       setExtractResult(res);
       setNoteReviewDecisions({});
       setExtractStatusText(res.modeLabel);
@@ -1938,9 +1946,6 @@ export default function Home() {
       setAnnouncement(
         `Comparison complete: ${count} mention ${count === 1 ? 'difference' : 'differences'} found.`,
       );
-      requestAnimationFrame(() => {
-        extractResultHeadingRef.current?.focus();
-      });
     },
     [
       activePreset,
