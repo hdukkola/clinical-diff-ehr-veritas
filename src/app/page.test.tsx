@@ -3,7 +3,9 @@ import { webcrypto } from 'node:crypto';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import Home from '@/app/page';
+import * as cloudWorkspace from '@/lib/cloud-workspace';
 import { earlier, later, syntheticScenarios } from '@/lib/fixtures';
+import { TRANSCRIPTION_MODEL, TRANSCRIPTION_WEIGHTS } from '@/lib/recording-transcription';
 
 function getLiveNavAnnouncement() {
   return document.querySelector('.sr-only[aria-live="polite"][aria-atomic="true"]');
@@ -103,6 +105,100 @@ describe('Clinical Diff Veritas Editorial UI', () => {
     } finally {
       digest.mockRestore();
       network.mockRestore();
+    }
+  });
+
+  it('requires consent, review, and a separate save to append a transcript to a synced note', async () => {
+    vi.stubEnv('NEXT_PUBLIC_CLINICAL_DIFF_EXAMPLE_WORKSPACE', '0');
+    vi.stubEnv('NEXT_PUBLIC_DIFFMD_RECORDING_TRANSCRIPTION', '1');
+    const uid = 'qa-case-owner';
+    const caseRecord = {
+      id: 'SYNC-' + 'A'.repeat(32),
+      name: 'Recording QA',
+      version: 1,
+      earlier: 'Earlier note text.',
+      later: 'Existing later note.',
+    };
+    const getIdToken = vi.fn().mockResolvedValue('mock.firebase.token');
+    type WorkspaceUser = NonNullable<ReturnType<typeof cloudWorkspace.useCloudSession>['user']>;
+    const account: Pick<WorkspaceUser, 'uid' | 'getIdToken'> = { uid, getIdToken };
+    const session = vi.spyOn(cloudWorkspace, 'useCloudSession').mockReturnValue({
+      user: account as WorkspaceUser,
+      pending: false, error: '', changeAccount: vi.fn(),
+    });
+    const cases = vi.spyOn(cloudWorkspace, 'useCloudCases').mockReturnValue({
+      cases: [caseRecord], loading: false, connected: true, error: '', retry: vi.fn(),
+    });
+    const save = vi.spyOn(cloudWorkspace, 'saveCloudCaseNotes').mockResolvedValue(2);
+    const playback = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:recording-qa');
+    const originalFetch = globalThis.fetch;
+    const network = vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) =>
+      input === '/api/recording-transcription'
+        ? Promise.resolve(Response.json({
+          model: TRANSCRIPTION_MODEL, weightsSha256: TRANSCRIPTION_WEIGHTS, reviewRequired: true,
+          segments: [{ startMs: 0, endMs: 800, text: 'The library opens at nine.' }],
+        }))
+        : originalFetch(input, init));
+    vi.stubGlobal('AudioContext', class {
+      decodeAudioData() { return Promise.resolve({ length: 16000, sampleRate: 16000 }); }
+      close() { return Promise.resolve(); }
+    });
+    vi.stubGlobal('OfflineAudioContext', class {
+      destination = {};
+      createBufferSource() { return { connect: vi.fn(), start: vi.fn() }; }
+      startRendering() { return Promise.resolve({ getChannelData: () => new Float32Array(16000) }); }
+    });
+
+    try {
+      const user = userEvent.setup();
+      render(<Home />);
+      await user.click(within(getPatientsGroup()).getByRole('button', { name: /^Recording QA/ }));
+      const panel = within(screen.getByRole('region', { name: 'Transcribe a recording' }));
+      const recording = new File(['audio'], 'recording.wav', { type: 'audio/wav' });
+      Object.defineProperty(recording, 'arrayBuffer', { value: () => Promise.resolve(new ArrayBuffer(4)) });
+      await user.upload(panel.getByLabelText('Choose an audio file'), recording);
+      const transcribe = panel.getByRole('button', { name: 'Transcribe recording' });
+      expect(transcribe).toBeDisabled();
+      expect(getIdToken).not.toHaveBeenCalled();
+      await user.click(panel.getByRole('checkbox', { name: /I have permission/ }));
+      await user.click(transcribe);
+      const draft = await panel.findByRole('textbox', { name: 'Transcript draft' });
+      expect(draft).toHaveValue('The library opens at nine.');
+      expect(network).toHaveBeenCalledWith('/api/recording-transcription', expect.objectContaining({
+        method: 'POST',
+        headers: {
+          'Content-Type': 'audio/wav',
+          'X-DiffMD-Workspace-Token': 'mock.firebase.token',
+          'X-DiffMD-Workspace-UID': uid,
+          'X-DiffMD-Case-ID': caseRecord.id,
+        },
+      }));
+
+      const review = panel.getByRole('checkbox', { name: /I checked the transcript/ });
+      const append = panel.getByRole('button', { name: 'Append to later note draft' });
+      expect(append).toBeDisabled();
+      await user.click(review);
+      fireEvent.change(draft, { target: { value: 'The library opens at 9 a.m.' } });
+      expect(append).toBeDisabled();
+      await user.click(review);
+      await user.click(append);
+      const main = within(screen.getByRole('main'));
+      expect(main.getByRole('textbox', { name: 'Later note' })).toHaveValue(
+        'Existing later note.\n\nThe library opens at 9 a.m.',
+      );
+      expect(save).not.toHaveBeenCalled();
+      await user.click(main.getByRole('button', { name: 'Save notes' }));
+      await waitFor(() => expect(save).toHaveBeenCalledExactlyOnceWith(uid, caseRecord, {
+        earlier: 'Earlier note text.',
+        later: 'Existing later note.\n\nThe library opens at 9 a.m.',
+      }));
+    } finally {
+      network.mockRestore();
+      playback.mockRestore();
+      save.mockRestore();
+      cases.mockRestore();
+      session.mockRestore();
+      vi.unstubAllGlobals();
     }
   });
 
