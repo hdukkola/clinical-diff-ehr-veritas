@@ -131,10 +131,16 @@ The Home page shows concise summaries and links into the richer page widgets. It
 
 1. **Open review items** (compact metric). Extends `review-progress`.
 2. **Review status** (standard donut). Parts of one defined whole with counts and denominator. Extends `review-progress`.
-3. **Recent source-backed changes** (wide evidence list). Extends `provenance-health` and Snapshot review evidence drill-down.
-4. **Encounter timeline** (compact or tall). Reuses `buildEncounterTimeline`.
-5. **Data completeness** (full bars). Counts against a shared denominator. New.
-6. **Shortcuts** (compact). New, trivial.
+3. **Medication changes to review** (standard list — `DESIGN-SONNET-002` worked example).
+   - **Page & placement:** Selected patient's Home (`Morgan Lee (Synthetic)` · `DEMO-001`).
+   - **Primary user & task:** Reviewer quickly sees unresolved documented differences and opens the comparison page (`Open medication review` prototype action).
+   - **Count definition:** Documented medication differences between earlier and later notes that do not yet have a human reviewer disposition (`7 of 12` fictional count in mock; explicitly labeled as documented differences, **never** described as confirmed medication errors).
+   - **Body:** Fictional count summary in context line plus up to three source-backed review items (`Metoprolol succinate`, `Lisinopril`, `Furosemide`) with explicit unknown/missing-evidence (`Missing evidence`, `Conflicting sources`, `Linked evidence`) indicators.
+   - **States:** `ready`, `loading`, `empty` (no unresolved differences), `unavailable` (comparison source offline), and `stale` (snapshot older than current note) are visually and textually distinct.
+4. **Recent source-backed changes** (wide evidence list). Extends `provenance-health` and Snapshot review evidence drill-down.
+5. **Encounter timeline** (compact or tall). Reuses `buildEncounterTimeline`.
+6. **Data completeness** (full bars). Counts against a shared denominator. New.
+7. **Shortcuts** (compact). New, trivial.
 
 ### Next, ranked by value
 
