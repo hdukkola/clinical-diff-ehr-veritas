@@ -104,7 +104,7 @@ const CLARUS_URL =
   'https://huggingface.co/datasets/ClarusC64/clinical-medication-reconciliation-discrepancy-risk-v0.1';
 const MEDTEMPO_URL = 'https://huggingface.co/datasets/mirobody/MedTEMPO-Bench';
 
-export const hfScenarios: HfSyntheticScenario[] = [
+export const hfScenarios: HfSyntheticScenario[] = process.env.NEXT_PUBLIC_CLINICAL_DIFF_EXAMPLE_WORKSPACE === '0' ? [] : [
   {
     id: 'hf-qdora-htn-escalation',
     patientId: 'HF-QDORA-014',
@@ -1207,7 +1207,7 @@ export const hfScenarios: HfSyntheticScenario[] = [
   },
 ];
 
-export const hfNoteComparisonPairs: HfNotePair[] = [
+export const hfNoteComparisonPairs: HfNotePair[] = process.env.NEXT_PUBLIC_CLINICAL_DIFF_EXAMPLE_WORKSPACE === '0' ? [] : [
   {
     id: 'hf-note-qdora-htn-escalation',
     title: 'Clinic Hypertension Follow-up → Dose Escalation (QDORA Rows 14 & 17)',

@@ -1,4 +1,12 @@
-export const SYNTHETIC_ASSISTANT_NOTES = {
+type AssistantNote = { label: string; text: string; medications: readonly string[] };
+
+const unavailableNote: AssistantNote = { label: '', text: '', medications: [] };
+
+export const SYNTHETIC_ASSISTANT_NOTES: Record<'earlier' | 'later', AssistantNote> =
+  process.env.NEXT_PUBLIC_CLINICAL_DIFF_EXAMPLE_WORKSPACE === '0' ? {
+    earlier: unavailableNote,
+    later: unavailableNote,
+  } : {
   earlier: {
     label: 'Demo earlier note',
     text: 'Sample outpatient medication list. The note explicitly lists Lisinopril 10 mg daily, Metformin 500 mg twice daily, and Aspirin 81 mg daily.',
@@ -9,7 +17,7 @@ export const SYNTHETIC_ASSISTANT_NOTES = {
     text: 'Sample discharge medication list. The note explicitly lists Lisinopril 20 mg daily, Metformin 500 mg twice daily, and Atorvastatin 20 mg nightly.',
     medications: ['Lisinopril', 'Metformin', 'Atorvastatin'],
   },
-} as const;
+  };
 
 export type SyntheticAssistantNote = keyof typeof SYNTHETIC_ASSISTANT_NOTES;
 

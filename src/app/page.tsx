@@ -174,7 +174,9 @@ const DIFF_GLYPHS: Record<'changed' | 'onlyA' | 'onlyB' | 'same', { glyph: strin
   same: { glyph: '·', label: 'Unchanged' },
 };
 
-const DEMO_PATIENT = getSyntheticScenario('scenario-morgan-lee-baseline')!;
+const DEMO_PATIENT = process.env.NEXT_PUBLIC_CLINICAL_DIFF_EXAMPLE_WORKSPACE === '0'
+  ? toPatientScenario({ id: 'example-disabled', name: '' })
+  : getSyntheticScenario('scenario-morgan-lee-baseline')!;
 const DEMO_MEDICATION_TERMS = [
   ...new Set([...DEMO_PATIENT.earlier.medications, ...DEMO_PATIENT.later.medications].map((medication) => medication.name)),
 ];
