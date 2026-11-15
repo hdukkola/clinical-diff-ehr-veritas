@@ -24,7 +24,7 @@ curl --fail-with-body http://127.0.0.1:3107/transcribe \
   --data-binary @dictation.wav
 ```
 
-The response includes `transcript`, the model and weights revision, and `reviewRequired: true`. For reproduction, read this synthetic test sentence aloud: “Discharge note lists lisinopril 20 milligrams daily. It does not say whether aspirin was stopped. I will check the original instructions.” Check the medication names, dose, frequency and uncertainty independently. A successful HTTP response only confirms that inference ran. The bundled two-speaker sample at `public/encounter/medication-follow-up.wav` exposed an aspirin transcription error and a change from whether to when.
+The response includes `transcript`, the model and weights revision, and `reviewRequired: true`. For reproduction, read this synthetic test sentence aloud: “Discharge note lists lisinopril 20 milligrams daily. It does not say whether aspirin was stopped. I will check the original instructions.” Check the medication names, dose, frequency and uncertainty independently. A successful HTTP response only confirms that inference ran. The two-speaker sample at `deploy/encounter-note-taker/medication-follow-up.wav` exposed an aspirin transcription error and a change from whether to when.
 
 ## Rebuild from source
 

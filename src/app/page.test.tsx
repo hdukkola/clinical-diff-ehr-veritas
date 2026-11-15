@@ -3,6 +3,7 @@ import { webcrypto } from 'node:crypto';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import Home from '@/app/page';
+import { saveBrowserNote, saveBrowserNoteReview } from '@/lib/browser-patients';
 import * as cloudWorkspace from '@/lib/cloud-workspace';
 import { earlier, later, syntheticScenarios } from '@/lib/fixtures';
 import { TRANSCRIPTION_MODEL, TRANSCRIPTION_WEIGHTS } from '@/lib/recording-transcription';
@@ -47,6 +48,39 @@ describe('Clinical Diff Veritas Editorial UI', () => {
 
   afterEach(() => vi.unstubAllEnvs());
 
+  it('removes only the selected browser case and prevents stale edits from restoring its stored data', async () => {
+    const user = userEvent.setup();
+    const removedId = 'LOCAL-AAAAAAAAAAAA';
+    const removedKey = `diffmd-case-v1:${removedId}`;
+    const otherKey = 'diffmd-case-v1:LOCAL-BBBBBBBBBBBB';
+    localStorage.setItem(removedKey, 'Case QA remove');
+    localStorage.setItem(`${removedKey}:earlier`, 'Lisinopril 10 mg daily');
+    localStorage.setItem(`${removedKey}:later`, 'Lisinopril 20 mg daily');
+    localStorage.setItem(`${removedKey}:review:lisinopril`, 'version:reviewed');
+    localStorage.setItem(otherKey, 'Case QA keep');
+    localStorage.setItem(`${otherKey}:later`, 'Continue metformin 500 mg daily');
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    try {
+      render(<Home />);
+      await user.click(within(getPatientsGroup()).getByRole('button', { name: /^Case QA remove/ }));
+      const remove = screen.getByRole('button', { name: 'Remove patient' });
+      await user.click(remove);
+      expect(localStorage.getItem(removedKey)).toBe('Case QA remove');
+      confirm.mockReturnValue(true);
+      await user.click(remove);
+      await waitFor(() => expect(screen.getByRole('heading', { name: 'Home' })).toHaveFocus());
+      expect(within(getPatientsGroup()).queryByRole('button', { name: /^Case QA remove/ })).not.toBeInTheDocument();
+      for (const suffix of ['', ':earlier', ':later', ':review:lisinopril']) {
+        expect(localStorage.getItem(removedKey + suffix)).toBeNull();
+      }
+      expect(saveBrowserNote(removedId, 'later', 'Stale edit')).toBe(false);
+      expect(saveBrowserNoteReview(removedId, 'version', 'lisinopril', 'reviewed')).toBe(false);
+      expect(localStorage.getItem(`${otherKey}:later`)).toBe('Continue metformin 500 mg daily');
+    } finally {
+      confirm.mockRestore();
+    }
+  });
+
   it('starts the public workspace empty and compares only notes the reviewer enters', async () => {
     vi.stubEnv('NEXT_PUBLIC_CLINICAL_DIFF_EXAMPLE_WORKSPACE', '0');
     const digest = vi.spyOn(globalThis.crypto, 'subtle', 'get').mockReturnValue(webcrypto.subtle as SubtleCrypto);
@@ -81,6 +115,25 @@ describe('Clinical Diff Veritas Editorial UI', () => {
       await user.click(within(result).getByRole('button', { name: 'Flag for clarification' }));
       expect(result).toHaveTextContent('1 flagged for clarification');
 
+      await openSnapshot(user);
+      const snapshotWidgets = main.getByRole('region', { name: 'Snapshot tools' });
+      expect(snapshotWidgets.querySelector('[data-page-widget="Comparison items"]')).toHaveTextContent('Lisinopril');
+      expect(snapshotWidgets.querySelector('[data-page-widget="Awaiting decision"] .page-widget-value')).toHaveTextContent(/^0$/);
+      await user.click(within(snapshotWidgets.querySelector<HTMLElement>('[data-page-widget="Comparison items"]')!)
+        .getByRole('button', { name: 'Open comparison' }));
+      await waitFor(() => expect(main.getByRole('heading', { name: 'Mention differences' })).toHaveFocus());
+      await user.click(within(getWorkspaceNav()).getByRole('button', { name: 'Review suggestions' }));
+      expect(main.getByRole('region', { name: 'Suggestion tools' })
+        .querySelector('[data-page-widget="Review queue"] .page-widget-value')).toHaveTextContent(/^1$/);
+      await openCompare(user);
+      fireEvent.change(main.getByRole('textbox', { name: 'Later note' }), { target: { value: 'Lisinopril 30 mg daily' } });
+      await openSnapshot(user);
+      expect(main.getByRole('region', { name: 'Snapshot tools' })
+        .querySelector('[data-page-widget="Comparison items"]')).toHaveTextContent('Run a comparison for this case');
+      expect(main.getByRole('region', { name: 'Snapshot tools' })).not.toHaveTextContent('Lisinopril');
+      await openCompare(user);
+      fireEvent.change(main.getByRole('textbox', { name: 'Later note' }), { target: { value: 'Lisinopril 20 mg daily' } });
+
       workspace.unmount();
       render(<Home />);
       await user.click(within(getPatientsGroup()).getByRole('button', { name: /^Case QA-001/ }));
@@ -108,7 +161,53 @@ describe('Clinical Diff Veritas Editorial UI', () => {
     }
   });
 
-  it('requires consent, review, and a separate save to append a transcript to a synced note', async () => {
+  it('opens exact case evidence from a medication control and returns focus to that control', async () => {
+    const user = userEvent.setup();
+    vi.stubEnv('NEXT_PUBLIC_CLINICAL_DIFF_EXAMPLE_WORKSPACE', '0');
+    const digest = vi.spyOn(globalThis.crypto, 'subtle', 'get').mockReturnValue(webcrypto.subtle as SubtleCrypto);
+    const network = vi.spyOn(globalThis, 'fetch').mockResolvedValue(Response.json({}));
+    const caseKey = 'diffmd-case-v1:LOCAL-AAAAAAAAAAAA';
+    localStorage.setItem(caseKey, 'Case QA evidence');
+    localStorage.setItem(`${caseKey}:earlier`, 'Lisinopril 10 mg daily\nAspirin 81 mg daily');
+    localStorage.setItem(`${caseKey}:later`, 'Lisinopril 20 mg daily');
+    try {
+      render(<Home />);
+      const main = within(screen.getByRole('main'));
+      await user.click(within(getPatientsGroup()).getByRole('button', { name: /^Case QA evidence/ }));
+      await openCompare(user);
+      await user.click(main.getByRole('button', { name: 'Compare notes' }));
+      await main.findByRole('region', { name: 'Mention differences' });
+      await openSnapshot(user);
+
+      const widget = main.getByRole('region', { name: 'Snapshot tools' })
+        .querySelector<HTMLElement>('[data-page-widget="Comparison items"]')!;
+      const medication = within(widget).getByRole('button', { name: 'View source evidence for Lisinopril' });
+      expect(medication.parentElement).toHaveTextContent('Earlier noteLisinopril 10 mg dailyLater noteLisinopril 20 mg daily');
+      const aspirin = within(widget).getByRole('button', { name: 'View source evidence for Aspirin' });
+      expect(aspirin.parentElement).toHaveTextContent('Earlier noteAspirin 81 mg dailyLater noteSource unavailable');
+
+      medication.focus();
+      await user.keyboard('{Enter}');
+      const evidence = main.getByRole('listitem', { name: 'Source evidence for Lisinopril' });
+      await waitFor(() => expect(evidence).toHaveFocus());
+      expect(evidence).toHaveTextContent('Earlier noteLisinopril 10 mg dailyLater noteLisinopril 20 mg daily');
+      await user.click(within(evidence).getByRole('button', { name: 'Mark reviewed' }));
+      await user.click(within(evidence).getByRole('button', { name: 'Return to Snapshot review' }));
+      await waitFor(() => expect(main.getByRole('button', { name: 'View source evidence for Lisinopril' })).toHaveFocus());
+
+      await user.click(main.getByRole('button', { name: 'View source evidence for Aspirin' }));
+      const earlierOnly = main.getByRole('listitem', { name: 'Source evidence for Aspirin' });
+      await waitFor(() => expect(earlierOnly).toHaveFocus());
+      expect(earlierOnly).toHaveTextContent('Earlier noteAspirin 81 mg dailyLater noteSource unavailable');
+      expect(within(main.getByRole('listitem', { name: 'Source evidence for Lisinopril' }))
+        .getByRole('button', { name: 'Mark reviewed' })).toHaveAttribute('aria-pressed', 'true');
+    } finally {
+      digest.mockRestore();
+      network.mockRestore();
+    }
+  });
+
+  it('starts meeting notes from the microphone and saves only the reviewed draft', async () => {
     vi.stubEnv('NEXT_PUBLIC_CLINICAL_DIFF_EXAMPLE_WORKSPACE', '0');
     vi.stubEnv('NEXT_PUBLIC_DIFFMD_RECORDING_TRANSCRIPTION', '1');
     const uid = 'qa-case-owner';
@@ -130,7 +229,6 @@ describe('Clinical Diff Veritas Editorial UI', () => {
       cases: [caseRecord], loading: false, connected: true, error: '', retry: vi.fn(),
     });
     const save = vi.spyOn(cloudWorkspace, 'saveCloudCaseNotes').mockResolvedValue(2);
-    const playback = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:recording-qa');
     const originalFetch = globalThis.fetch;
     const network = vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) =>
       input === '/api/recording-transcription'
@@ -139,31 +237,46 @@ describe('Clinical Diff Veritas Editorial UI', () => {
           segments: [{ startMs: 0, endMs: 800, text: 'The library opens at nine.' }],
         }))
         : originalFetch(input, init));
+    const track = { stop: vi.fn(), addEventListener: vi.fn() };
+    const getUserMedia = vi.fn().mockRejectedValueOnce(new DOMException('', 'NotAllowedError'))
+      .mockResolvedValue({ getTracks: () => [track], getAudioTracks: () => [track] });
+    const mediaDevices = Object.getOwnPropertyDescriptor(navigator, 'mediaDevices');
+    Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: { getUserMedia } });
+    const port = { onmessage: vi.fn<(event: MessageEvent) => void>(), close: vi.fn(), postMessage: vi.fn() };
     vi.stubGlobal('AudioContext', class {
-      decodeAudioData() { return Promise.resolve({ length: 16000, sampleRate: 16000 }); }
+      sampleRate = 16_000;
+      destination = {};
+      state = 'running';
+      audioWorklet = { addModule: vi.fn().mockResolvedValue(undefined) };
+      createMediaStreamSource() { return { connect: vi.fn() }; }
+      resume() { return Promise.resolve(); }
       close() { return Promise.resolve(); }
     });
-    vi.stubGlobal('OfflineAudioContext', class {
-      destination = {};
-      createBufferSource() { return { connect: vi.fn(), start: vi.fn() }; }
-      startRendering() { return Promise.resolve({ getChannelData: () => new Float32Array(16000) }); }
+    vi.stubGlobal('AudioWorkletNode', class {
+      port = port;
+      connect = vi.fn();
     });
 
     try {
       const user = userEvent.setup();
       render(<Home />);
       await user.click(within(getPatientsGroup()).getByRole('button', { name: /^Recording QA/ }));
-      const panel = within(screen.getByRole('region', { name: 'Transcribe a recording' }));
-      const recording = new File(['audio'], 'recording.wav', { type: 'audio/wav' });
-      Object.defineProperty(recording, 'arrayBuffer', { value: () => Promise.resolve(new ArrayBuffer(4)) });
-      await user.upload(panel.getByLabelText('Choose an audio file'), recording);
-      const transcribe = panel.getByRole('button', { name: 'Transcribe recording' });
-      expect(transcribe).toBeDisabled();
-      expect(getIdToken).not.toHaveBeenCalled();
-      await user.click(panel.getByRole('checkbox', { name: /I have permission/ }));
-      await user.click(transcribe);
-      const draft = await panel.findByRole('textbox', { name: 'Transcript draft' });
-      expect(draft).toHaveValue('The library opens at nine.');
+      const panelElement = screen.getByRole('region', { name: 'Meeting notes' });
+      const panel = within(panelElement);
+      expect(panelElement.querySelector('input[type=file]')).toBeNull();
+      const start = panel.getByRole('button', { name: 'Start recording' });
+      expect(start).toBeDisabled();
+      expect(getUserMedia).not.toHaveBeenCalled();
+      await user.click(panel.getByRole('checkbox', { name: /Everyone has agreed/ }));
+      await user.click(start);
+      expect(await panel.findByRole('alert')).toHaveTextContent('Microphone permission was denied');
+      await user.click(panel.getByRole('button', { name: 'Start recording' }));
+      expect(await panel.findByRole('status')).toHaveTextContent('Recording from the microphone');
+      expect(getUserMedia).toHaveBeenLastCalledWith({ audio: true, video: false });
+      const draft = panel.getByRole('textbox', { name: 'Meeting note draft' });
+      act(() => port.onmessage(new MessageEvent('message', { data: new Float32Array(12 * 16_000) })));
+      await waitFor(() => expect(draft).toHaveValue('[00:00] The library opens at nine.'));
+      expect(draft).toHaveAttribute('readonly');
       expect(network).toHaveBeenCalledWith('/api/recording-transcription', expect.objectContaining({
         method: 'POST',
         headers: {
@@ -174,8 +287,12 @@ describe('Clinical Diff Veritas Editorial UI', () => {
         },
       }));
 
-      const review = panel.getByRole('checkbox', { name: /I checked the transcript/ });
-      const append = panel.getByRole('button', { name: 'Append to later note draft' });
+      await user.click(panel.getByRole('button', { name: 'Stop recording' }));
+      expect(track.stop).toHaveBeenCalled();
+      expect(port.postMessage).toHaveBeenCalledWith('finish');
+      act(() => port.onmessage(new MessageEvent('message', { data: 'finished' })));
+      const review = await panel.findByRole('checkbox', { name: /I reviewed the notes/ });
+      const append = panel.getByRole('button', { name: 'Add to later note draft' });
       expect(append).toBeDisabled();
       await user.click(review);
       fireEvent.change(draft, { target: { value: 'The library opens at 9 a.m.' } });
@@ -194,10 +311,11 @@ describe('Clinical Diff Veritas Editorial UI', () => {
       }));
     } finally {
       network.mockRestore();
-      playback.mockRestore();
       save.mockRestore();
       cases.mockRestore();
       session.mockRestore();
+      if (mediaDevices) Object.defineProperty(navigator, 'mediaDevices', mediaDevices);
+      else Reflect.deleteProperty(navigator, 'mediaDevices');
       vi.unstubAllGlobals();
     }
   });

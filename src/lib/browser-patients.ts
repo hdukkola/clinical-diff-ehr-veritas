@@ -48,6 +48,23 @@ export function createBrowserPatient(name: string): BrowserPatient | null {
   }
 }
 
+export function removeBrowserPatient(id: string): boolean {
+  if (!patientIdPattern.test(id)) return false;
+  try {
+    const storage = window.localStorage;
+    const key = prefix + id;
+    storage.removeItem(key);
+    for (let index = storage.length - 1; index >= 0; index--) {
+      const entry = storage.key(index);
+      if (entry?.startsWith(`${key}:`)) storage.removeItem(entry);
+    }
+    window.dispatchEvent(new Event(changeEvent));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function readBrowserNote(id: string, side: 'earlier' | 'later'): string {
   try {
     return window.localStorage.getItem(`${prefix}${id}:${side}`) ?? '';
@@ -58,6 +75,7 @@ export function readBrowserNote(id: string, side: 'earlier' | 'later'): string {
 
 export function saveBrowserNote(id: string, side: 'earlier' | 'later', value: string): boolean {
   try {
+    if (!patientIdPattern.test(id) || window.localStorage.getItem(prefix + id) === null) return false;
     const key = `${prefix}${id}:${side}`;
     if (value) window.localStorage.setItem(key, value);
     else window.localStorage.removeItem(key);
@@ -94,6 +112,7 @@ export function readBrowserNoteReviews(id: string, version: string, keys: string
 
 export function saveBrowserNoteReview(id: string, version: string, key: string, choice: NoteReviewDecision | null): boolean {
   try {
+    if (!patientIdPattern.test(id) || window.localStorage.getItem(prefix + id) === null) return false;
     const storageKey = `${prefix}${id}:review:${key}`;
     if (choice) window.localStorage.setItem(storageKey, `${version}:${choice}`);
     else window.localStorage.removeItem(storageKey);

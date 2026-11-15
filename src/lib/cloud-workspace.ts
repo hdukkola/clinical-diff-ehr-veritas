@@ -165,4 +165,14 @@ export async function saveCloudCaseNotes(uid: string, record: CloudCase, notes: 
   });
 }
 
+export async function removeCloudCase(uid: string, record: CloudCase): Promise<void> {
+  const { store, database } = await connect();
+  const destination = store.doc(database, 'workspaces', uid, 'cases', record.id);
+  await store.runTransaction(database, async (transaction) => {
+    const latest = await transaction.get(destination);
+    if (!latest.exists() || latest.get('version') !== record.version) throw new CloudCaseConflict();
+    transaction.delete(destination);
+  });
+}
+
 export class CloudCaseConflict extends Error {}

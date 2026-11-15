@@ -3,6 +3,7 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -33,6 +34,7 @@ import {
   readBrowserNote,
   readBrowserNoteReviews,
   readBrowserPatients,
+  removeBrowserPatient,
   saveBrowserNote,
   saveBrowserNoteReview,
   subscribeToPatients,
@@ -41,10 +43,11 @@ import {
 } from '@/lib/browser-patients';
 import {
   CLOUD_CASE_LIMIT, CloudCaseConflict, cloudWorkspaceEnabled, createCloudCase,
-  saveCloudCaseNotes, useCloudCases, useCloudSession, type CaseNotes,
+  removeCloudCase, saveCloudCaseNotes, useCloudCases, useCloudSession, type CaseNotes,
 } from '@/lib/cloud-workspace';
 import { BRAND_NAME } from '@/lib/branding';
 import { WorkspaceWidgets, type WorkspaceWidget } from '@/components/WorkspaceWidgets';
+import { buildWorkspaceWidgetCatalog } from '@/lib/workspace-widget-catalog';
 import Link from 'next/link';
 import { EncounterDocumentationNotice } from '@/components/EncounterDocumentationNotice';
 import { EncounterNoteDraft } from '@/components/EncounterNoteDraft';
@@ -53,7 +56,7 @@ import { PatientChat, type ChatThreads } from '@/components/PatientChat';
 import { AssistantPanel } from '@/components/AssistantPanel';
 import { applyChartCorrections, chartCorrectionsFor, type ChartAspect, type ChartCorrection } from '@/lib/patient-chat';
 import { EncounterAudioNote } from '@/components/EncounterAudioNote';
-import { RecordingTranscription } from '@/components/RecordingTranscription';
+import { LiveMeetingNotes } from '@/components/LiveMeetingNotes';
 import { SYNTHETIC_ASSISTANT_NOTES } from '@/lib/assistant-evidence';
 import {
   DEFAULT_MLX_MODEL_ID,
@@ -173,7 +176,9 @@ const DIFF_GLYPHS: Record<'changed' | 'onlyA' | 'onlyB' | 'same', { glyph: strin
   same: { glyph: '·', label: 'Unchanged' },
 };
 
-const DEMO_PATIENT = getSyntheticScenario('scenario-morgan-lee-baseline')!;
+const DEMO_PATIENT = process.env.NEXT_PUBLIC_CLINICAL_DIFF_EXAMPLE_WORKSPACE === '0'
+  ? toPatientScenario({ id: 'example-disabled', name: '' })
+  : getSyntheticScenario('scenario-morgan-lee-baseline')!;
 const DEMO_MEDICATION_TERMS = [
   ...new Set([...DEMO_PATIENT.earlier.medications, ...DEMO_PATIENT.later.medications].map((medication) => medication.name)),
 ];
@@ -436,6 +441,23 @@ function buildQuoteSnippet(evidence: MentionEvidence, sourceText: string): Quote
 
 function formatQuoteSnippetText(q: QuoteSnippet): string {
   return `${q.hasLeadingEllipsis ? '…' : ''}${q.prefix}${q.match}${q.suffix}${q.hasTrailingEllipsis ? '…' : ''}`;
+}
+
+function NoteEvidenceExcerpts({ difference }: { difference: MentionDifference }) {
+  const excerpts = [
+    difference.earlierExcerpt ?? (difference.kind === 'earlier_only' && difference.quotes[0]
+      ? formatQuoteSnippetText(difference.quotes[0]) : null),
+    difference.laterExcerpt ?? (difference.kind === 'later_only' && difference.quotes[0]
+      ? formatQuoteSnippetText(difference.quotes[0]) : null),
+  ];
+  return (
+    <dl className="note-evidence-excerpts">
+      <dt>Earlier note</dt>
+      <dd>{excerpts[0] || 'Source unavailable'}</dd>
+      <dt>Later note</dt>
+      <dd>{excerpts[1] || 'Source unavailable'}</dd>
+    </dl>
+  );
 }
 
 function downloadTextFile(filename: string, content: string, mimeType: string): void {
@@ -870,23 +892,28 @@ export default function Home() {
 
 type CloudDraft = CaseNotes & { baseVersion: number; savedVersion?: number };
 
+function withoutPatient<T>(data: Record<string, T>, id: string): Record<string, T> {
+  const next = { ...data };
+  delete next[id];
+  return next;
+}
+
 function Workspace({ session }: { session: ReturnType<typeof useCloudSession> }) {
   const exampleWorkspace = process.env.NEXT_PUBLIC_CLINICAL_DIFF_EXAMPLE_WORKSPACE === '1';
   const initialPatientId = exampleWorkspace ? DEMO_PATIENT.id : '';
   const cloudUser = session.user?.uid;
   const cloud = useCloudCases(cloudUser);
-  const [newCloudCase, setNewCloudCase] = useState<Awaited<ReturnType<typeof createCloudCase>>>();
+  const cloudCases = cloud.cases;
   const [cloudDrafts, setCloudDrafts] = useState<Record<string, CloudDraft>>({});
   const [cloudWrite, setCloudWrite] = useState(false);
   const cloudWritePending = useRef(false);
   const [cloudSaveError, setCloudSaveError] = useState<{ id: string; message: string }>();
   const hasUnsavedCloudNotes = Object.values(cloudDrafts).some((draft) => !draft.savedVersion);
-  const cloudCases = useMemo(() => newCloudCase && !cloud.cases.some((item) => item.id === newCloudCase.id)
-    && !cloud.error ? [...cloud.cases, newCloudCase] : cloud.cases, [cloud.cases, cloud.error, newCloudCase]);
   const savedPatients = useSyncExternalStore(subscribeToPatients, readBrowserPatients, noBrowserPatients);
   const [unsavedNotes, setUnsavedNotes] = useState<Record<string, Partial<Record<'earlier' | 'later', string>>>>({});
   const [creatingPatient, setCreatingPatient] = useState(false);
   const [patientFormError, setPatientFormError] = useState('');
+  const [patientRemovalError, setPatientRemovalError] = useState<{ id: string; message: string }>();
   const patientScenarios = useMemo(
     () => [
       ...(exampleWorkspace && !cloudUser ? [DEMO_PATIENT] : []),
@@ -949,6 +976,7 @@ function Workspace({ session }: { session: ReturnType<typeof useCloudSession> })
   } | null>(null);
   const [sessionNoteReviews, setNoteReviewDecisions] = useState<Record<string, NoteReviewDecision>>({});
   const [noteReviewError, setNoteReviewError] = useState('');
+  const [noteEvidenceReturn, setNoteEvidenceReturn] = useState<string | null>(null);
   const [comparisonDrafts, setComparisonDrafts] = useState(() => new Map<string, {
     earlier: string;
     later: string;
@@ -959,6 +987,10 @@ function Workspace({ session }: { session: ReturnType<typeof useCloudSession> })
 
   /* ---- Snapshot review state ---- */
   const [selectedScenarioId, setSelectedScenarioId] = useState(initialPatientId);
+  const selectedPatientRef = useRef(initialPatientId);
+  useLayoutEffect(() => {
+    selectedPatientRef.current = selectedScenarioId;
+  }, [selectedScenarioId]);
   const [diffTab, setDiffTab] = useState<DiffTab>('diff');
   const [diffFilter, setDiffFilter] = useState<DiffFilter>('all');
   const [selectedMedId, setSelectedMedId] = useState<string | null>(null);
@@ -1040,6 +1072,7 @@ function Workspace({ session }: { session: ReturnType<typeof useCloudSession> })
     ? sessionNoteReviews : Object.fromEntries(JSON.parse(savedNoteReviews)), [cloudUser, isDemoPatient, savedNoteReviews, sessionNoteReviews]);
   const setExtractResult = useCallback((result: NoteComparisonResult | null, version: string | null = null) => {
     setNoteReviewError('');
+    setNoteEvidenceReturn(null);
     setCompletedComparison(result ? {
       patientId: activeScenario.id, result, reviewVersion: version, earlier: earlierNoteText, later: laterNoteText,
     } : null);
@@ -1288,6 +1321,7 @@ function Workspace({ session }: { session: ReturnType<typeof useCloudSession> })
     setWidgetEditPage(undefined);
     setSelectedMedId(null);
     setEvidenceReturn(null);
+    setNoteEvidenceReturn(null);
     setMobileNavOpen(false);
     setPaletteMenuOpen(false);
     setAnnouncement(`Navigated to ${VIEW_NAMES[nextView]}`);
@@ -1536,7 +1570,6 @@ function Workspace({ session }: { session: ReturnType<typeof useCloudSession> })
       setCloudWrite(true);
       try {
         const patient = await createCloudCase(cloudUser, name);
-        setNewCloudCase(patient);
         setRailFilter('');
         openPatient(toPatientScenario(patient));
       } catch {
@@ -1554,6 +1587,54 @@ function Workspace({ session }: { session: ReturnType<typeof useCloudSession> })
     }
     setRailFilter('');
     openPatient(toPatientScenario(patient));
+  }
+
+  async function removePatient() {
+    const { id, patientLabel } = activeScenario;
+    if (!id || isDemoPatient || hostedComparePending.current || cloudWritePending.current) return;
+    if (cloudUser && (!cloudCase || !cloud.connected || cloudEditConflict)) return;
+    const name = cleanPatientName(patientLabel);
+    if (!window.confirm(`Remove "${name}" and its saved notes? This cannot be undone.`)) return;
+
+    setPatientRemovalError(undefined);
+    if (cloudUser && cloudCase) {
+      cloudWritePending.current = true;
+      setCloudWrite(true);
+      try {
+        await removeCloudCase(cloudUser, cloudCase);
+      } catch (error) {
+        setPatientRemovalError({ id, message: error instanceof CloudCaseConflict
+          ? 'This case changed on another device. Check the latest notes before removing it.'
+          : 'Could not remove the cloud case. Check your connection and try again.' });
+        return;
+      } finally {
+        cloudWritePending.current = false;
+        setCloudWrite(false);
+      }
+    } else if (!removeBrowserPatient(id)) {
+      setPatientRemovalError({ id, message: 'Could not remove this case from browser storage.' });
+      return;
+    }
+
+    setUnsavedNotes((current) => withoutPatient(current, id));
+    setCloudDrafts((current) => withoutPatient(current, id));
+    setCloudSaveError((current) => current?.id === id ? undefined : current);
+    setChatThreads((current) => withoutPatient(current, id));
+    setWidgetNotes((current) => withoutPatient(current, id));
+    setChartCorrections((current) => current.filter((change) => change.scenarioId !== id));
+    setComparisonDrafts((current) => {
+      const next = new Map(current);
+      next.delete(id);
+      return next;
+    });
+    setChatChartId((current) => current === id ? '' : current);
+    if (selectedPatientRef.current === id) {
+      setSelectedScenarioId('');
+      setCompletedComparison(null);
+      setNoteReviewDecisions({});
+      navigateTo('home');
+    }
+    setAnnouncement(`Removed ${name}.`);
   }
 
   function changeWorkspaceAccount() {
@@ -2541,9 +2622,9 @@ function Workspace({ session }: { session: ReturnType<typeof useCloudSession> })
   const serviceStatus = socketReady === 'live' ? 'Connected' : socketStatus.configured && !socketStatus.reachable ? 'Unavailable' : 'Standby';
   const outsideCount = activeScenario.externalRecords?.length ?? 0;
 
-  function focusSection(id: string) {
+  function focusSection(id: string, fallbackId?: string) {
     requestAnimationFrame(() => {
-      const element = document.getElementById(id);
+      const element = document.getElementById(id) ?? (fallbackId ? document.getElementById(fallbackId) : null);
       if (!element) return;
       const focusTarget = element.matches('input, textarea, select, button, [tabindex]')
         ? element
@@ -2583,6 +2664,65 @@ function Workspace({ session }: { session: ReturnType<typeof useCloudSession> })
   const jump = (title: string, value: string | number, next: ViewId, text: string, detail?: string) =>
     metric(title, value, detail, text, () => navigateTo(next));
 
+  const caseId = hasSelectedPatient && !isDemoPatient ? activeScenario.id : null;
+  const caseCatalog = new Map(buildWorkspaceWidgetCatalog({
+    activeCase: caseId ? { id: caseId, name: patientName } : null,
+    notes: caseId ? { caseId, earlier: earlierNoteText, later: laterNoteText } : null,
+    comparison: completedComparison && !isDemoPatient ? {
+      caseId: completedComparison.patientId,
+      earlierText: completedComparison.earlier,
+      laterText: completedComparison.later,
+      differences: completedComparison.result.differences,
+      modeLabel: completedComparison.result.modeLabel,
+      simulated: completedComparison.result.simulated,
+    } : null,
+    reviews: comparison && caseId ? {
+      caseId, earlierText: comparison.earlier, laterText: comparison.later, decisions: noteReviewDecisions,
+    } : null,
+    ownedCases: cloudUser && (!cloud.connected || cloud.loading) ? null : patientScenarios
+      .filter((scenario) => scenario.id !== DEMO_PATIENT.id)
+      .map((scenario) => ({ id: scenario.id, name: cleanPatientName(scenario.patientLabel) })),
+  }).map((item) => [item.id, item]));
+
+  function openNoteEvidence() {
+    navigateTo('extract', false);
+    focusSection(extractResult ? 'extraction-result-title' : 'earlier-note');
+  }
+
+  // Retain existing card titles because saved layouts use them as keys.
+  function caseMetric(id: string, savedTitle?: string): WorkspaceWidget {
+    const card = caseCatalog.get(id);
+    if (!card) throw new Error(`Unknown workspace widget: ${id}`);
+    const rows = id === 'difference-list' && card.state === 'ready' ? extractResult?.differences.slice(0, 3) : undefined;
+    const detail = rows?.length ? <>
+      <ul className="widget-evidence">
+        {rows.map((row) => {
+          const target = encodeURIComponent(row.key);
+          return (
+            <li key={row.key}>
+              <button type="button" className="btn quiet" id={`widget-evidence-${target}`}
+                aria-label={`View source evidence for ${row.name}`} onClick={() => {
+                  navigateTo('extract', false);
+                  setNoteEvidenceReturn(row.key);
+                  focusSection(`comparison-evidence-${target}`, 'extraction-result-title');
+                }}>{row.name}</button>
+              <NoteEvidenceExcerpts difference={row} />
+            </li>
+          );
+        })}
+      </ul>
+      {(card.rows?.length ?? 0) > rows.length && <p>Open comparison for the full list.</p>}
+    </> : card.detail;
+    return metric(savedTitle ?? card.title, card.value, detail, card.action?.label, () => {
+      if (id === 'earlier-note' || id === 'later-note' || id === 'notes-present') {
+        navigateTo('extract', false);
+        focusSection(id === 'later-note' ? id : 'earlier-note');
+      } else {
+        openNoteEvidence();
+      }
+    });
+  }
+
   const chatChart = patientScenarios.find((chart) => chart.id === chatChartId) ?? activeScenario;
 
   function openChartChat() {
@@ -2610,11 +2750,14 @@ function Workspace({ session }: { session: ReturnType<typeof useCloudSession> })
       widgets = [
         metric('Patient workspace', patientName, activeScenario.patientId,
           hasSelectedPatient ? 'Open patient' : undefined, () => selectPatient(activeScenario.id)),
-        jump('Medication review', pendingReviews, 'diff', 'Open snapshot review', 'Changes awaiting a decision'),
+        isDemoPatient ? jump('Medication review', pendingReviews, 'diff', 'Open snapshot review', 'Changes awaiting a decision')
+          : caseMetric('awaiting-review', 'Medication review'),
         jump('Note comparison', compareStatus, 'extract', 'Open Compare notes', 'Compare earlier and later notes'),
         metric('Ask about a patient', patientName, undefined, 'Open AI chat', openChartChat),
-        jump('Suggestion queue', openTriageCount, 'triage', 'Open suggestions', 'Decisions pending'),
-        metric(cloudUser ? 'Cases in your account' : 'Patients in this browser', patientScenarios.length),
+        jump('Suggestion queue', isDemoPatient ? openTriageCount : caseCatalog.get('clarifications')?.value ?? 'Unavailable',
+          'triage', 'Open suggestions', isDemoPatient ? 'Decisions pending' : 'Flagged for clarification'),
+        metric(cloudUser ? 'Cases in your account' : 'Patients in this browser',
+          isDemoPatient ? patientScenarios.length : caseCatalog.get('owned-cases')?.value),
         jump('Activity log', audit.length, 'audit', 'Open session activity', audit[0]?.action),
         exampleWorkspace ? jump('Model connection', serviceStatus, 'models', 'Open connections')
           : jump('External connections', 'None configured', 'models', 'View processing settings'),
@@ -2622,8 +2765,10 @@ function Workspace({ session }: { session: ReturnType<typeof useCloudSession> })
           navigateTo('patient', false);
           focusSection('transcript-title');
         }) : metric('Encounter record', 'No recording'),
-        metric('Source documents', documentIndex.counts.total, 'Indexed records for this chart', 'Open documents', () => openSnapshot('documents')),
-        metric('Review worklist', reviewedCount, 'Changes with a recorded decision', 'Open worklist', () => openSnapshot('worklist')),
+        isDemoPatient ? metric('Source documents', documentIndex.counts.total, 'Indexed records for this chart', 'Open documents', () => openSnapshot('documents'))
+          : caseMetric('notes-present', 'Source documents'),
+        isDemoPatient ? metric('Review worklist', reviewedCount, 'Changes with a recorded decision', 'Open worklist', () => openSnapshot('worklist'))
+          : caseMetric('reviewed-count', 'Review worklist'),
       ];
       break;
     case 'patient':
@@ -2647,10 +2792,14 @@ function Workspace({ session }: { session: ReturnType<typeof useCloudSession> })
         metric('Discharge conversation', '01:02', 'Recording consent included', 'Read transcript', () => focusSection('transcript-title')),
       ] : [
         jump('Note comparison', compareStatus, 'extract', 'Compare patient notes', 'Enter an earlier and a later note'),
-        metric('Notes entered', Number(Boolean(earlierNoteText.trim())) + Number(Boolean(laterNoteText.trim()))),
-        metric('Note differences', extractResult ? noteDiffCount : '—'),
-        metric('Decisions recorded', noteDecidedCount),
+        caseMetric('notes-present'),
+        caseMetric('comparison-differences', 'Note differences'),
+        caseMetric('reviewed-count'),
         metric('Ask about a patient', patientName, undefined, 'Open chart assistant', openChartChat),
+        caseMetric('earlier-note'),
+        caseMetric('later-note'),
+        caseMetric('awaiting-review'),
+        caseMetric('clarifications'),
       ];
       break;
     case 'extract':
@@ -2663,7 +2812,8 @@ function Workspace({ session }: { session: ReturnType<typeof useCloudSession> })
         metric('Differences found', extractResult ? noteDiffCount : '—', undefined, extractResult ? 'View results' : undefined, () => focusSection('extraction-result-title')),
         metric('Earlier excerpts', extractResult?.earlier.quotes.length ?? '—', 'Medication mentions linked to the earlier note'),
         metric(isDemoPatient ? 'Discharge excerpts' : 'Later excerpts', extractResult?.later.quotes.length ?? '—', 'Medication mentions linked to the later note'),
-        metric('Decisions recorded', extractResult ? noteDecidedCount : '—'),
+        isDemoPatient ? metric('Decisions recorded', extractResult ? noteDecidedCount : '—')
+          : caseMetric('reviewed-count'),
         metric('Clarifications', extractResult ? noteFlaggedCount : '—', undefined, noteFlaggedCount ? 'Download follow-ups' : undefined, handleExportFollowUps),
         isDemoPatient ? metric('Inference service', serviceStatus, undefined, 'Refresh service status', handleCheckService)
           : metric('Processing location', 'This browser'),
@@ -2682,13 +2832,27 @@ function Workspace({ session }: { session: ReturnType<typeof useCloudSession> })
         metric('Undated entries', encounterTimeline.undated.length, undefined, 'Check timeline', () => openSnapshot('timeline')),
         metric('Compared snapshots', isDemoPatient ? 2 : 0, undefined, 'Open medication lists', () => openSnapshot('snapshots')),
         metric('Comparison rules', undefined, 'How missing fields and differences are interpreted', 'Read method', () => openSnapshot('method')),
-      ] : [];
+      ] : [
+        caseMetric('difference-list'),
+        caseMetric('regimen-changed'),
+        caseMetric('awaiting-review'),
+        caseMetric('earlier-only'),
+        caseMetric('later-only'),
+        caseMetric('explicit-discontinuation'),
+        metric('Earlier excerpts', extractResult?.earlier.quotes.length ?? 'Unavailable',
+          'Medication mentions linked to the earlier note', 'Open comparison', openNoteEvidence),
+        metric('Later excerpts', extractResult?.later.quotes.length ?? 'Unavailable',
+          'Medication mentions linked to the later note', 'Open comparison', openNoteEvidence),
+      ];
       break;
     case 'triage':
       widgetTitle = 'Suggestion tools';
       widgets = !isDemoPatient ? [
-        metric('Review queue', noteFlaggedCount, 'Differences flagged for clarification'),
-        metric('Decisions recorded', noteDecidedCount, undefined, 'Open note comparison', () => navigateTo('extract')),
+        caseMetric('clarifications', 'Review queue'),
+        caseMetric('reviewed-count'),
+        caseMetric('awaiting-review'),
+        metric('Follow-up export', undefined, 'Download questions for differences flagged for clarification.',
+          noteFlaggedCount > 0 ? 'Download follow-ups' : undefined, handleExportFollowUps),
       ] : [
         metric('Suggestions generated', suggestions.length, undefined, 'Open queue', () => focusSection('o-queue')),
         metric('Awaiting decision', openTriageCount),
@@ -3088,7 +3252,12 @@ function Workspace({ session }: { session: ReturnType<typeof useCloudSession> })
                     </p>}
                   </div>
                   {view === 'patient' && !isDemoPatient && (
-                    <button type="button" className="btn primary" onClick={() => navigateTo('extract')}>Edit patient notes</button>
+                    <div className="patient-create-actions">
+                      <button type="button" className="btn primary" onClick={() => navigateTo('extract')}>Edit patient notes</button>
+                      <button type="button" className="btn quiet"
+                        disabled={cloudWrite || hostedCompareBusy || Boolean(cloudUser && (!cloud.connected || cloudEditConflict))}
+                        onClick={() => void removePatient()}>Remove patient</button>
+                    </div>
                   )}
                   {view === 'home' && <div className="patient-create-actions">
                     <button type="button" className="btn quiet" disabled={hostedCompareBusy} onClick={showPatientForm}>Add patient</button>
@@ -3099,19 +3268,19 @@ function Workspace({ session }: { session: ReturnType<typeof useCloudSession> })
                     <button type="button" className="btn" onClick={() => navigateTo('extract')}>Start comparison</button>
                   </div>}
                 </header>
+                {view === 'patient' && patientRemovalError?.id === activeScenario.id &&
+                  <p role="alert">{patientRemovalError.message}</p>}
                 {view === 'patient' && cloudCase && session.user && process.env.NEXT_PUBLIC_DIFFMD_RECORDING_TRANSCRIPTION === '1' && (
-                  <RecordingTranscription key={session.user.uid + '/' + cloudCase.id} uid={session.user.uid}
+                  <LiveMeetingNotes key={session.user.uid + '/' + cloudCase.id} uid={session.user.uid}
                     caseId={cloudCase.id} getToken={() => session.user!.getIdToken()}
-                    noteExists={Boolean(laterNoteText.trim())} disabled={cloudWrite || !cloud.connected}
+                    disabled={cloudWrite || !cloud.connected || Boolean(cloudEditConflict)}
                     onUse={(text) => {
                       const note = [laterNoteText.trimEnd(), text].filter(Boolean).join('\n\n');
-                      if (note.length > 12_000) {
-                        setAnnouncement('The later note and transcript exceed 12,000 characters. Shorten either before importing.');
-                        return;
-                      }
+                      if (note.length > 12_000) return false;
                       updateNote('later', note);
-                      setAnnouncement('Transcript added to the later note draft. Review and save the note.');
+                      setAnnouncement('Meeting transcript added to the later note draft. Review and save the note.');
                       navigateTo('extract');
+                      return true;
                     }} />
                 )}
                 {view === 'home' && cloudWorkspaceEnabled && (
@@ -3461,7 +3630,8 @@ function Workspace({ session }: { session: ReturnType<typeof useCloudSession> })
                           {extractResult.differences.map((entry) => {
                             const dec = noteReviewDecisions[entry.key] ?? null;
                             return (
-                              <li key={entry.key}>
+                              <li key={entry.key} id={`comparison-evidence-${encodeURIComponent(entry.key)}`}
+                                tabIndex={-1} aria-label={`Source evidence for ${entry.name}`}>
                                 <div className="extract-row-title">
                                   <strong>{entry.name}</strong>
                                   <span>{entry.statusLabel ?? `${entry.label} only`}</span>
@@ -3493,7 +3663,7 @@ function Workspace({ session }: { session: ReturnType<typeof useCloudSession> })
                                     {entry.absenceNote}
                                   </p>
                                 )}
-                                {entry.quotes.map((q) => (
+                                {isDemoPatient ? entry.quotes.map((q) => (
                                   <blockquote key={q.key}>
                                     {q.hasLeadingEllipsis ? '…' : ''}
                                     {q.prefix}
@@ -3501,7 +3671,13 @@ function Workspace({ session }: { session: ReturnType<typeof useCloudSession> })
                                     {q.suffix}
                                     {q.hasTrailingEllipsis ? '…' : ''}
                                   </blockquote>
-                                ))}
+                                )) : <NoteEvidenceExcerpts difference={entry} />}
+                                {noteEvidenceReturn === entry.key && (
+                                  <button type="button" className="btn quiet" onClick={() => {
+                                    navigateTo('diff', false);
+                                    focusSection(`widget-evidence-${encodeURIComponent(entry.key)}`, 'case-snapshot-heading');
+                                  }}>Return to Snapshot review</button>
+                                )}
                                 <div
                                   className="extract-review-controls"
                                   role="group"
@@ -3583,7 +3759,7 @@ function Workspace({ session }: { session: ReturnType<typeof useCloudSession> })
             {/* ==================== SNAPSHOT REVIEW ==================== */}
             {view === 'diff' && !isDemoPatient && !patientRequired && (
               <section aria-label="Snapshot review">
-                <h1 className="h1" ref={headingRef} tabIndex={-1}>{patientName}</h1>
+                <h1 id="case-snapshot-heading" className="h1" ref={headingRef} tabIndex={-1}>{patientName}</h1>
                 <p className="lede">{extractResult
                   ? `${noteDiffCount} medication differences and ${noteDecidedCount} review decisions in the current comparison.`
                   : 'Compare an earlier and a later note to review the medication differences.'}</p>

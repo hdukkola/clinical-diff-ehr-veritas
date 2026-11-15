@@ -17,6 +17,6 @@ COPY --from=whisper /opt/whisper/whisper-cli /opt/whisper/whisper-cli
 COPY --from=whisper /models/whisper-base.en.bin /models/whisper-base.en.bin
 WORKDIR /app
 COPY deploy/encounter-note-taker/service.py deploy/encounter-note-taker/fixture.json deploy/encounter-note-taker/compare-fixture.json /app/
-COPY public/encounter/medication-follow-up.wav /app/medication-follow-up.wav
+COPY deploy/encounter-note-taker/medication-follow-up.wav /app/medication-follow-up.wav
 USER 65532:65532
 CMD ["python", "service.py"]
