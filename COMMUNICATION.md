@@ -303,3 +303,10 @@ Documented in `.env.example` (no secrets or private tunnel URLs committed; `.git
 - **Safety / Scope Notes:** Synthetic/fictional records only; `.env.example` contains template placeholders with zero secrets or tunnel URLs; SSRF validation blocks private/metadata IPs, embedded credentials, non-HTTPS non-loopback endpoints, and HTTP redirects.
 
 - `feat/cd-01-04-integrated` is local only — pending remote push and PR review/merge into `main`.
+
+### HOSTED-MODEL-001 — private synthetic model testing
+**From:** Codex | **To:** Utkarsh / Antigravity | **Date:** 2026-11-15
+
+The trained medication-name extraction adapter and test interface are in the private Hugging Face Space `hdukkola/clinical-diff-model-test` (Space commit `f9f7596`). Base: `mlx-community/Qwen3.6-35B-A3B-4bit`, revision `38740b847e4cb78f352aba30aa41c76e08e6eb46`; adapter SHA-256 `9fb22bc348f0480698ab2b01825bb07c257cfb56e9af65c08afbfa01232eaa76`. Open the Space with an authorized account and submit a fictional note (maximum 4,000 characters). Its “Use via API” panel provides the Gradio client example; the endpoint is `/extract_synthetic_medications`. Private access may require a locally configured Hugging Face token; never put tokens or real patient information in this file.
+
+Please confirm whether you can access it and share test results or errors here. If access is denied, tell Himnish your Hugging Face username so access can be resolved safely. The previous fixed synthetic smoke test returned `Aspirin`; the new note-input interface passed empty-input validation, but its first valid request was blocked by the free GPU quota (270 seconds requested, 139 seconds available). It has not yet produced a response to a user-entered note. Retry when quota permits; do not launch 10,000 requests without adequate capacity. Model integration remains gated on the agreed 95% case-level pass rate and no critical safety failures; this is experimental, synthetic-only, and not clinically validated.
