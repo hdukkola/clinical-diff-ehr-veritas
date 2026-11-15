@@ -106,6 +106,33 @@ describe('Clinical Diff Veritas Editorial UI', () => {
     }
   });
 
+  it('preserves edited notes when replacing them with encounter notes is canceled', async () => {
+    const user = userEvent.setup();
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    try {
+      render(<Home />);
+      await user.click(within(getLeftNav()).getByRole('button', { name: 'Compare notes' }));
+      const earlierNote = document.getElementById('earlier-note') as HTMLTextAreaElement;
+      await user.clear(earlierNote);
+      await user.type(earlierNote, 'An edited example note.');
+      await user.click(within(getPatientsGroup()).getByRole('button', { name: /Morgan Lee/ }));
+      const loadNotes = screen.getByRole('button', { name: 'Load notes in Compare' });
+
+      await user.click(loadNotes);
+      expect(confirm).toHaveBeenCalledOnce();
+      expect(screen.getByRole('heading', { level: 1, name: 'Morgan Lee' })).toBeVisible();
+      await user.click(within(getLeftNav()).getByRole('button', { name: 'Compare notes' }));
+      expect(document.getElementById('earlier-note')).toHaveValue('An edited example note.');
+
+      confirm.mockReturnValue(true);
+      await user.click(within(getPatientsGroup()).getByRole('button', { name: /Morgan Lee/ }));
+      await user.click(screen.getByRole('button', { name: 'Load notes in Compare' }));
+      expect((document.getElementById('earlier-note') as HTMLTextAreaElement).value).toContain('Lisinopril 10 mg daily');
+    } finally {
+      confirm.mockRestore();
+    }
+  });
+
   it('opens Home by default and gives all eight screens their own ten widgets', async () => {
     const user = userEvent.setup();
     render(<Home />);

@@ -1430,18 +1430,19 @@ export default function Home() {
 
   const selectPatient = useCallback(
     (scenarioId: string) => {
-      setSelectedScenarioId(scenarioId);
+      const targetScenario = patientScenarios.find((scenario) => scenario.id === scenarioId);
+      if (!targetScenario) return;
+      setSelectedScenarioId(targetScenario.id);
       setDiffFilter('all');
       setSelectedMedId(null);
       setEvidenceReturnMedId(null);
       setActiveExternalRecordId(null);
       setMobileNavOpen(false);
       setView('patient');
-      const targetScenario = allScenarios.find((s) => s.id === scenarioId);
-      setAnnouncement(`Selected ${cleanPatientName(targetScenario?.patientLabel ?? scenarioId)}`);
+      setAnnouncement(`Selected ${cleanPatientName(targetScenario.patientLabel)}`);
       setFocusHeadingNonce((n) => n + 1);
     },
-    [allScenarios],
+    [patientScenarios],
   );
 
   const changePalette = useCallback(
@@ -2459,6 +2460,8 @@ export default function Home() {
 
   function openEncounterNotes() {
     if (earlierNoteText !== DEFAULT_EARLIER_NOTE || laterNoteText !== DEFAULT_LATER_NOTE) {
+      const replaceNotes = window.confirm('Replace the notes in Compare and clear their results?');
+      if (!replaceNotes) return;
       handleSelectPreset('default');
     }
     navigateTo('extract', false);
