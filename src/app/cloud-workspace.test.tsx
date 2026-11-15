@@ -106,20 +106,20 @@ describe('Account workspace', () => {
     await select(/^Cloud reference/);
     const patient = within(main.getByRole('region', { name: 'Patient summary' }));
     await user.click(patient.getByRole('button', { name: 'Add widgets' }));
-    await user.click(patient.getByRole('button', { name: 'Add Changes awaiting review' }));
-    expect(value('Notes entered')).toHaveTextContent('2');
-    expect(value('Note differences')).toHaveTextContent('—');
+    await user.click(patient.getByRole('button', { name: 'Add Awaiting decision' }));
+    expect(value('Notes entered')).toHaveTextContent('2 / 2');
+    expect(value('Note differences')).toHaveTextContent('Unavailable');
     await openNotes(user);
     await user.click(main.getByRole('button', { name: 'Compare notes' }));
     const result = await main.findByRole('region', { name: 'Mention differences' });
     await user.click(within(result).getByRole('button', { name: 'Flag for clarification' }));
     await select(/^Cloud reference/);
     expect(value('Note differences')).toHaveTextContent('1');
-    expect(value('Changes awaiting review')).toHaveTextContent('0');
+    expect(value('Awaiting decision')).toHaveTextContent('0');
 
     await select(/^Second reference/);
-    expect(value('Notes entered')).toHaveTextContent('0');
-    expect(value('Note differences')).toHaveTextContent('—');
+    expect(value('Notes entered')).toHaveTextContent('0 / 2');
+    expect(value('Note differences')).toHaveTextContent('Unavailable');
     await select(/^Cloud reference/);
     expect(value('Note differences')).toHaveTextContent('1');
     await openNotes(user);
