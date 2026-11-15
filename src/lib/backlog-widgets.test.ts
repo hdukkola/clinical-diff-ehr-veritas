@@ -43,7 +43,7 @@ describe('90-Item EHR Widget Backlog (76 Remaining Antigravity Surfaces)', () =>
   it('tracks Codex-owned items (02, 17) separately from the 76 remaining Antigravity items', () => {
     const codexIds = BACKLOG_WIDGET_CATALOG.filter((w) => w.owner === 'codex').map((w) => w.id);
     expect(codexIds).toEqual([2, 17]);
-    expect(REMAINING_ANTIGRAVITY_IDS.length).toBe(84);
+    expect(REMAINING_ANTIGRAVITY_IDS.length).toBe(76);
   });
 
   it.each(REMAINING_ANTIGRAVITY_IDS)(

@@ -29,11 +29,7 @@ describe('Specialty, Patient-Facing, Operations, and Model/Platform Widgets (61-
     expect(SPECIALTY_WIDGET_IDS.length).toBe(30);
     expect(SPECIALTY_WIDGET_IDS).not.toContain(94);
     expect(SPECIALTY_WIDGET_IDS).not.toContain(96);
-    for (let id = 61; id <= 93; id++) {
-      expect(SPECIALTY_WIDGET_IDS).toContain(id);
-    }
-    expect(SPECIALTY_WIDGET_IDS).toContain(95);
-    for (let id = 97; id <= 100; id++) {
+    for (let id = 61; id <= 90; id++) {
       expect(SPECIALTY_WIDGET_IDS).toContain(id);
     }
   });
