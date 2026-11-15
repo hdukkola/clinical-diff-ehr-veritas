@@ -2358,6 +2358,103 @@ pre.code .c {
   background: var(--hover);
 }
 
+.cw-reset-btn:focus-visible,
+.cw-placement-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.cw-toolbar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.cw-placement-panel {
+  margin-bottom: 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--sunk);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.cw-placement-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.cw-placement-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cw-placement-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--raised);
+}
+
+.cw-placement-name {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--strong);
+}
+
+.cw-placement-btns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.cw-placement-btn {
+  padding: 4px 10px;
+  min-height: 28px;
+  border-radius: 6px;
+  border: 1px solid var(--line-2);
+  background: var(--sunk);
+  color: var(--text);
+  font-size: 11.5px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.cw-placement-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--strong);
+}
+
+.cw-placement-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+@media (hover: none), (max-width: 780px) {
+  .cw-reset-btn,
+  .cw-placement-btn {
+    min-height: 44px;
+  }
+}
+
 /* 12-column rhythm: featured cards span 6, compact status cards span 4 */
 .cw-grid {
   display: grid;

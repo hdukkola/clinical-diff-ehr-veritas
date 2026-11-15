@@ -1435,4 +1435,43 @@ describe('Clinical Diff Veritas Editorial UI', () => {
       }),
     ).not.toBeInTheDocument();
   });
+
+  it('supports optional widget placement and Restore defaults through accessible layout controls', async () => {
+    const user = userEvent.setup();
+    render(<Home />);
+
+    const cockpit = screen.getByRole('region', { name: 'Clinical cockpit widgets' });
+    const getWidgetOrder = () =>
+      Array.from(cockpit.querySelectorAll<HTMLElement>('[data-widget-id]')).map(
+        (el) => el.dataset.widgetId,
+      );
+
+    const placementBtn = within(cockpit).getByRole('button', { name: 'Placement' });
+    await user.click(placementBtn);
+    expect(placementBtn).toHaveAttribute('aria-expanded', 'true');
+
+    const panel = within(cockpit).getByRole('region', { name: 'Widget placement controls' });
+
+    // Place Provenance & Evidence Health first
+    await user.click(within(panel).getByRole('button', { name: 'Place Provenance & Evidence Health first' }));
+    expect(getWidgetOrder()[0]).toBe('provenance-health');
+
+    // Hide AI Triage Queue
+    await user.click(within(panel).getByRole('button', { name: 'Hide AI Triage Queue' }));
+    expect(getWidgetOrder()).not.toContain('triage-queue');
+    expect(getWidgetOrder()).toHaveLength(6);
+
+    // Restore defaults restores order, all 7 widgets, and returns focus to Placement toggle
+    await user.click(within(panel).getByRole('button', { name: 'Restore defaults' }));
+    expect(getWidgetOrder()).toEqual([
+      'diff-breakdown',
+      'review-progress',
+      'provenance-health',
+      'triage-queue',
+      'model-socket',
+      'eval-metrics',
+      'session-activity',
+    ]);
+    await waitFor(() => expect(placementBtn).toHaveFocus());
+  });
 });

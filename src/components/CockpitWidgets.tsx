@@ -552,7 +552,10 @@ export function CockpitWidgets({
   );
   const [draggedId, setDraggedId] = useState<CockpitWidgetId | null>(null);
   const [dragStartOrder, setDragStartOrder] = useState<CockpitWidgetId[]>([]);
+  const [hiddenWidgets, setHiddenWidgets] = useState<CockpitWidgetId[]>([]);
+  const [placementOpen, setPlacementOpen] = useState(false);
   const [liveStatus, setLiveStatus] = useState<string>('');
+  const placementToggleRef = useRef<HTMLButtonElement | null>(null);
   const moveBtnRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const gridRef = useRef<HTMLDivElement>(null);
   const previousRects = useRef<Map<string, DOMRect> | null>(null);
@@ -620,6 +623,51 @@ export function CockpitWidgets({
     },
     [order, updateOrder],
   );
+
+  const moveWidgetToEdge = useCallback(
+    (id: CockpitWidgetId, edge: 'first' | 'last') => {
+      const idx = order.indexOf(id);
+      if (idx < 0) return;
+      const targetIdx = edge === 'first' ? 0 : order.length - 1;
+      if (idx === targetIdx) return;
+      const next = [...order];
+      const [moved] = next.splice(idx, 1);
+      next.splice(targetIdx, 0, moved);
+      updateOrder(
+        next,
+        `Placed ${WIDGET_TITLES[id]} ${edge === 'first' ? 'first' : 'last'} (position ${targetIdx + 1} of ${next.length}).`,
+      );
+    },
+    [order, updateOrder],
+  );
+
+  const toggleWidgetVisibility = useCallback(
+    (id: CockpitWidgetId) => {
+      const isHidden = hiddenWidgets.includes(id);
+      if (!isHidden && order.length - hiddenWidgets.length <= 1) {
+        setLiveStatus(`Cannot hide ${WIDGET_TITLES[id]}; at least one cockpit widget must remain visible.`);
+        return;
+      }
+      const nextHidden = isHidden
+        ? hiddenWidgets.filter((item) => item !== id)
+        : [...hiddenWidgets, id];
+      setHiddenWidgets(nextHidden);
+      setLiveStatus(
+        isHidden
+          ? `Shown ${WIDGET_TITLES[id]} in cockpit.`
+          : `Hidden ${WIDGET_TITLES[id]} from cockpit.`,
+      );
+    },
+    [hiddenWidgets, order.length],
+  );
+
+  const restoreDefaults = useCallback(() => {
+    setHiddenWidgets([]);
+    updateOrder(DEFAULT_COCKPIT_WIDGET_ORDER, 'Restored default cockpit widget placement and order.');
+    requestAnimationFrame(() => {
+      placementToggleRef.current?.focus({ preventScroll: true });
+    });
+  }, [updateOrder]);
 
   const handleDragStart = useCallback(
     (id: CockpitWidgetId, e: DragEvent<HTMLElement>) => {
@@ -832,6 +880,11 @@ export function CockpitWidgets({
   }, [socketStatus.adapter, socketStatus.model, socketStatus.provider]);
 
   const isCustomOrder = !arraysEqual(order, DEFAULT_COCKPIT_WIDGET_ORDER);
+  const hasCustomPlacement = isCustomOrder || hiddenWidgets.length > 0;
+  const visibleOrder = useMemo(
+    () => (draggedId ? dragStartOrder : order).filter((id) => !hiddenWidgets.includes(id)),
+    [dragStartOrder, draggedId, hiddenWidgets, order],
+  );
 
   const renderWidgetBody = (id: CockpitWidgetId) => {
     switch (id) {
@@ -1196,25 +1249,109 @@ export function CockpitWidgets({
           <span className="cw-toolbar-eyebrow">Cockpit</span>
           <span className="cw-toolbar-hint">Drag cards or use arrows to reorder · tap a title to inspect</span>
         </div>
-        {isCustomOrder && (
+        <div className="cw-toolbar-actions">
           <button
+            ref={placementToggleRef}
             type="button"
             className="cw-reset-btn"
-            onClick={() =>
-              updateOrder(DEFAULT_COCKPIT_WIDGET_ORDER, 'Reset cockpit widget order to default.')
-            }
+            aria-expanded={placementOpen}
+            aria-controls="cw-placement-panel"
+            onClick={() => setPlacementOpen((open) => !open)}
           >
-            Reset layout
+            Placement
           </button>
-        )}
+          {isCustomOrder && (
+            <button
+              type="button"
+              className="cw-reset-btn"
+              onClick={() =>
+                updateOrder(DEFAULT_COCKPIT_WIDGET_ORDER, 'Reset cockpit widget order to default.')
+              }
+            >
+              Reset layout
+            </button>
+          )}
+          {hasCustomPlacement && (
+            <button
+              type="button"
+              className="cw-reset-btn"
+              onClick={restoreDefaults}
+            >
+              Restore defaults
+            </button>
+          )}
+        </div>
       </div>
+
+      {placementOpen && (
+        <div
+          id="cw-placement-panel"
+          className="cw-placement-panel"
+          role="region"
+          aria-label="Widget placement controls"
+        >
+          <div className="cw-placement-head">
+            <span>Optional widget placement &amp; visibility</span>
+            <button
+              type="button"
+              className="cw-reset-btn"
+              disabled={!hasCustomPlacement}
+              onClick={restoreDefaults}
+            >
+              Restore defaults
+            </button>
+          </div>
+          <ul className="cw-placement-list">
+            {order.map((id, idx) => {
+              const title = WIDGET_TITLES[id];
+              const isHidden = hiddenWidgets.includes(id);
+              const isLastVisible = !isHidden && order.length - hiddenWidgets.length <= 1;
+              return (
+                <li key={id} className="cw-placement-row">
+                  <span className="cw-placement-name">{title}</span>
+                  <div className="cw-placement-btns">
+                    <button
+                      type="button"
+                      className="cw-placement-btn"
+                      aria-label={`Place ${title} first`}
+                      disabled={idx === 0}
+                      onClick={() => moveWidgetToEdge(id, 'first')}
+                    >
+                      First
+                    </button>
+                    <button
+                      type="button"
+                      className="cw-placement-btn"
+                      aria-label={`Place ${title} last`}
+                      disabled={idx === order.length - 1}
+                      onClick={() => moveWidgetToEdge(id, 'last')}
+                    >
+                      Last
+                    </button>
+                    <button
+                      type="button"
+                      className="cw-placement-btn"
+                      aria-pressed={!isHidden}
+                      aria-label={isHidden ? `Show ${title}` : `Hide ${title}`}
+                      disabled={isLastVisible}
+                      onClick={() => toggleWidgetVisibility(id)}
+                    >
+                      {isHidden ? 'Show' : 'Hide'}
+                    </button>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
 
       <div className="sr-only" role="status" aria-live="polite">
         {liveStatus}
       </div>
 
       <div className="cw-grid" role="list" ref={gridRef}>
-        {(draggedId ? dragStartOrder : order).map((id) => {
+        {visibleOrder.map((id) => {
           const index = order.indexOf(id);
           const title = WIDGET_TITLES[id];
           const isDragging = draggedId === id;
