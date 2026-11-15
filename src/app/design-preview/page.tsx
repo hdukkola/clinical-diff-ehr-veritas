@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { notFound } from 'next/navigation';
 import {
   WidgetGrid,
   WidgetShell,
@@ -36,6 +37,8 @@ const ALL_STATES: WidgetState[] = [
  * calls a model, or performs an action.
  */
 export default function DesignPreviewPage() {
+  if (process.env.NODE_ENV === 'production') notFound();
+
   return (
     <main className="wsp-page" id="main-content">
       <p className="wsp-banner" role="note">

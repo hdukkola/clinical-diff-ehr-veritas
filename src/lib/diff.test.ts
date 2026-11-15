@@ -1027,3 +1027,83 @@ describe('compareNoteRegimens & normalizeNoteText', () => {
     );
   });
 });
+
+const HELDOUT_CASES: {
+  id: string;
+  a: Snapshot;
+  b: Snapshot;
+  gold: Record<string, 'added' | 'removed' | 'changed' | 'same'>;
+}[] = [
+  {
+    id: 'heldout-1',
+    a: {
+      id: 'ho-1a',
+      source: 'Held-out outpatient',
+      recordedAt: '2026-01-10',
+      medications: [
+        { id: 'x', name: 'Med X', dose: '10 mg', route: 'oral', frequency: 'daily' },
+        { id: 'y', name: 'Med Y', dose: '1 g', route: 'oral', frequency: 'twice daily' },
+      ],
+    },
+    b: {
+      id: 'ho-1b',
+      source: 'Held-out discharge',
+      recordedAt: '2026-01-14',
+      medications: [{ id: 'x', name: 'Med X', dose: '10 mg', route: 'oral', frequency: 'daily' }],
+    },
+    gold: { x: 'same', y: 'removed' },
+  },
+  {
+    id: 'heldout-2',
+    a: {
+      id: 'ho-2a',
+      source: 'Held-out intake',
+      recordedAt: '2026-02-01',
+      medications: [{ id: 'p', name: 'Med P', dose: '5 mg', route: 'oral', frequency: 'daily' }],
+    },
+    b: {
+      id: 'ho-2b',
+      source: 'Held-out clinic',
+      recordedAt: '2026-02-05',
+      medications: [
+        { id: 'p', name: 'Med P', dose: '5 mg', route: 'oral', frequency: null },
+        { id: 'q', name: 'Med Q', dose: '2 mg', route: 'oral', frequency: 'nightly' },
+      ],
+    },
+    gold: { p: 'changed', q: 'added' },
+  },
+  {
+    id: 'heldout-3',
+    a: {
+      id: 'ho-3a',
+      source: 'Held-out primary',
+      recordedAt: '2026-03-01',
+      medications: [
+        { id: 'm', name: 'Med M', dose: '25 mcg', route: 'oral', frequency: 'daily' },
+        { id: 'n', name: 'Med N', dose: '40 mg', route: 'IV', frequency: 'q12h' },
+      ],
+    },
+    b: {
+      id: 'ho-3b',
+      source: 'Held-out follow-up',
+      recordedAt: '2026-03-08',
+      medications: [
+        { id: 'm', name: 'Med M', dose: '50 mcg', route: 'oral', frequency: 'daily' },
+        { id: 'n', name: 'Med N', dose: '40 mg', route: 'IV', frequency: 'q12h' },
+      ],
+    },
+    gold: { m: 'changed', n: 'same' },
+  },
+];
+
+describe('held-out snapshot cases', () => {
+  it.each(HELDOUT_CASES)('matches expected medication changes for $id', ({ a, b, gold }) => {
+    const changes = new Map(compareSnapshots(a, b).map((row) => [row.medicationId, row.kind]));
+    for (const [id, kind] of Object.entries(gold)) {
+      expect(changes.get(id) ?? 'same').toBe(kind);
+    }
+    for (const id of changes.keys()) {
+      expect(gold).toHaveProperty(id);
+    }
+  });
+});
