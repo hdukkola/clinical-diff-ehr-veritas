@@ -58,6 +58,16 @@ describe('ai-socket Colab Qwen 3.5 4B readiness & SSRF guards', () => {
     expect(resolved.apiKey).toBe('secret-token');
   });
 
+  it('never forwards unrelated provider tokens to the configured endpoint', () => {
+    for (const env of [
+      { OPENAI_COMPATIBLE_BASE_URL: 'https://qwen-colab.trycloudflare.com' },
+      { CLINICAL_DIFF_BACKEND_URL: 'https://mlx.example.com', CLINICAL_DIFF_MODEL_PROVIDER: 'mlx_service' },
+    ]) {
+      expect(resolveSocketConfig({ ...env, OPENAI_API_KEY: 'openai-secret', HF_TOKEN: 'hf-secret' }).apiKey).toBeNull();
+      expect(resolveSocketConfig({ ...env, CLINICAL_DIFF_API_KEY: 'endpoint-secret', HF_TOKEN: 'hf-secret' }).apiKey).toBe('endpoint-secret');
+    }
+  });
+
   it('parses Qwen think blocks, fenced JSON, and {name} objects safely', () => {
     const raw = `<think>Checking medications in note...</think>
 Here is the JSON:
