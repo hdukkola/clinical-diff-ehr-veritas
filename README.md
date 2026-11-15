@@ -33,6 +33,10 @@ Set `NEXT_PUBLIC_CLINICAL_DIFF_EXAMPLE_WORKSPACE=1` in `.env.local` to exercise 
 
 The Firebase release builds with `NEXT_PUBLIC_CLINICAL_DIFF_EXAMPLE_WORKSPACE=0`, `NEXT_PUBLIC_CLINICAL_DIFF_HOSTED_COMPARE=0` and `NEXT_PUBLIC_CLINICAL_DIFF_DISABLE_SOCKET_STREAM=1`. Stage the release without `public/encounter/medication-follow-up.wav`, then verify the exact Cloud Run revision through a Firebase preview channel before promoting it.
 
+The optional account workspace uses Firebase Authentication with Google and Cloud Firestore. Build it with the web app's public SDK configuration in `NEXT_PUBLIC_DIFFMD_FIREBASE_API_KEY`, `NEXT_PUBLIC_DIFFMD_FIREBASE_APP_ID`, `NEXT_PUBLIC_DIFFMD_FIREBASE_PROJECT`, and `NEXT_PUBLIC_DIFFMD_FIREBASE_AUTH_DOMAIN`. Use a Firebase Hosting domain authorized for sign-in. Deploy `firestore.rules` and `firestore.indexes.json` before exposing the account controls. To grant an account access, an administrator creates an empty `workspaceAccounts/{verified-google-email}` document. A user can read and update only their own cases.
+
+Browser cases stay local when signing in. Account cases and explicitly saved de-identified notes sync between signed-in devices. A stale edit cannot overwrite another device's save. Run the comparison again after reopening a saved case. Account review decisions and activity stay in the tab.
+
 ## Verification Commands
 
 ```sh

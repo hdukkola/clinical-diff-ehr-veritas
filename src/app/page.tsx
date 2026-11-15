@@ -39,6 +39,10 @@ import {
   type BrowserPatient,
   type NoteReviewDecision,
 } from '@/lib/browser-patients';
+import {
+  CLOUD_CASE_LIMIT, CloudCaseConflict, cloudWorkspaceEnabled, createCloudCase,
+  saveCloudCaseNotes, useCloudCases, useCloudSession, type CaseNotes,
+} from '@/lib/cloud-workspace';
 import { BRAND_NAME } from '@/lib/branding';
 import { WorkspaceWidgets, type WorkspaceWidget } from '@/components/WorkspaceWidgets';
 import Link from 'next/link';
@@ -859,19 +863,45 @@ const emptyBrowserNote = () => '';
 const emptyBrowserReviews = () => '[]';
 
 export default function Home() {
+  const session = useCloudSession();
+  return <Workspace key={session.user?.uid ?? 'browser'} session={session} />;
+}
+
+type CloudDraft = CaseNotes & { baseVersion: number; savedVersion?: number };
+
+function Workspace({ session }: { session: ReturnType<typeof useCloudSession> }) {
   const exampleWorkspace = process.env.NEXT_PUBLIC_CLINICAL_DIFF_EXAMPLE_WORKSPACE === '1';
   const initialPatientId = exampleWorkspace ? DEMO_PATIENT.id : '';
+  const cloudUser = session.user?.uid;
+  const cloud = useCloudCases(cloudUser);
+  const [newCloudCase, setNewCloudCase] = useState<Awaited<ReturnType<typeof createCloudCase>>>();
+  const [cloudDrafts, setCloudDrafts] = useState<Record<string, CloudDraft>>({});
+  const [cloudWrite, setCloudWrite] = useState(false);
+  const cloudWritePending = useRef(false);
+  const [cloudSaveError, setCloudSaveError] = useState<{ id: string; message: string }>();
+  const hasUnsavedCloudNotes = Object.values(cloudDrafts).some((draft) => !draft.savedVersion);
+  const cloudCases = useMemo(() => newCloudCase && !cloud.cases.some((item) => item.id === newCloudCase.id)
+    && !cloud.error ? [...cloud.cases, newCloudCase] : cloud.cases, [cloud.cases, cloud.error, newCloudCase]);
   const savedPatients = useSyncExternalStore(subscribeToPatients, readBrowserPatients, noBrowserPatients);
   const [unsavedNotes, setUnsavedNotes] = useState<Record<string, Partial<Record<'earlier' | 'later', string>>>>({});
   const [creatingPatient, setCreatingPatient] = useState(false);
   const [patientFormError, setPatientFormError] = useState('');
   const patientScenarios = useMemo(
     () => [
-      ...(exampleWorkspace ? [DEMO_PATIENT] : []),
-      ...(JSON.parse(savedPatients) as BrowserPatient[]).map(toPatientScenario),
+      ...(exampleWorkspace && !cloudUser ? [DEMO_PATIENT] : []),
+      ...(cloudUser ? cloudCases : JSON.parse(savedPatients) as BrowserPatient[]).map(toPatientScenario),
     ],
-    [exampleWorkspace, savedPatients],
+    [cloudCases, cloudUser, exampleWorkspace, savedPatients],
   );
+  useEffect(() => {
+    if (!hasUnsavedCloudNotes) return;
+    function warnUnsavedNotes(event: BeforeUnloadEvent) {
+      event.preventDefault();
+      event.returnValue = '';
+    }
+    window.addEventListener('beforeunload', warnUnsavedNotes);
+    return () => window.removeEventListener('beforeunload', warnUnsavedNotes);
+  }, [hasUnsavedCloudNotes]);
   /* ---- Navigation & Theme ---- */
   const [view, setView] = useState<ViewId>('home');
   const palette = useSyncExternalStore(
@@ -985,20 +1015,28 @@ export default function Home() {
   );
   const savedEarlierNote = useSyncExternalStore(subscribeToPatients, getSavedEarlier, emptyBrowserNote);
   const savedLaterNote = useSyncExternalStore(subscribeToPatients, getSavedLater, emptyBrowserNote);
+  const cloudCase = cloudCases.find((item) => item.id === activeScenario.id);
+  const pendingDraft = cloudDrafts[activeScenario.id];
+  const cloudDraft = cloudCase && pendingDraft && (!pendingDraft.savedVersion || cloudCase.version < pendingDraft.savedVersion)
+    ? pendingDraft : undefined;
+  const cloudEditPending = Boolean(cloudDraft && !cloudDraft.savedVersion);
+  const cloudEditConflict = Boolean(cloudEditPending && cloudCase && cloudDraft && cloudCase.version !== cloudDraft.baseVersion);
   const unsavedPatientNotes = unsavedNotes[activeScenario.id];
-  const earlierNoteText = isDemoPatient ? exampleEarlierNote : unsavedPatientNotes?.earlier ?? savedEarlierNote;
-  const laterNoteText = isDemoPatient ? exampleLaterNote : unsavedPatientNotes?.later ?? savedLaterNote;
+  const earlierNoteText = isDemoPatient ? exampleEarlierNote
+    : cloudUser ? cloudDraft?.earlier ?? cloudCase?.earlier ?? '' : unsavedPatientNotes?.earlier ?? savedEarlierNote;
+  const laterNoteText = isDemoPatient ? exampleLaterNote
+    : cloudUser ? cloudDraft?.later ?? cloudCase?.later ?? '' : unsavedPatientNotes?.later ?? savedLaterNote;
   const comparison = completedComparison?.patientId === activeScenario.id &&
     completedComparison.earlier === earlierNoteText && completedComparison.later === laterNoteText
     ? completedComparison : null;
   const extractResult = comparison?.result ?? null;
   const reviewVersion = comparison?.reviewVersion ?? null;
-  const getSavedNoteReviews = useCallback(() => reviewVersion && extractResult
+  const getSavedNoteReviews = useCallback(() => !cloudUser && reviewVersion && extractResult
     ? readBrowserNoteReviews(activeScenario.id, reviewVersion, extractResult.differences.map((row) => row.key))
-    : '[]', [activeScenario.id, extractResult, reviewVersion]);
+    : '[]', [activeScenario.id, cloudUser, extractResult, reviewVersion]);
   const savedNoteReviews = useSyncExternalStore(subscribeToPatients, getSavedNoteReviews, emptyBrowserReviews);
-  const noteReviewDecisions = useMemo<Record<string, NoteReviewDecision>>(() => isDemoPatient
-    ? sessionNoteReviews : Object.fromEntries(JSON.parse(savedNoteReviews)), [isDemoPatient, savedNoteReviews, sessionNoteReviews]);
+  const noteReviewDecisions = useMemo<Record<string, NoteReviewDecision>>(() => isDemoPatient || cloudUser
+    ? sessionNoteReviews : Object.fromEntries(JSON.parse(savedNoteReviews)), [cloudUser, isDemoPatient, savedNoteReviews, sessionNoteReviews]);
   const setExtractResult = useCallback((result: NoteComparisonResult | null, version: string | null = null) => {
     setNoteReviewError('');
     setCompletedComparison(result ? {
@@ -1483,12 +1521,29 @@ export default function Home() {
     navigateTo('home', false);
   }
 
-  function createPatient(event: FormEvent<HTMLFormElement>) {
+  async function createPatient(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (hostedComparePending.current) return;
+    if (hostedComparePending.current || cloudWritePending.current) return;
     const name = String(new FormData(event.currentTarget).get('patient-name') ?? '').trim();
     if (!name || name.length > 80) {
       setPatientFormError(exampleWorkspace ? 'Enter a name between 1 and 80 characters.' : 'Enter a case reference between 1 and 80 characters.');
+      return;
+    }
+    if (cloudUser) {
+      if (!cloud.connected || cloudCases.length >= CLOUD_CASE_LIMIT) return;
+      cloudWritePending.current = true;
+      setCloudWrite(true);
+      try {
+        const patient = await createCloudCase(cloudUser, name);
+        setNewCloudCase(patient);
+        setRailFilter('');
+        openPatient(toPatientScenario(patient));
+      } catch {
+        setPatientFormError('Could not create the cloud case. Check your connection and try again.');
+      } finally {
+        cloudWritePending.current = false;
+        setCloudWrite(false);
+      }
       return;
     }
     const patient = createBrowserPatient(name);
@@ -1498,6 +1553,39 @@ export default function Home() {
     }
     setRailFilter('');
     openPatient(toPatientScenario(patient));
+  }
+
+  function changeWorkspaceAccount() {
+    if (cloudWritePending.current || hostedComparePending.current) return;
+    const hasUnsavedNotes = hasUnsavedCloudNotes || Object.values(unsavedNotes).some((note) => Object.keys(note).length);
+    if (hasUnsavedNotes && !window.confirm('Switch workspaces and discard unsaved note edits?')) return;
+    void session.changeAccount(!cloudUser);
+  }
+
+  async function saveWorkspaceNotes() {
+    if (!cloudUser || !cloudCase || !cloudDraft || !cloudEditPending || cloudEditConflict
+      || !cloud.connected || cloudWritePending.current) return;
+    const { earlier, later, baseVersion } = cloudDraft;
+    const { id } = cloudCase;
+    if ([earlier, later].some((text) => Array.from(text).length > 12000)) {
+      setCloudSaveError({ id, message: 'Keep each note within 12,000 characters before saving.' });
+      return;
+    }
+    setCloudSaveError(undefined);
+    cloudWritePending.current = true;
+    setCloudWrite(true);
+    try {
+      const savedVersion = await saveCloudCaseNotes(cloudUser, { ...cloudCase, version: baseVersion }, { earlier, later });
+      setCloudDrafts((current) => ({ ...current, [id]: { ...cloudDraft, savedVersion } }));
+      setAnnouncement('Notes saved to your account.');
+    } catch (error) {
+      setCloudSaveError({ id, message: error instanceof CloudCaseConflict
+        ? 'Another tab or device changed these notes. Copy your edits before loading the saved version.'
+        : 'Could not save your edits. Keep this tab open and try again when connected.' });
+    } finally {
+      cloudWritePending.current = false;
+      setCloudWrite(false);
+    }
   }
 
   const changePalette = useCallback(
@@ -1606,6 +1694,24 @@ export default function Home() {
       return;
     }
     const id = activeScenario.id;
+    if (cloudCase) {
+      if (cloudWritePending.current) return;
+      setCloudDrafts((current) => {
+        const draft = current[id];
+        if (draft && !draft.savedVersion) return { ...current, [id]: { ...draft, [side]: value } };
+        return {
+          ...current,
+          [id]: {
+            earlier: earlierNoteText,
+            later: laterNoteText,
+            baseVersion: Math.max(cloudCase.version, draft?.savedVersion ?? 0),
+            [side]: value,
+          },
+        };
+      });
+      return;
+    }
+    if (cloudUser) return;
     const saved = saveBrowserNote(id, side, value);
     setUnsavedNotes((current) => {
       if (saved && current[id]?.[side] === undefined) return current;
@@ -1614,7 +1720,7 @@ export default function Home() {
       else next[id][side] = value;
       return next;
     });
-  }, [activeScenario.id, isDemoPatient]);
+  }, [activeScenario.id, cloudCase, cloudUser, earlierNoteText, isDemoPatient, laterNoteText]);
 
   const handleClearNotes = useCallback(() => {
     noteCompareRun.current++;
@@ -1970,7 +2076,7 @@ export default function Home() {
     (diff: MentionDifference, choice: NoteReviewDecision) => {
       const prev = noteReviewDecisions[diff.key];
       const next: NoteReviewDecision | null = prev === choice ? null : choice;
-      if (isDemoPatient) {
+      if (isDemoPatient || cloudUser) {
         setNoteReviewDecisions((curr) => {
           const copy = { ...curr };
           if (next) copy[diff.key] = next;
@@ -2000,7 +2106,7 @@ export default function Home() {
             : `Cleared review for ${diff.name}`,
       );
     },
-    [activeScenario.id, addAudit, isDemoPatient, noteReviewDecisions, reviewVersion],
+    [activeScenario.id, addAudit, cloudUser, isDemoPatient, noteReviewDecisions, reviewVersion],
   );
 
   const handleExportFollowUps = useCallback(() => {
@@ -2507,7 +2613,7 @@ export default function Home() {
         jump('Note comparison', compareStatus, 'extract', 'Open Compare notes', 'Compare earlier and later notes'),
         metric('Ask about a patient', patientName, undefined, 'Open AI chat', openChartChat),
         jump('Suggestion queue', openTriageCount, 'triage', 'Open suggestions', 'Decisions pending'),
-        metric('Patients in this browser', patientScenarios.length),
+        metric(cloudUser ? 'Cases in your account' : 'Patients in this browser', patientScenarios.length),
         jump('Activity log', audit.length, 'audit', 'Open session activity', audit[0]?.action),
         exampleWorkspace ? jump('Model connection', serviceStatus, 'models', 'Open connections')
           : jump('External connections', 'None configured', 'models', 'View processing settings'),
@@ -2975,7 +3081,9 @@ export default function Home() {
                     <h1 className="h1" ref={headingRef} tabIndex={-1}>
                       {view === 'patient' ? cleanPatientName(activeScenario.patientLabel) : 'Home'}
                     </h1>
-                    {view === 'patient' && <p>{activeScenario.patientId}{isDemoPatient ? ' · Outpatient to discharge' : ' · Saved in this browser'}</p>}
+                    {view === 'patient' && <p>{activeScenario.patientId}
+                      {isDemoPatient ? ' · Outpatient to discharge' : cloudUser ? ' · Saved in your account' : ' · Saved in this browser'}
+                    </p>}
                   </div>
                   {view === 'patient' && !isDemoPatient && (
                     <button type="button" className="btn primary" onClick={() => navigateTo('extract')}>Edit patient notes</button>
@@ -2989,12 +3097,33 @@ export default function Home() {
                     <button type="button" className="btn" onClick={() => navigateTo('extract')}>Start comparison</button>
                   </div>}
                 </header>
+                {view === 'home' && cloudWorkspaceEnabled && (
+                  <section className="patient-create-form" aria-labelledby="workspace-storage-heading">
+                    <h2 id="workspace-storage-heading" className="h2">{cloudUser ? 'Account workspace' : 'Browser workspace'}</h2>
+                    <p>{cloudUser
+                      ? 'You are signed in. Saved cases and notes are available on your signed-in devices.'
+                      : 'Your cases stay in this browser. Invited teammates can sign in to open their account workspace.'}
+                    </p>
+                    {cloud.loading && <p role="status">Connecting to your cloud workspace…</p>}
+                    {cloudUser && !cloud.loading && !cloud.connected && !cloud.error &&
+                      <p role="status">Connection lost. Cloud saves are paused until you reconnect.</p>}
+                    {cloudCases.length >= CLOUD_CASE_LIMIT && <p role="status">This workspace has reached its 100-case limit.</p>}
+                    {(session.error || cloud.error) && <p role="alert">{session.error || cloud.error}</p>}
+                    <div className="patient-create-actions">
+                      <button type="button" className="btn quiet" disabled={session.pending || cloudWrite || hostedCompareBusy}
+                        onClick={changeWorkspaceAccount}>
+                        {cloudUser ? 'Sign out' : 'Sign in with Google'}
+                      </button>
+                      {cloud.error && <button type="button" className="btn quiet" onClick={cloud.retry}>Retry connection</button>}
+                    </div>
+                  </section>
+                )}
                 {view === 'home' && creatingPatient && (
                   <form className="patient-create-form" onSubmit={createPatient} aria-labelledby="new-patient-title">
                     <h2 id="new-patient-title" className="h2">Add patient</h2>
                     <p id="new-patient-help">
                       {exampleWorkspace ? 'Use a fictional name.' : 'Use a de-identified case reference without a patient name or medical record number.'}
-                      {' '}Cases and note drafts are saved in this browser and available in its DiffMD tabs.
+                      {' '}{cloudUser ? 'Cases are saved in your account.' : 'Cases and note drafts are saved in this browser and available in its DiffMD tabs.'}
                     </p>
                     <label htmlFor="new-patient-name">{exampleWorkspace ? 'Patient name' : 'Case reference'}</label>
                     <input id="new-patient-name" name="patient-name" className="search" required maxLength={80}
@@ -3002,7 +3131,10 @@ export default function Home() {
                       onChange={() => setPatientFormError('')} />
                     {patientFormError && <p role="alert">{patientFormError}</p>}
                     <div className="patient-create-actions">
-                      <button type="submit" className="btn primary">Create patient</button>
+                      <button type="submit" className="btn primary"
+                        disabled={cloudWrite || (Boolean(cloudUser) && !cloud.connected) || cloudCases.length >= CLOUD_CASE_LIMIT}>
+                        {cloudWrite ? 'Saving…' : 'Create patient'}
+                      </button>
                       <button type="button" className="btn quiet" onClick={() => {
                         setCreatingPatient(false);
                         setFocusHeadingNonce((n) => n + 1);
@@ -3112,7 +3244,9 @@ export default function Home() {
                   </div>
 
                   <p className="extract-scope" style={{ marginTop: 8 }}>
-                    {!isDemoPatient ? 'Enter de-identified notes only. Drafts save in this browser. Run the comparison again after reloading.'
+                    {!isDemoPatient ? cloudUser
+                      ? 'Enter de-identified notes only. Save changes to sync them to your account. Comparison results and review decisions stay in this tab.'
+                      : 'Enter de-identified notes only. Drafts save in this browser. Run the comparison again after reloading.'
                       : HOSTED_COMPARE_ENABLED
                       ? 'Qwen 4B can read the bundled example. Edited or alternate example notes use rules in this browser. Use fictional records only.'
                       : 'Use example records only. The status above identifies the comparison method.'}
@@ -3165,8 +3299,8 @@ export default function Home() {
                         <textarea
                           id="earlier-note"
                           rows={5}
-                          readOnly={hostedCompareBusy}
-                          placeholder="Enter example note text"
+                          readOnly={hostedCompareBusy || cloudWrite}
+                          placeholder="Paste the earlier note"
                           value={earlierNoteText}
                           onChange={(e) => {
                             updateNote('earlier', e.target.value);
@@ -3188,8 +3322,8 @@ export default function Home() {
                         <textarea
                           id="later-note"
                           rows={5}
-                          readOnly={hostedCompareBusy}
-                          placeholder="Enter example note text"
+                          readOnly={hostedCompareBusy || cloudWrite}
+                          placeholder="Paste the later note"
                           value={laterNoteText}
                           onChange={(e) => {
                             updateNote('later', e.target.value);
@@ -3209,6 +3343,23 @@ export default function Home() {
                       <button className="btn primary" type="submit" disabled={hostedCompareBusy}>
                         {hostedCompareBusy ? 'Comparing…' : 'Compare notes'}
                       </button>
+                      {cloudCase && (
+                        <button type="button" className="btn" disabled={cloudWrite || !cloudEditPending || cloudEditConflict || !cloud.connected}
+                          onClick={() => void saveWorkspaceNotes()}>
+                          {cloudWrite ? 'Saving…' : 'Save notes'}
+                        </button>
+                      )}
+                      {cloudEditPending && (
+                        <button type="button" className="btn quiet" disabled={cloudWrite} onClick={() => {
+                          if (!window.confirm('Discard your unsaved edits and load the saved notes?')) return;
+                          setCloudDrafts((current) => {
+                            const next = { ...current };
+                            delete next[activeScenario.id];
+                            return next;
+                          });
+                          setCloudSaveError(undefined);
+                        }}>Discard edits</button>
+                      )}
                       {isDemoPatient && <button
                         className="btn quiet"
                         type="button"
@@ -3222,13 +3373,19 @@ export default function Home() {
                         className="btn quiet"
                         type="button"
                         id="extraction-reset"
-                        disabled={hostedCompareBusy}
+                        disabled={hostedCompareBusy || cloudWrite}
                         onClick={handleClearNotes}
                       >
                         Clear notes
                       </button>
                     </div>
                   </form>
+                  {cloudEditConflict
+                    ? <p role="alert">Another tab or device saved changes. Copy your edits before discarding them.</p>
+                    : cloudSaveError?.id === activeScenario.id
+                      ? <p role="alert">{cloudSaveError.message}</p>
+                      : cloudCase && <p role="status">{!cloud.connected ? 'Cloud connection lost. Keep this tab open.'
+                        : cloudEditPending ? 'Unsaved note edits' : 'Notes are synced'}</p>}
 
                   {extractError && (
                     <p id="extraction-error" className="extract-error" role="alert">

@@ -1,0 +1,34 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function ownsWorkspace(uid) {
+      return request.auth != null
+        && request.auth.uid == uid
+        && request.auth.token.email_verified == true
+        && request.auth.token.firebase.sign_in_provider == 'google.com'
+        && exists(/databases/$(database)/documents/workspaceAccounts/$(request.auth.token.email));
+    }
+
+    function validCase(id) {
+      let data = request.resource.data;
+      return id.matches('^SYNC-[A-F0-9]{32}$')
+        && data.keys().hasAll(['name', 'earlier', 'later', 'version'])
+        && data.keys().hasOnly(['name', 'earlier', 'later', 'version'])
+        && data.name is string && data.name.size() > 0 && data.name.size() <= 80
+        && data.earlier is string && data.earlier.size() <= 12000
+        && data.later is string && data.later.size() <= 12000
+        && data.version is int;
+    }
+
+    match /workspaces/{uid}/cases/{id} {
+      allow get: if ownsWorkspace(uid);
+      allow list: if ownsWorkspace(uid) && request.query.limit <= 100;
+      allow create: if ownsWorkspace(uid) && validCase(id)
+        && request.resource.data.version == 1
+        && request.resource.data.earlier == '' && request.resource.data.later == '';
+      allow update: if ownsWorkspace(uid) && validCase(id)
+        && request.resource.data.name == resource.data.name
+        && request.resource.data.version == resource.data.version + 1;
+    }
+  }
+}

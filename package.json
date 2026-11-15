@@ -12,6 +12,7 @@
     "eval:model": "node tests/model-eval/run_model_eval.mjs"
   },
   "dependencies": {
+    "firebase": "13.3.0",
     "next": "16.4.6",
     "react": "19.3.0",
     "react-dom": "19.3.0"
@@ -30,5 +31,8 @@
     "tailwindcss": "4.3.3",
     "typescript": "^5",
     "vitest": "^4.1.12"
+  },
+  "overrides": {
+    "@grpc/grpc-js": "1.14.7"
   }
 }

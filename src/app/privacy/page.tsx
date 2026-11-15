@@ -17,14 +17,25 @@ export default function PrivacyPage() {
       <section aria-labelledby="privacy-browser">
         <h2 id="privacy-browser">What stays in your browser</h2>
         <p>
-          Case references, note drafts, medication review decisions and widget layouts are stored in this
-          browser. Your DiffMD tabs can access that storage. Clear this site&apos;s browser storage to remove
-          saved data and preferences.
+          In the browser workspace, case references, note drafts and medication review decisions are stored
+          in this browser. Widget layouts also stay in this browser. Clear this site&apos;s browser storage to
+          remove these saved data and preferences.
         </p>
         <p>
           Comparison results, activity and chat history are kept in the current tab. Reload the page and
           compare your saved notes again to rebuild the results and recover decisions for that exact note pair.
         </p>
+      </section>
+
+      <section aria-labelledby="privacy-account">
+        <h2 id="privacy-account">Account workspace</h2>
+        <p>
+          Google sign-in shares your account identifier and verified email address with Firebase
+          Authentication. Invited accounts can store de-identified case references and notes in
+          Cloud Firestore. Notes are sent only when you save them. Signing in does not upload your
+          browser workspace. Cloud review decisions and unsaved edits are held in the current tab.
+        </p>
+        <p>Sign out when you finish on a shared device. Clearing browser storage does not delete cloud cases.</p>
       </section>
 
       <section aria-labelledby="privacy-processing">
