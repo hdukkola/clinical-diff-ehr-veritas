@@ -18,7 +18,7 @@ import {
 } from '@/lib/diff';
 import type { SnapshotComparisonReport } from '@/lib/types';
 
-export type CockpitViewId = 'extract' | 'diff' | 'triage' | 'eval' | 'audit' | 'models';
+export type CockpitViewId = 'extract' | 'diff' | 'triage' | 'audit' | 'models';
 export type CockpitDiffFilter = 'all' | 'changed' | 'onlyA' | 'onlyB' | 'same';
 export type CockpitNavigateFilter = CockpitDiffFilter | string;
 export type CockpitReviewDecision = 'verified' | 'flagged' | 'deferred';
@@ -29,7 +29,6 @@ export type CockpitWidgetId =
   | 'provenance-health'
   | 'triage-queue'
   | 'model-socket'
-  | 'eval-metrics'
   | 'session-activity';
 
 export interface CockpitSnapshotEntry {
@@ -41,16 +40,6 @@ export interface CockpitSnapshotEntry {
 export interface CockpitTriageSuggestion {
   id: string;
   decision: 'accepted' | 'override-pending' | 'overridden' | 'skipped' | null;
-}
-
-export interface CockpitEvalSummary {
-  ts: string;
-  totalCases: number;
-  precision: number;
-  recall: number;
-  exactMatch: number;
-  heldOutCases?: number;
-  scenarioCases?: number;
 }
 
 export interface CockpitAuditEntry {
@@ -77,7 +66,6 @@ export interface CockpitWidgetsProps {
   activeReport: CockpitReportSummary | null;
   triageByScenario: Record<string, ReadonlyArray<CockpitTriageSuggestion>>;
   socketStatus: SocketStatus;
-  evalSummary: CockpitEvalSummary | null;
   audit: ReadonlyArray<CockpitAuditEntry>;
   onNavigate: (view: CockpitViewId, filter?: CockpitNavigateFilter) => void;
   onSelectEvidenceChange?: (medId: string) => void;
@@ -91,7 +79,6 @@ export const DEFAULT_COCKPIT_WIDGET_ORDER: CockpitWidgetId[] = [
   'provenance-health',
   'triage-queue',
   'model-socket',
-  'eval-metrics',
   'session-activity',
 ];
 
@@ -101,7 +88,6 @@ const WIDGET_TITLES: Record<CockpitWidgetId, string> = {
   'provenance-health': 'Provenance & Evidence Health',
   'triage-queue': 'AI Triage Queue',
   'model-socket': 'Note Extraction & Model Socket',
-  'eval-metrics': 'Evaluation Metrics',
   'session-activity': 'Session Activity',
 };
 
@@ -111,7 +97,6 @@ const WIDGET_SUBTITLES: Record<CockpitWidgetId, string> = {
   'provenance-health': 'Evidence link resolution',
   'triage-queue': 'AI suggestion status',
   'model-socket': 'Extraction runtime',
-  'eval-metrics': 'Extraction accuracy',
   'session-activity': 'Recent actions',
 };
 
@@ -122,7 +107,6 @@ const WIDGET_SPAN: Record<CockpitWidgetId, 4 | 6> = {
   'provenance-health': 4,
   'triage-queue': 4,
   'model-socket': 4,
-  'eval-metrics': 6,
   'session-activity': 6,
 };
 
@@ -233,11 +217,6 @@ function buildActivitySparkline(audit: ReadonlyArray<CockpitAuditEntry>): Sparkl
   const areaPath = `${linePath} L ${last.x} ${SPARK_BASE} L ${first.x} ${SPARK_BASE} Z`;
 
   return { linePath, areaPath, lastX: last.x, lastY: last.y, buckets };
-}
-
-function clampRatio(value: number): number {
-  if (!Number.isFinite(value)) return 0;
-  return Math.max(0, Math.min(1, value));
 }
 
 function arraysEqual(a: ReadonlyArray<CockpitWidgetId>, b: ReadonlyArray<CockpitWidgetId>): boolean {
@@ -542,7 +521,6 @@ export function CockpitWidgets({
   activeReport,
   triageByScenario,
   socketStatus,
-  evalSummary,
   audit,
   onNavigate,
   onSelectEvidenceChange,
@@ -1102,105 +1080,6 @@ export function CockpitWidgets({
         );
       }
 
-      case 'eval-metrics': {
-        const bars = [
-          {
-            key: 'precision',
-            label: 'Precision',
-            val: evalSummary ? clampRatio(evalSummary.precision) : 0,
-            raw: evalSummary ? evalSummary.precision.toFixed(2) : '—',
-            color: 'var(--accent)',
-          },
-          {
-            key: 'recall',
-            label: 'Recall',
-            val: evalSummary ? clampRatio(evalSummary.recall) : 0,
-            raw: evalSummary ? evalSummary.recall.toFixed(2) : '—',
-            color: 'var(--add)',
-          },
-          {
-            key: 'exactMatch',
-            label: 'Exact match',
-            val: evalSummary ? clampRatio(evalSummary.exactMatch) : 0,
-            raw: evalSummary ? evalSummary.exactMatch.toFixed(2) : '—',
-            color: 'var(--chg)',
-          },
-        ];
-        const trackTop = 24;
-        const trackH = 66;
-        const barW = 46;
-
-        return (
-          <button type="button" className="cw-drill-btn" onClick={() => onNavigate('eval')}>
-            <div className="cw-eval-row">
-              <svg
-                className="cw-bars-svg"
-                viewBox="0 0 240 118"
-                width="100%"
-                style={{ aspectRatio: '240 / 118' }}
-                role="img"
-                aria-label={
-                  evalSummary
-                    ? `Evaluation metrics: Precision ${evalSummary.precision.toFixed(2)}, Recall ${evalSummary.recall.toFixed(2)}, Exact Match ${evalSummary.exactMatch.toFixed(2)}`
-                    : 'Evaluation metrics not run yet'
-                }
-              >
-                <line
-                  x1="0"
-                  x2="240"
-                  y1={trackTop + trackH / 2}
-                  y2={trackTop + trackH / 2}
-                  stroke="var(--line-2)"
-                  strokeWidth="1"
-                  strokeDasharray="2 4"
-                />
-                {bars.map((bar, idx) => {
-                  const cx = 40 + idx * 80;
-                  const x = cx - barW / 2;
-                  const fillH = evalSummary ? Math.max(4, bar.val * trackH) : 0;
-                  return (
-                    <g key={bar.key}>
-                      <text x={cx} y="14" textAnchor="middle" className="cw-bar-val">
-                        {bar.raw}
-                      </text>
-                      <rect x={x} y={trackTop} width={barW} height={trackH} rx="7" fill="var(--sunk)" />
-                      {fillH > 0 && (
-                        <rect
-                          x={x}
-                          y={trackTop + trackH - fillH}
-                          width={barW}
-                          height={fillH}
-                          rx="7"
-                          fill={bar.color}
-                        />
-                      )}
-                      <text x={cx} y="110" textAnchor="middle" className="cw-bar-lbl">
-                        {bar.label}
-                      </text>
-                    </g>
-                  );
-                })}
-              </svg>
-
-              <dl className="cw-stat-list">
-                <div>
-                  <dt>Total</dt>
-                  <dd>{evalSummary ? `${evalSummary.totalCases} cases` : '—'}</dd>
-                </div>
-                <div>
-                  <dt>Held-out</dt>
-                  <dd>{evalSummary?.heldOutCases != null ? `${evalSummary.heldOutCases} cases` : '—'}</dd>
-                </div>
-                <div>
-                  <dt>Scenario</dt>
-                  <dd>{evalSummary?.scenarioCases != null ? `${evalSummary.scenarioCases} cases` : '—'}</dd>
-                </div>
-              </dl>
-            </div>
-          </button>
-        );
-      }
-
       case 'session-activity': {
         const mix: BarSegment[] = [
           { key: 'clinician', value: auditStats.clinician, color: 'var(--accent)' },
@@ -1420,8 +1299,6 @@ export function CockpitWidgets({
                         onNavigate('triage');
                       } else if (id === 'model-socket') {
                         onNavigate('models');
-                      } else if (id === 'eval-metrics') {
-                        onNavigate('eval');
                       } else {
                         onNavigate('audit');
                       }

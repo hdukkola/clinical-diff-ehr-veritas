@@ -23,7 +23,6 @@ import {
   compareSnapshots,
   EVIDENCE_STATE_LABELS,
   getConflictingEvidencePairs,
-  normalizeNoteText,
   searchChartRecords,
   type ChartSearchMatch,
   type NoteRegimenChangeCategory,
@@ -41,8 +40,7 @@ import {
   type SocketReadiness,
   type SocketStatus,
 } from '@/lib/ai-socket';
-import { getSyntheticScenario, syntheticScenarios, type SyntheticScenario } from '@/lib/fixtures';
-import { hfDatasetSources, hfNoteComparisonPairs, hfScenarios } from '@/lib/hf-fixtures';
+import { getSyntheticScenario, type SyntheticScenario } from '@/lib/fixtures';
 import {
   CockpitWidgets,
   DEFAULT_COCKPIT_WIDGET_ORDER,
@@ -50,7 +48,6 @@ import {
   type CockpitViewId,
   type CockpitWidgetId,
 } from '@/components/CockpitWidgets';
-import { BacklogCatalogDrawer } from '@/components/BacklogCatalogDrawer';
 import type {
   Medication,
   MedicationChange,
@@ -62,7 +59,7 @@ import type {
 /* ------------------------------------------------------------------
    Constants & Palettes
    ------------------------------------------------------------------ */
-type ViewId = 'home' | 'patient' | 'extract' | 'diff' | 'triage' | 'eval' | 'audit' | 'models';
+type ViewId = 'home' | 'patient' | 'extract' | 'diff' | 'triage' | 'audit' | 'models';
 type PaletteId = 'void' | 'dimmed' | 'obsidian' | 'forest';
 type DiffFilter = 'all' | 'changed' | 'onlyA' | 'onlyB' | 'same';
 type ReviewDecision = 'verified' | 'flagged' | 'deferred';
@@ -76,7 +73,6 @@ const VIEW_NAMES: Record<ViewId, string> = {
   extract: 'Compare notes',
   diff: 'Snapshot review',
   triage: 'Review suggestions',
-  eval: 'Evaluations',
   audit: 'Session activity',
   models: 'Models & data',
 };
@@ -86,7 +82,6 @@ const WORKSPACE_VIEWS: { id: ViewId; label: string }[] = [
   { id: 'extract', label: 'Compare notes' },
   { id: 'diff', label: 'Snapshot review' },
   { id: 'triage', label: 'Review suggestions' },
-  { id: 'eval', label: 'Evaluations' },
   { id: 'audit', label: 'Session activity' },
 ];
 
@@ -153,6 +148,11 @@ const DIFF_GLYPHS: Record<'changed' | 'onlyA' | 'onlyB' | 'same', { glyph: strin
   onlyB: { glyph: '+', label: 'Only in B' },
   same: { glyph: '·', label: 'Unchanged' },
 };
+
+const DEMO_PATIENT = getSyntheticScenario('scenario-morgan-lee-baseline')!;
+const DEMO_MEDICATION_TERMS = [
+  ...new Set([...DEMO_PATIENT.earlier.medications, ...DEMO_PATIENT.later.medications].map((medication) => medication.name)),
+];
 
 const DEFAULT_EARLIER_NOTE = SYNTHETIC_ASSISTANT_NOTES.earlier.text;
 const DEFAULT_LATER_NOTE = SYNTHETIC_ASSISTANT_NOTES.later.text;
@@ -627,7 +627,7 @@ function cleanPatientName(label: string): string {
 }
 
 /* ------------------------------------------------------------------
-   Connectors & Held-out Evaluation Set
+   Connectors
    ------------------------------------------------------------------ */
 type ConnectionState = 'idle' | 'checking' | 'ok' | 'degraded' | 'error';
 
@@ -794,95 +794,6 @@ type AuditEntry = {
   medicationId?: string;
 };
 
-type EvaluationOutcome = 'passed' | 'failed' | 'timedOut';
-
-type EvaluationCounts = Record<EvaluationOutcome, number> & { tested: number };
-
-const EVALUATION_FAMILIES = [
-  ['heldOut', 'Held-out labels'],
-  ['workspace', 'Curated workspace fixtures'],
-  ['hf', 'Hugging Face cases'],
-] as const;
-
-type EvaluationFamily = (typeof EVALUATION_FAMILIES)[number][0];
-
-type EvalSummary = {
-  ts: string;
-  families: Record<EvaluationFamily, EvaluationCounts>;
-  totals: EvaluationCounts;
-  precision: number;
-  recall: number;
-  exactMatch: number;
-};
-
-const HELDOUT_CASES: {
-  id: string;
-  a: Snapshot;
-  b: Snapshot;
-  gold: Record<string, 'added' | 'removed' | 'changed' | 'same'>;
-}[] = [
-  {
-    id: 'heldout-1',
-    a: {
-      id: 'ho-1a',
-      source: 'Held-out outpatient',
-      recordedAt: '2026-01-10',
-      medications: [
-        { id: 'x', name: 'Med X', dose: '10 mg', route: 'oral', frequency: 'daily' },
-        { id: 'y', name: 'Med Y', dose: '1 g', route: 'oral', frequency: 'twice daily' },
-      ],
-    },
-    b: {
-      id: 'ho-1b',
-      source: 'Held-out discharge',
-      recordedAt: '2026-01-14',
-      medications: [{ id: 'x', name: 'Med X', dose: '10 mg', route: 'oral', frequency: 'daily' }],
-    },
-    gold: { x: 'same', y: 'removed' },
-  },
-  {
-    id: 'heldout-2',
-    a: {
-      id: 'ho-2a',
-      source: 'Held-out intake',
-      recordedAt: '2026-02-01',
-      medications: [{ id: 'p', name: 'Med P', dose: '5 mg', route: 'oral', frequency: 'daily' }],
-    },
-    b: {
-      id: 'ho-2b',
-      source: 'Held-out clinic',
-      recordedAt: '2026-02-05',
-      medications: [
-        { id: 'p', name: 'Med P', dose: '5 mg', route: 'oral', frequency: null },
-        { id: 'q', name: 'Med Q', dose: '2 mg', route: 'oral', frequency: 'nightly' },
-      ],
-    },
-    gold: { p: 'changed', q: 'added' },
-  },
-  {
-    id: 'heldout-3',
-    a: {
-      id: 'ho-3a',
-      source: 'Held-out primary',
-      recordedAt: '2026-03-01',
-      medications: [
-        { id: 'm', name: 'Med M', dose: '25 mcg', route: 'oral', frequency: 'daily' },
-        { id: 'n', name: 'Med N', dose: '40 mg', route: 'IV', frequency: 'q12h' },
-      ],
-    },
-    b: {
-      id: 'ho-3b',
-      source: 'Held-out follow-up',
-      recordedAt: '2026-03-08',
-      medications: [
-        { id: 'm', name: 'Med M', dose: '50 mcg', route: 'oral', frequency: 'daily' },
-        { id: 'n', name: 'Med N', dose: '40 mg', route: 'IV', frequency: 'q12h' },
-      ],
-    },
-    gold: { m: 'changed', n: 'same' },
-  },
-];
-
 function subscribePalette(cb: () => void) {
   window.addEventListener('storage', cb);
   window.addEventListener('cd-palette-change', cb);
@@ -910,30 +821,10 @@ function getPaletteServerSnapshot(): PaletteId {
    Main Component
    ------------------------------------------------------------------ */
 export default function Home() {
-  const allScenarios = useMemo(() => {
-    const map = new Map<string, SyntheticScenario>();
-    for (const s of syntheticScenarios) map.set(s.id, s);
-    for (const s of hfScenarios) map.set(s.id, s);
-    return [...map.values()];
-  }, []);
-
-  const patientScenarios = useMemo(
-    () => allScenarios.filter((scenario) => scenario.id === 'scenario-morgan-lee-baseline'),
-    [allScenarios],
-  );
-
-  const allMedicationTerms = useMemo(() => {
-    const terms = new Set<string>();
-    for (const s of allScenarios) {
-      for (const m of s.earlier.medications) terms.add(m.name);
-      for (const m of s.later.medications) terms.add(m.name);
-    }
-    for (const p of hfNoteComparisonPairs) {
-      for (const m of p.referenceMedications) terms.add(m);
-    }
-    return [...terms];
-  }, [allScenarios]);
-
+  const [localPatients, setLocalPatients] = useState<SyntheticScenario[]>([]);
+  const [creatingPatient, setCreatingPatient] = useState(false);
+  const [patientFormError, setPatientFormError] = useState('');
+  const patientScenarios = useMemo(() => [DEMO_PATIENT, ...localPatients], [localPatients]);
   /* ---- Navigation & Theme ---- */
   const [view, setView] = useState<ViewId>('home');
   const palette = useSyncExternalStore(
@@ -952,19 +843,10 @@ export default function Home() {
   const [focusHeadingNonce, setFocusHeadingNonce] = useState(0);
   const [widgetOrder, setWidgetOrder] = useState<CockpitWidgetId[]>(DEFAULT_COCKPIT_WIDGET_ORDER);
   const [pinnedOpen, setPinnedOpen] = useState(false);
-  const [backlogOpen, setBacklogOpen] = useState(false);
-  const backlogTriggerRef = useRef<HTMLButtonElement | null>(null);
-  const closeBacklog = useCallback(() => {
-    setBacklogOpen(false);
-    requestAnimationFrame(() => backlogTriggerRef.current?.focus());
-  }, []);
 
   /* ---- Compare notes state ---- */
-  const [selectedPresetId, setSelectedPresetId] = useState<string>('default');
   const [earlierNoteText, setEarlierNoteText] = useState<string>(DEFAULT_EARLIER_NOTE);
   const [laterNoteText, setLaterNoteText] = useState<string>(DEFAULT_LATER_NOTE);
-  const [earlierNoteLabel, setEarlierNoteLabel] = useState<string>('Earlier note');
-  const [laterNoteLabel, setLaterNoteLabel] = useState<string>('Discharge note');
   const [extractError, setExtractError] = useState<string>('');
   const [extractStatusText, setExtractStatusText] = useState<string>(
     'Standby · local extractor',
@@ -975,9 +857,15 @@ export default function Home() {
   const [socketStatus, setSocketStatus] = useState<SocketStatus>(INITIAL_SOCKET_STATUS);
   const [extractResult, setExtractResult] = useState<NoteComparisonResult | null>(null);
   const [noteReviewDecisions, setNoteReviewDecisions] = useState<Record<string, NoteReviewDecision>>({});
+  const [comparisonDrafts, setComparisonDrafts] = useState(() => new Map<string, {
+    earlier: string;
+    later: string;
+    result: NoteComparisonResult | null;
+    decisions: Record<string, NoteReviewDecision>;
+  }>());
 
   /* ---- Snapshot review state ---- */
-  const [selectedScenarioId, setSelectedScenarioId] = useState<string>('scenario-morgan-lee-baseline');
+  const [selectedScenarioId, setSelectedScenarioId] = useState<string>(DEMO_PATIENT.id);
   const [diffTab, setDiffTab] = useState<DiffTab>('diff');
   const [diffFilter, setDiffFilter] = useState<DiffFilter>('all');
   const [selectedMedId, setSelectedMedId] = useState<string | null>(null);
@@ -992,18 +880,9 @@ export default function Home() {
   const [reviews, setReviews] = useState<Record<string, ReviewDecision>>({});
   const [notes, setNotes] = useState<Record<string, string>>({});
 
-  /* ---- Triage, Eval, Audit, Connections ---- */
+  /* ---- Triage, Audit, Connections ---- */
   const [triageByScenario, setTriageByScenario] = useState<Record<string, TriageSuggestion[]>>({});
-  const [evalSummary, setEvalSummary] = useState<EvalSummary | null>(null);
-  const [audit, setAudit] = useState<AuditEntry[]>([
-    {
-      id: 'aud-init',
-      ts: '2026-11-14T00:00:00.000Z',
-      actor: 'System',
-      action: 'Session started',
-      target: 'synthetic fixtures',
-    },
-  ]);
+  const [audit, setAudit] = useState<AuditEntry[]>([]);
   const [auditFilter, setAuditFilter] = useState<string>('all');
   const [modelsTab, setModelsTab] = useState<ModelsTab>('connections');
   const [connections, setConnections] = useState<ConnectionItem[]>(INITIAL_CONNECTIONS);
@@ -1029,16 +908,12 @@ export default function Home() {
   /* ---- Derived Data ---- */
   const activeScenario = useMemo(
     () =>
-      allScenarios.find((s) => s.id === selectedScenarioId) ??
-      getSyntheticScenario(selectedScenarioId) ??
-      allScenarios[0],
-    [allScenarios, selectedScenarioId],
+      patientScenarios.find((s) => s.id === selectedScenarioId) ?? DEMO_PATIENT,
+    [patientScenarios, selectedScenarioId],
   );
-
-  const activePreset = useMemo(
-    () => hfNoteComparisonPairs.find((p) => p.id === selectedPresetId) ?? null,
-    [selectedPresetId],
-  );
+  const isDemoPatient = activeScenario.id === DEMO_PATIENT.id;
+  const earlierNoteLabel = 'Earlier note';
+  const laterNoteLabel = isDemoPatient ? 'Discharge note' : 'Later note';
 
   const activeReport = useMemo(
     () => analyzeSnapshots(activeScenario.earlier, activeScenario.later),
@@ -1132,10 +1007,12 @@ export default function Home() {
   }, [extractResult, view]);
 
   useEffect(() => {
+    if (view === 'home' && creatingPatient) document.getElementById('new-patient-name')?.focus();
+  }, [creatingPatient, view]);
+
+  useEffect(() => {
     if (focusHeadingNonce === 0) return;
-    requestAnimationFrame(() => {
-      headingRef.current?.focus();
-    });
+    headingRef.current?.focus();
   }, [focusHeadingNonce]);
 
   useEffect(() => {
@@ -1211,6 +1088,7 @@ export default function Home() {
               typeof (item as AuditEntry).id === 'string' &&
               typeof (item as AuditEntry).ts === 'string' &&
               typeof (item as AuditEntry).actor === 'string' &&
+              (item as AuditEntry).actor !== 'Eval' &&
               typeof (item as AuditEntry).action === 'string' &&
               typeof (item as AuditEntry).target === 'string',
           );
@@ -1219,11 +1097,7 @@ export default function Home() {
               const seen = new Set(prev.map((a) => a.id));
               const incoming = hydratedAudit.filter((entry) => !seen.has(entry.id));
               if (incoming.length === 0) return prev;
-              const initIdx = prev.findIndex((a) => a.id === 'aud-init');
-              if (initIdx === -1) {
-                return [...prev, ...incoming];
-              }
-              return [...prev.slice(0, initIdx), ...incoming, ...prev.slice(initIdx)];
+              return [...prev, ...incoming];
             });
           }
         }
@@ -1268,9 +1142,9 @@ export default function Home() {
     ) => {
       const entry = createAuditEntry(actor, action, target, meta);
       setAudit((prev) => [entry, ...prev]);
-      void persistSessionUpdate({ auditEntry: entry });
+      if (isDemoPatient) void persistSessionUpdate({ auditEntry: entry });
     },
-    [createAuditEntry, persistSessionUpdate],
+    [createAuditEntry, isDemoPatient, persistSessionUpdate],
   );
 
   const navigateTo = useCallback((nextView: ViewId, focusHeading = true) => {
@@ -1453,22 +1327,79 @@ export default function Home() {
     });
   }, []);
 
-  const selectPatient = useCallback(
-    (scenarioId: string) => {
-      const targetScenario = patientScenarios.find((scenario) => scenario.id === scenarioId);
-      if (!targetScenario) return;
+  const openPatient = useCallback(
+    (targetScenario: SyntheticScenario) => {
+      if (hostedCompareBusy) return;
+      if (targetScenario.id !== selectedScenarioId) {
+        const draft = {
+          earlier: earlierNoteText,
+          later: laterNoteText,
+          result: extractResult,
+          decisions: noteReviewDecisions,
+        };
+        setComparisonDrafts((current) => new Map(current).set(selectedScenarioId, draft));
+        const next = comparisonDrafts.get(targetScenario.id);
+        const openingExample = targetScenario.id === DEMO_PATIENT.id;
+        setEarlierNoteText(next?.earlier ?? (openingExample ? DEFAULT_EARLIER_NOTE : ''));
+        setLaterNoteText(next?.later ?? (openingExample ? DEFAULT_LATER_NOTE : ''));
+        setExtractResult(next?.result ?? null);
+        setNoteReviewDecisions(next?.decisions ?? {});
+        setExtractError('');
+        setChartSearchQuery('');
+        setActiveCitationByMed({});
+        setDiffTab('diff');
+      }
       setSelectedScenarioId(targetScenario.id);
       setDiffFilter('all');
       setSelectedMedId(null);
       setEvidenceReturn(null);
       setActiveExternalRecordId(null);
       setMobileNavOpen(false);
+      setCreatingPatient(false);
       setView('patient');
       setAnnouncement(`Selected ${cleanPatientName(targetScenario.patientLabel)}`);
       setFocusHeadingNonce((n) => n + 1);
     },
-    [patientScenarios],
+    [comparisonDrafts, earlierNoteText, extractResult, hostedCompareBusy, laterNoteText, noteReviewDecisions, selectedScenarioId],
   );
+
+  const selectPatient = useCallback((scenarioId: string) => {
+    const patient = patientScenarios.find((scenario) => scenario.id === scenarioId);
+    if (patient) openPatient(patient);
+  }, [openPatient, patientScenarios]);
+
+  function showPatientForm() {
+    if (hostedComparePending.current) return;
+    setPatientFormError('');
+    setCreatingPatient(true);
+    setMobileNavOpen(false);
+    navigateTo('home', false);
+  }
+
+  function createPatient(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (hostedComparePending.current) return;
+    const name = String(new FormData(event.currentTarget).get('patient-name') ?? '').trim();
+    if (!name || name.length > 80) {
+      setPatientFormError('Enter a name between 1 and 80 characters.');
+      return;
+    }
+    const patientId = `LOCAL-${localPatients.length + 1}`;
+    const patient: SyntheticScenario = {
+      id: patientId,
+      patientId,
+      patientLabel: name,
+      title: 'Patient workspace',
+      summary: '',
+      category: 'empty-no-change',
+      tags: [],
+      earlier: { id: `${patientId}-earlier`, source: 'Earlier medication list', recordedAt: null, medications: [] },
+      later: { id: `${patientId}-later`, source: 'Later medication list', recordedAt: null, medications: [] },
+    };
+    setLocalPatients((current) => [...current, patient]);
+    setRailFilter('');
+    openPatient(patient);
+  }
 
   const changePalette = useCallback(
     (nextPalette: PaletteId) => {
@@ -1507,13 +1438,15 @@ export default function Home() {
         return next;
       });
       setAudit((curr) => [auditEntry, ...curr]);
-      void persistSessionUpdate({
-        scenarioId: activeScenario.id,
-        medId,
-        key,
-        decision: nextDecision,
-        auditEntry,
-      });
+      if (isDemoPatient) {
+        void persistSessionUpdate({
+          scenarioId: activeScenario.id,
+          medId,
+          key,
+          decision: nextDecision,
+          auditEntry,
+        });
+      }
       setAnnouncement(
         cleared ? `Cleared ${choice} for ${medName}` : `Marked ${medName} as ${choice}`,
       );
@@ -1528,6 +1461,7 @@ export default function Home() {
       activeScenario.id,
       activeScenario.patientLabel,
       createAuditEntry,
+      isDemoPatient,
       persistSessionUpdate,
       reviews,
     ],
@@ -1557,34 +1491,14 @@ export default function Home() {
   );
 
   /* ---- Compare Notes Actions ---- */
-  const handleSelectPreset = useCallback(
-    (presetId: string) => {
-      setSelectedPresetId(presetId);
-      setExtractError('');
-      setExtractResult(null);
-      setNoteReviewDecisions({});
-      if (presetId === 'default') {
-        setEarlierNoteLabel('Earlier note');
-        setLaterNoteLabel('Discharge note');
-        setEarlierNoteText(DEFAULT_EARLIER_NOTE);
-        setLaterNoteText(DEFAULT_LATER_NOTE);
-      } else {
-        const pair = hfNoteComparisonPairs.find((p) => p.id === presetId);
-        if (pair) {
-          setEarlierNoteLabel(pair.earlierLabel || 'Earlier note');
-          setLaterNoteLabel(pair.laterLabel || 'Discharge note');
-          setEarlierNoteText(normalizeNoteText(pair.earlierNote));
-          setLaterNoteText(normalizeNoteText(pair.laterNote));
-        }
-      }
-    },
-    [],
-  );
-
   const handleLoadExample = useCallback(() => {
-    handleSelectPreset(selectedPresetId);
+    setEarlierNoteText(DEFAULT_EARLIER_NOTE);
+    setLaterNoteText(DEFAULT_LATER_NOTE);
+    setExtractError('');
+    setExtractResult(null);
+    setNoteReviewDecisions({});
     setAnnouncement('Loaded example notes');
-  }, [handleSelectPreset, selectedPresetId]);
+  }, []);
 
   const handleClearNotes = useCallback(() => {
     setEarlierNoteText('');
@@ -1719,15 +1633,13 @@ export default function Home() {
         return;
       }
 
-      const hostedExample = HOSTED_COMPARE_ENABLED && selectedPresetId === 'default' &&
+      const hostedExample = isDemoPatient && HOSTED_COMPARE_ENABLED &&
         earlierNoteText === DEFAULT_EARLIER_NOTE && laterNoteText === DEFAULT_LATER_NOTE;
       let hostedResult: NoteComparisonResult | undefined;
-      if (hostedExample || (!HOSTED_COMPARE_ENABLED && extractStatusState === 'live')) {
-        if (hostedExample) {
-          hostedComparePending.current = true;
-          setHostedCompareBusy(true);
-          setExtractResult(null);
-        }
+      if (hostedExample || (isDemoPatient && !HOSTED_COMPARE_ENABLED && extractStatusState === 'live')) {
+        hostedComparePending.current = true;
+        setHostedCompareBusy(true);
+        setExtractResult(null);
         try {
           const response = hostedExample
             ? await fetch('/api/encounter-compare', { method: 'POST', signal: AbortSignal.timeout(55_000) })
@@ -1819,23 +1731,17 @@ export default function Home() {
             return;
           }
         } finally {
-          if (hostedExample) {
-            hostedComparePending.current = false;
-            setHostedCompareBusy(false);
-          }
+          hostedComparePending.current = false;
+          setHostedCompareBusy(false);
         }
       }
-
-      const extraCandidates = activePreset
-        ? [...activePreset.referenceMedications, ...allMedicationTerms]
-        : allMedicationTerms;
 
       const baseRes = hostedResult ?? runDeterministicNoteComparison(
         earlierNoteText,
         laterNoteText,
         earlierNoteLabel,
         laterNoteLabel,
-        extraCandidates,
+        DEMO_MEDICATION_TERMS,
       );
 
       const regimenReport = compareNoteRegimens(earlierNoteText, laterNoteText);
@@ -1929,15 +1835,13 @@ export default function Home() {
       );
     },
     [
-      activePreset,
       addAudit,
-      allMedicationTerms,
       earlierNoteLabel,
       earlierNoteText,
       extractStatusState,
+      isDemoPatient,
       laterNoteLabel,
       laterNoteText,
-      selectedPresetId,
     ],
   );
 
@@ -1982,7 +1886,7 @@ export default function Home() {
       : extractResult.simulated ? 'Local standby' : 'Local model';
     const sections = flagged.map((entry) =>
       [
-        `Can you confirm whether ${entry.name} belongs on the discharge medication list?`,
+        `Can you confirm whether ${entry.name} belongs on the ${isDemoPatient ? 'discharge' : 'later'} medication list?`,
         `Source excerpts from ${entry.label.toLowerCase()}:`,
         ...entry.quotes.map(
           (quote) => `> ${formatQuoteSnippetText(quote).replace(/\r?\n/g, '\n> ')}`,
@@ -1991,7 +1895,7 @@ export default function Home() {
     );
     const text =
       [
-        'Discharge medication follow-ups',
+        isDemoPatient ? 'Discharge medication follow-ups' : 'Medication follow-ups',
         `${mode} · Review required before chart commit`,
         ...sections,
         'Review both source notes before recording a medication decision.',
@@ -2002,9 +1906,9 @@ export default function Home() {
     setAnnouncement(
       `Downloaded ${flagged.length} flagged follow-up${flagged.length === 1 ? '' : 's'}`,
     );
-  }, [addAudit, extractResult, noteReviewDecisions, showToast]);
+  }, [addAudit, extractResult, isDemoPatient, noteReviewDecisions, showToast]);
 
-  /* ---- Triage & Eval Actions ---- */
+  /* ---- Triage Actions ---- */
   const runTriage = useCallback(() => {
     if (!activeModelConn) return;
     const driver = DRIVERS.find((d) => d.id === activeModelConn.driver);
@@ -2069,81 +1973,6 @@ export default function Home() {
     showToast(`${suggestions.length} suggestions from ${activeModelConn.name}`);
   }, [activeModelConn, activeReport.changes, activeScenario, addAudit, showToast]);
 
-  const runEval = useCallback(() => {
-    let tp = 0;
-    let fp = 0;
-    let fn = 0;
-    let exact = 0;
-    let totalChecks = 0;
-
-    const totals: EvaluationCounts = { tested: 0, passed: 0, failed: 0, timedOut: 0 };
-    const families: EvalSummary['families'] = {
-      heldOut: { ...totals },
-      workspace: { ...totals },
-      hf: { ...totals },
-    };
-
-    function record(family: EvaluationFamily, outcome: EvaluationOutcome) {
-      families[family].tested++;
-      families[family][outcome]++;
-      totals.tested++;
-      totals[outcome]++;
-    }
-
-    for (const c of HELDOUT_CASES) {
-      let resMap: Map<string, MedicationChange['kind']> | undefined;
-      try {
-        resMap = new Map(compareSnapshots(c.a, c.b).map(row => [row.medicationId, row.kind]));
-      } catch {
-        // Every expected statement remains in the denominator on a comparison error.
-      }
-      let passed = true;
-      const medicationIds = new Set([...Object.keys(c.gold), ...(resMap?.keys() ?? [])]);
-      for (const medId of medicationIds) {
-        totalChecks++;
-        const goldKind = c.gold[medId];
-        const predKind = resMap ? resMap.get(medId) ?? 'same' : undefined;
-        if (predKind === goldKind) exact++;
-        else passed = false;
-        const predDiff = predKind !== undefined && predKind !== 'same';
-        const goldDiff = goldKind !== undefined && goldKind !== 'same';
-        if (predDiff && goldDiff && predKind === goldKind) {
-          tp++;
-        } else {
-          if (predDiff) fp++;
-          if (goldDiff) fn++;
-        }
-      }
-      record('heldOut', passed ? 'passed' : 'failed');
-    }
-
-    const hfScenarioIds = new Set(hfScenarios.map(scenario => scenario.id));
-    for (const scenario of allScenarios) {
-      const family = hfScenarioIds.has(scenario.id) ? 'hf' : 'workspace';
-      let passed = false;
-      try {
-        const report = analyzeSnapshots(scenario.earlier, scenario.later);
-        const rerun = analyzeSnapshots(scenario.earlier, scenario.later);
-        passed = JSON.stringify(report) === JSON.stringify(rerun);
-      } catch {
-        // A fixture that cannot be compared is a failed case in the denominator.
-      }
-      record(family, passed ? 'passed' : 'failed');
-    }
-
-    const summary: EvalSummary = {
-      ts: new Date().toISOString(),
-      families,
-      totals,
-      precision: tp / Math.max(1, tp + fp),
-      recall: tp / Math.max(1, tp + fn),
-      exactMatch: exact / Math.max(1, totalChecks),
-    };
-    setEvalSummary(summary);
-    addAudit('Eval', 'Ran held-out & fixture suite', `${summary.totals.tested} cases`);
-    setAnnouncement(`Evaluation complete across ${summary.totals.tested} synthetic cases.`);
-  }, [addAudit, allScenarios]);
-
   /* ---- Audit Export ---- */
   const exportAudit = useCallback(
     (format: 'csv' | 'json') => {
@@ -2172,7 +2001,7 @@ export default function Home() {
     | { id: string; label: string; hint: string; action: 'view'; target: ViewId }
     | { id: string; label: string; hint: string; action: 'patient'; target: string }
     | { id: string; label: string; hint: string; action: 'palette'; target: PaletteId }
-    | { id: string; label: string; hint: string; action: 'triage' | 'eval' | 'export' };
+    | { id: string; label: string; hint: string; action: 'triage' | 'export' };
 
   const commandItems = useMemo(() => {
     const items: CommandItem[] = [
@@ -2211,12 +2040,6 @@ export default function Home() {
         action: 'triage',
       },
       {
-        id: 'act-eval',
-        label: 'Run held-out evaluation',
-        hint: 'action',
-        action: 'eval',
-      },
-      {
         id: 'act-export',
         label: 'Export audit log',
         hint: 'action',
@@ -2241,14 +2064,11 @@ export default function Home() {
       else if (item.action === 'triage') {
         navigateTo('triage');
         runTriage();
-      } else if (item.action === 'eval') {
-        navigateTo('eval');
-        runEval();
       } else if (item.action === 'export') {
         exportAudit('json');
       }
     },
-    [changePalette, exportAudit, navigateTo, runEval, runTriage, selectPatient],
+    [changePalette, exportAudit, navigateTo, runTriage, selectPatient],
   );
 
   /* ---- Global Keyboard Shortcuts ---- */
@@ -2400,7 +2220,7 @@ export default function Home() {
 
   /* ---- Outline for Right Rail ---- */
   const outlineSections = useMemo((): Array<[string, string]> => {
-    if (view === 'diff') {
+    if (view === 'diff' && isDemoPatient) {
       if (diffTab === 'diff') {
         return [
           ['o-summary', 'Summary'],
@@ -2425,20 +2245,12 @@ export default function Home() {
         ['o-queue', 'Queue'],
       ];
     }
-    if (view === 'eval') {
-      return [
-        ['o-about', 'About this set'],
-        ['o-results', 'Results'],
-        ['o-agree', 'Session agreement'],
-      ];
-    }
     if (view === 'audit') {
       return [['o-trail', 'Trail']];
     }
     if (view === 'models') {
       if (modelsTab === 'connections') {
         return [
-          ['o-hf', 'Hugging Face datasets'],
           ['o-db', 'Databases'],
           ['o-ml', 'Models'],
           ['o-log', 'Connection events'],
@@ -2456,7 +2268,7 @@ export default function Home() {
       ];
     }
     return [];
-  }, [diffTab, modelsTab, view]);
+  }, [diffTab, isDemoPatient, modelsTab, view]);
 
   /* ---- Snapshot Review Counts ---- */
   const diffEntriesCount = snapshotEntries.filter((r) => r.kind === 'changed').length;
@@ -2493,7 +2305,6 @@ export default function Home() {
   const patientName = cleanPatientName(activeScenario.patientLabel);
   const suggestions = triageByScenario[activeScenario.id] ?? [];
   const socketReady = deriveSocketReadiness(socketStatus);
-  const evaluationDone = evalSummary?.totals.tested ?? null;
   const compareStatus = extractResult ? (extractResult.simulated ? 'Rules' : 'Hosted model') : 'Not run';
   const serviceStatus = socketReady === 'live' ? 'Connected' : socketStatus.configured && !socketStatus.reachable ? 'Unavailable' : 'Standby';
   const outsideCount = activeScenario.externalRecords?.length ?? 0;
@@ -2517,7 +2328,7 @@ export default function Home() {
     if (earlierNoteText !== DEFAULT_EARLIER_NOTE || laterNoteText !== DEFAULT_LATER_NOTE) {
       const replaceNotes = window.confirm('Replace the notes in Compare and clear their results?');
       if (!replaceNotes) return;
-      handleSelectPreset('default');
+      handleLoadExample();
     }
     navigateTo('extract', false);
     focusSection(targetId);
@@ -2547,24 +2358,24 @@ export default function Home() {
     case 'home':
       widgetTitle = 'Workspace overview';
       widgets = [
-        { ...metric('Patient workspace', patientName, `${activeScenario.patientId} · Outpatient to discharge`, 'Open patient', () => selectPatient(activeScenario.id)), wide: true },
+        { ...metric('Patient workspace', patientName, activeScenario.patientId, 'Open patient', () => selectPatient(activeScenario.id)), wide: true },
         jump('Medication review', pendingReviews, 'diff', 'Open snapshot review', 'Changes awaiting a decision'),
-        jump('Note comparison', compareStatus, 'extract', 'Open Compare notes', 'Compare the earlier and discharge notes'),
+        jump('Note comparison', compareStatus, 'extract', 'Open Compare notes', 'Compare earlier and later notes'),
         jump('Suggestion queue', openTriageCount, 'triage', 'Open suggestions', 'Decisions pending'),
-        jump('Comparison checks', evaluationDone ?? 'Ready', 'eval', 'Open evaluations', 'Cases in the latest run'),
+        metric('Patients in this tab', patientScenarios.length),
         jump('Activity log', audit.length, 'audit', 'Open session activity', audit[0]?.action),
         jump('Model connection', serviceStatus, 'models', 'Open connections'),
-        metric('Encounter record', 'October 15', 'Discharge conversation and recording consent', 'Read encounter', () => {
+        isDemoPatient ? metric('Encounter record', 'October 15', 'Discharge conversation and recording consent', 'Read encounter', () => {
           navigateTo('patient', false);
           focusSection('transcript-title');
-        }),
-        metric('Source documents', documentIndex.counts.total, 'Indexed records for Morgan Lee', 'Open documents', () => openSnapshot('documents')),
+        }) : metric('Encounter record', 'No recording'),
+        metric('Source documents', documentIndex.counts.total, 'Indexed records for this chart', 'Open documents', () => openSnapshot('documents')),
         metric('Review worklist', reviewedCount, 'Changes with a recorded decision', 'Open worklist', () => openSnapshot('worklist')),
       ];
       break;
     case 'patient':
       widgetTitle = 'Patient summary';
-      widgets = [
+      widgets = isDemoPatient ? [
         { ...metric('Latest medication list', activeScenario.later.medications.length,
           <ul className="widget-medications">{activeScenario.later.medications.map((med) => (
             <li key={med.id}><span>{med.name}</span><span>{med.dose ?? 'Dose unavailable'}</span></li>
@@ -2578,6 +2389,11 @@ export default function Home() {
         metric('Medication plan in notes', 'Earlier / discharge', 'Read the two notes mentioned in the conversation', 'Load encounter notes', openEncounterNotes),
         metric('Recorded decisions', `${reviewedCount} / ${reviewableCount}`, 'Verified, flagged or deferred', 'View worklist', () => openSnapshot('worklist')),
         metric('Discharge conversation', '01:02', 'Recording consent included', 'Read transcript', () => focusSection('transcript-title')),
+      ] : [
+        jump('Note comparison', compareStatus, 'extract', 'Compare patient notes', 'Enter an earlier and a later note'),
+        metric('Notes entered', Number(Boolean(earlierNoteText.trim())) + Number(Boolean(laterNoteText.trim()))),
+        metric('Note differences', extractResult ? noteDiffCount : '—'),
+        metric('Decisions recorded', noteDecidedCount),
       ];
       break;
     case 'extract':
@@ -2585,19 +2401,20 @@ export default function Home() {
       widgets = [
         metric('Source A', earlierNoteLabel, `${earlierNoteText.length} characters`, 'Edit earlier note', () => focusSection('earlier-note')),
         metric('Source B', laterNoteLabel, `${laterNoteText.length} characters`, 'Edit later note', () => focusSection('later-note')),
-        metric('Note set', activePreset?.title ?? 'Outpatient and discharge', undefined, 'Choose note set', () => focusSection('note-preset-select')),
+        metric('Patient', patientName, activeScenario.patientId),
         metric('Comparison method', compareStatus, extractResult?.modeLabel),
         metric('Differences found', extractResult ? noteDiffCount : '—', undefined, extractResult ? 'View results' : undefined, () => focusSection('extraction-result-title')),
         metric('Earlier excerpts', extractResult?.earlier.quotes.length ?? '—', 'Medication mentions linked to the earlier note'),
-        metric('Discharge excerpts', extractResult?.later.quotes.length ?? '—', 'Medication mentions linked to the discharge note'),
+        metric(isDemoPatient ? 'Discharge excerpts' : 'Later excerpts', extractResult?.later.quotes.length ?? '—', 'Medication mentions linked to the later note'),
         metric('Decisions recorded', extractResult ? noteDecidedCount : '—'),
         metric('Clarifications', extractResult ? noteFlaggedCount : '—', undefined, noteFlaggedCount ? 'Download follow-ups' : undefined, handleExportFollowUps),
-        metric('Inference service', serviceStatus, undefined, 'Refresh service status', handleCheckService),
+        isDemoPatient ? metric('Inference service', serviceStatus, undefined, 'Refresh service status', handleCheckService)
+          : metric('Processing location', 'This browser'),
       ];
       break;
     case 'diff':
       widgetTitle = 'Snapshot tools';
-      widgets = [
+      widgets = isDemoPatient ? [
         metric('Dose or field changes', diffEntriesCount, undefined, 'Filter changed fields', () => openSnapshot('diff', 'changed')),
         metric('Only in earlier list', onlyACount, undefined, 'Filter earlier only', () => openSnapshot('diff', 'onlyA')),
         metric('Only in later list', onlyBCount, undefined, 'Filter later only', () => openSnapshot('diff', 'onlyB')),
@@ -2606,9 +2423,9 @@ export default function Home() {
         metric('Evidence links', activeReport.changes.reduce((sum, change) => sum + (change.evidenceLinks?.length ?? 0), 0), 'Links attached to medication differences', 'Browse evidence documents', () => openSnapshot('documents')),
         metric('Document revisions', documentIndex.counts.revisions, 'Indexed revisions across both snapshots'),
         metric('Undated entries', encounterTimeline.undated.length, undefined, 'Check timeline', () => openSnapshot('timeline')),
-        metric('Compared snapshots', 2, undefined, 'Open medication lists', () => openSnapshot('snapshots')),
+        metric('Compared snapshots', isDemoPatient ? 2 : 0, undefined, 'Open medication lists', () => openSnapshot('snapshots')),
         metric('Comparison rules', undefined, 'How missing fields and differences are interpreted', 'Read method', () => openSnapshot('method')),
-      ];
+      ] : [];
       break;
     case 'triage':
       widgetTitle = 'Suggestion tools';
@@ -2623,21 +2440,6 @@ export default function Home() {
         metric('Comparison input', activeReport.changes.length, 'Medication differences for this patient', 'Review differences', () => openSnapshot('diff')),
         metric('Suggestion provider', activeModelConn?.name ?? 'Unavailable', undefined, 'Check provider', () => focusSection('o-model')),
         metric('Suggestion generation', undefined, 'Every proposed change requires a review decision', 'Open generation controls', () => focusSection('o-model')),
-      ];
-      break;
-    case 'eval':
-      widgetTitle = 'Evaluation results';
-      widgets = [
-        metric('Held-out cases available', HELDOUT_CASES.length, undefined, 'Run comparison checks', runEval),
-        metric('Record pairs available', allScenarios.length, 'Includes licensed datasets'),
-        metric('Tested', evaluationDone ?? '—', undefined, 'Open result tables', () => focusSection('o-results')),
-        metric('Passed', evalSummary?.totals.passed ?? '—'),
-        metric('Failed', evalSummary?.totals.failed ?? '—'),
-        metric('Timed out', evalSummary?.totals.timedOut ?? '—'),
-        metric('Medication precision', evalSummary ? `${(evalSummary.precision * 100).toFixed(1)}%` : '—'),
-        metric('Medication recall', evalSummary ? `${(evalSummary.recall * 100).toFixed(1)}%` : '—'),
-        metric('Exact match', evalSummary ? `${(evalSummary.exactMatch * 100).toFixed(1)}%` : '—'),
-        metric('Last check', evalSummary ? `${evalSummary.ts.slice(11, 19)} UTC` : 'Not run', 'Rule-based checks', 'View case coverage', () => focusSection('o-about')),
       ];
       break;
     case 'audit':
@@ -2665,7 +2467,7 @@ export default function Home() {
         metric('Model reported by service', socketStatus.model ?? 'No hosted model reported', socketStatus.adapter ? `Adapter: ${socketStatus.adapter}` : undefined),
         metric('Record source', activeDbConn?.name ?? 'None', undefined, 'View data connections', () => { setModelsTab('connections'); focusSection('o-db'); }),
         metric('Suggestion model', activeModelConn?.name ?? 'None', undefined, 'View model connections', () => { setModelsTab('connections'); focusSection('o-ml'); }),
-        metric('Hugging Face sources', hfDatasetSources.length, undefined, 'Browse datasets', () => { setModelsTab('connections'); focusSection('o-hf'); }),
+        metric('Configured connections', connections.length),
         metric('Ready connections', connections.filter((connection) => connection.state === 'ok').length),
         metric('Connection events', connLog.length, undefined, 'Open event log', () => { setModelsTab('connections'); focusSection('o-log'); }),
         metric('Register connector', undefined, 'Configure a data or inference endpoint', 'Open connection form', () => { setModelsTab('add'); focusSection('o-new'); }),
@@ -2675,7 +2477,9 @@ export default function Home() {
       break;
   }
 
-  const pageWidgets = <WorkspaceWidgets title={widgetTitle} widgets={widgets} overview={isOverview} />;
+  const pageWidgets = widgets.length > 0
+    ? <WorkspaceWidgets title={widgetTitle} widgets={widgets} overview={isOverview} />
+    : null;
 
   /* ---- FHIR Preview Bundle ---- */
   const fhirBundleJson = useMemo(() => {
@@ -2754,19 +2558,6 @@ export default function Home() {
           >
             Menu
           </button>
-
-          {view !== 'extract' && (
-            <button
-              type="button"
-              className="ghost health-btn"
-              id="health"
-              title="Connection health"
-              onClick={() => navigateTo('models')}
-            >
-              <span className="dot degraded" aria-hidden="true" />
-              Local standby
-            </button>
-          )}
 
           <div className="menu-wrap" ref={paletteWrapRef}>
             <button
@@ -2862,14 +2653,18 @@ export default function Home() {
                     type="button"
                     className="item"
                     aria-current={isActive ? 'true' : undefined}
+                    disabled={hostedCompareBusy}
                     onClick={() => selectPatient(scenario.id)}
                   >
                     <span className="item-label">{cleanPatientName(scenario.patientLabel)}</span>
-                    <small>{openCount ? `${openCount} open` : 'done'}</small>
+                    <small>{scenario.id === DEMO_PATIENT.id ? (openCount ? `${openCount} open` : 'done') : scenario.patientId}</small>
                   </button>
                 );
               })}
             </div>
+            <button type="button" className="btn quiet patient-add-button" disabled={hostedCompareBusy} onClick={showPatientForm}>
+              Add patient
+            </button>
           </div>
 
           <div className="grp">
@@ -3020,14 +2815,32 @@ export default function Home() {
                     <h1 className="h1" ref={headingRef} tabIndex={-1}>
                       {view === 'patient' ? cleanPatientName(activeScenario.patientLabel) : 'Home'}
                     </h1>
-                    {view === 'patient' && <p>{activeScenario.patientId} · Outpatient to discharge</p>}
+                    {view === 'patient' && <p>{activeScenario.patientId}{isDemoPatient ? ' · Outpatient to discharge' : ' · This browser tab'}</p>}
                   </div>
                   {view === 'home' && (
                     <button type="button" className="btn" onClick={() => navigateTo('extract')}>Start comparison</button>
                   )}
                 </header>
+                {view === 'home' && creatingPatient && (
+                  <form className="patient-create-form" onSubmit={createPatient} aria-labelledby="new-patient-title">
+                    <h2 id="new-patient-title" className="h2">Add patient</h2>
+                    <p id="new-patient-help">Use a fictional name. Patients and notes you add stay in this tab and clear when you reload.</p>
+                    <label htmlFor="new-patient-name">Patient name</label>
+                    <input id="new-patient-name" name="patient-name" className="search" required maxLength={80}
+                      autoComplete="off" aria-describedby="new-patient-help" aria-invalid={Boolean(patientFormError)}
+                      onChange={() => setPatientFormError('')} />
+                    {patientFormError && <p role="alert">{patientFormError}</p>}
+                    <div className="patient-create-actions">
+                      <button type="submit" className="btn primary">Create patient</button>
+                      <button type="button" className="btn quiet" onClick={() => {
+                        setCreatingPatient(false);
+                        setFocusHeadingNonce((n) => n + 1);
+                      }}>Cancel</button>
+                    </div>
+                  </form>
+                )}
                 {pageWidgets}
-                {view === 'patient' && (
+                {view === 'patient' && isDemoPatient && (
                   <>
                     <EncounterTranscript
                       onCompare={() => openEncounterNotes('earlier-note')}
@@ -3059,22 +2872,14 @@ export default function Home() {
                 activeReport={activeReport}
                 triageByScenario={triageByScenario}
                 socketStatus={socketStatus}
-                evalSummary={evalSummary && {
-                  ...evalSummary,
-                  totalCases: evalSummary.totals.tested,
-                  heldOutCases: evalSummary.families.heldOut.tested,
-                  scenarioCases: evalSummary.families.workspace.tested + evalSummary.families.hf.tested,
-                }}
                 audit={audit}
                 onNavigate={handleCockpitNavigate}
                 onSelectEvidenceChange={(medId) => handleSelectEvidenceChange(medId, 'home')}
                 order={widgetOrder}
                 onOrderChange={setWidgetOrder}
               />
-              <button ref={backlogTriggerRef} type="button" className="btn quiet"
-                onClick={() => setBacklogOpen(true)}>Widget library</button>
             </details>
-            {!isOverview && (
+            {!isOverview && widgets.length > 0 && (
               <button className="btn quiet page-tools-jump" type="button" onClick={() => focusSection('page-widgets')}>
                 {widgetTitle}
               </button>
@@ -3085,8 +2890,9 @@ export default function Home() {
               <section className="extract-workspace" aria-label="Compare notes workspace">
                 <header className="extract-hero">
                   <h1 className="h1" ref={headingRef} tabIndex={-1}>
-                    Discharge medication review
+                    {isDemoPatient ? 'Discharge medication review' : 'Medication note comparison'}
                   </h1>
+                  {!isDemoPatient && <p>{patientName} · {activeScenario.patientId}</p>}
                 </header>
 
                 <div className="extract-shell">
@@ -3102,27 +2908,28 @@ export default function Home() {
                         }`}
                         aria-hidden="true"
                       />
-                      {hostedCompareBusy ? 'Checking bundled notes with Qwen 4B…'
-                        : HOSTED_COMPARE_ENABLED ? extractResult?.modeLabel ?? 'Ready to compare'
+                      {hostedCompareBusy ? (HOSTED_COMPARE_ENABLED ? 'Checking bundled notes with Qwen 4B…' : 'Comparing notes…')
+                        : !isDemoPatient || HOSTED_COMPARE_ENABLED ? extractResult?.modeLabel ?? 'Ready to compare'
                         : extractStatusText}
                     </p>
-                    <button
+                    {isDemoPatient && <button
                       type="button"
                       className="btn quiet"
                       id="extraction-retry"
                       onClick={handleCheckService}
                     >
                       {HOSTED_COMPARE_ENABLED ? 'Check local extractor' : 'Check service'}
-                    </button>
+                    </button>}
                   </div>
 
                   <p className="extract-scope" style={{ marginTop: 8 }}>
-                    {HOSTED_COMPARE_ENABLED
+                    {!isDemoPatient ? 'Use fictional notes only. Both notes and their results stay in this tab.'
+                      : HOSTED_COMPARE_ENABLED
                       ? 'Qwen 4B can read the bundled example. Edited or alternate example notes use rules in this browser. Use fictional records only.'
                       : 'Use example records only. The status above identifies the comparison method.'}
                   </p>
 
-                  <details className="extract-diagnostics" style={{ marginTop: 8 }}>
+                  {isDemoPatient && <details className="extract-diagnostics" style={{ marginTop: 8 }}>
                     <summary style={{ cursor: 'pointer', fontSize: 12, color: 'var(--muted)' }}>
                       Example details &amp; technical diagnostics
                     </summary>
@@ -3157,49 +2964,12 @@ export default function Home() {
                         <span className="mono">{socketStatus.endpoints.compare}</span>
                       </span>
                     </div>
-                    {activePreset && (
-                      <div className="extract-preset-meta" style={{ marginTop: 8 }}>
-                        <span className="e-tag">{activePreset.dataset}</span>
-                        <span className="e-tag verified">{activePreset.license}</span>
-
-                        <a
-                          href={activePreset.sourceUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="btn quiet"
-                          style={{ height: 24, padding: '0 6px', fontSize: 11.5 }}
-                        >
-                          Source
-                        </a>
-                      </div>
-                    )}
-                  </details>
-
-                  <div className="extract-presets" style={{ marginTop: 12 }}>
-                    <label htmlFor="note-preset-select">Note preset</label>
-                    <select
-                      id="note-preset-select"
-                      value={selectedPresetId}
-                      disabled={hostedCompareBusy}
-                      onChange={(e) => handleSelectPreset(e.target.value)}
-                    >
-                      <option value="default">
-                        Outpatient and discharge notes
-                      </option>
-                      {hfNoteComparisonPairs.map((pair) => (
-                        <option key={pair.id} value={pair.id}>
-                          {pair.title} ({pair.license})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                  </details>}
 
                   <form id="extraction-form" onSubmit={handleCompareNotes} aria-busy={hostedCompareBusy}>
                     <div className="extract-note-grid">
                       <div className="extract-note">
-                        <label htmlFor="earlier-note">
-                          Earlier note <span>{earlierNoteLabel}</span>
-                        </label>
+                        <label htmlFor="earlier-note">{earlierNoteLabel}</label>
                         <textarea
                           id="earlier-note"
                           rows={5}
@@ -3221,7 +2991,7 @@ export default function Home() {
 
                       <div className="extract-note">
                         <label htmlFor="later-note">
-                          Discharge note <span>{laterNoteLabel}</span>
+                          {laterNoteLabel}
                         </label>
                         <textarea
                           id="later-note"
@@ -3247,7 +3017,7 @@ export default function Home() {
                       <button className="btn primary" type="submit" disabled={hostedCompareBusy}>
                         {hostedCompareBusy ? 'Comparing…' : 'Compare notes'}
                       </button>
-                      <button
+                      {isDemoPatient && <button
                         className="btn quiet"
                         type="button"
                         id="extraction-example"
@@ -3255,7 +3025,7 @@ export default function Home() {
                         onClick={handleLoadExample}
                       >
                         Load example
-                      </button>
+                      </button>}
                       <button
                         className="btn quiet"
                         type="button"
@@ -3441,7 +3211,14 @@ export default function Home() {
             )}
 
             {/* ==================== SNAPSHOT REVIEW ==================== */}
-            {view === 'diff' && (
+            {view === 'diff' && !isDemoPatient && (
+              <section aria-label="Snapshot review">
+                <h1 className="h1" ref={headingRef} tabIndex={-1}>{patientName}</h1>
+                <p className="lede">This patient has no structured medication lists. You can compare an earlier and a later note.</p>
+                <button type="button" className="btn" onClick={() => navigateTo('extract')}>Compare patient notes</button>
+              </section>
+            )}
+            {view === 'diff' && isDemoPatient && (
               <section aria-label="Snapshot review">
                 <div className="eyebrow">
                   Medication reconciliation
@@ -5074,139 +4851,6 @@ export default function Home() {
               </section>
             )}
 
-            {/* ==================== EVALUATIONS ==================== */}
-            {view === 'eval' && (
-              <section aria-label="Evaluations">
-                <h1 className="h1" ref={headingRef} tabIndex={-1}>
-                  Evaluation results
-                </h1>
-                <p className="lede">
-                  Run the comparison checks and review the results by case set.
-                </p>
-
-                <section className="sec" id="o-about" style={{ marginTop: 28 }}>
-                  <h2 className="h2">About this set</h2>
-                  <div className="prose">
-                    <p>
-                      <b>
-                        {HELDOUT_CASES.length} held-out cases + {allScenarios.length} workspace
-                        scenarios
-                      </b>
-                      . Precision, recall, and exact match use the held-out medication labels.
-                      Workspace fixtures check whether rerunning the comparison produces the same report.
-                      This run uses a synchronous comparison with no model calls or request timeouts.
-                    </p>
-                  </div>
-                </section>
-
-                <section className="sec" id="o-results">
-                  <h2 className="h2">
-                    Results{' '}
-                    <span>{evalSummary ? `run ${evalSummary.ts.slice(11, 19)}Z` : 'not run'}</span>
-                  </h2>
-                  <ul className="rows widget-table-card">
-                    <li className="row eval head">
-                      <span>Method</span>
-                      <span>Cases</span>
-                      <span>Precision</span>
-                      <span>Recall</span>
-                      <span>Exact match</span>
-                    </li>
-                    <li className="row eval">
-                      <span style={{ color: 'var(--strong)' }}>
-                        Deterministic diff <span style={{ color: 'var(--faint)' }}>baseline</span>
-                      </span>
-                      <span className="mono">{evalSummary ? evalSummary.totals.tested : '—'}</span>
-                      <span className="mono">
-                        {evalSummary ? evalSummary.precision.toFixed(2) : '—'}
-                      </span>
-                      <span className="mono">
-                        {evalSummary ? evalSummary.recall.toFixed(2) : '—'}
-                      </span>
-                      <span className="mono">
-                        {evalSummary ? evalSummary.exactMatch.toFixed(2) : '—'}
-                      </span>
-                    </li>
-                  </ul>
-                  {evalSummary && (
-                    <div className="evaluation-breakdown" role="region" aria-label="Evaluation counts" tabIndex={0}>
-                      <table aria-label="Evaluation case breakdown">
-                        <thead>
-                          <tr>
-                            <th scope="col">Case family</th>
-                            <th scope="col">Tested</th>
-                            <th scope="col">Passed</th>
-                            <th scope="col">Failed</th>
-                            <th scope="col">Timed out</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {EVALUATION_FAMILIES.map(([id, label]) => {
-                            const counts = evalSummary.families[id];
-                            return (
-                              <tr key={id}>
-                                <th scope="row">{label}</th>
-                                <td>{counts.tested}</td>
-                                <td>{counts.passed}</td>
-                                <td>{counts.failed}</td>
-                                <td>{counts.timedOut}</td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                        <tfoot>
-                          <tr>
-                            <th scope="row">Total</th>
-                            <td>{evalSummary.totals.tested}</td>
-                            <td>{evalSummary.totals.passed}</td>
-                            <td>{evalSummary.totals.failed}</td>
-                            <td>{evalSummary.totals.timedOut}</td>
-                          </tr>
-                        </tfoot>
-                      </table>
-                    </div>
-                  )}
-                  <div style={{ marginTop: 14 }}>
-                    <button type="button" className="btn primary" onClick={runEval}>
-                      {evalSummary ? 'Run again' : 'Run held-out set'}
-                    </button>
-                  </div>
-                </section>
-
-                <section className="sec" id="o-agree">
-                  <h2 className="h2">Session agreement</h2>
-                  <div className="prose">
-                    {(() => {
-                      const allTri = Object.values(triageByScenario).flat();
-                      const acc = allTri.filter((s) => s.decision === 'accepted').length;
-                      const ov = allTri.filter((s) => s.decision === 'overridden').length;
-                      const revVals = Object.values(reviews);
-                      return (
-                        <>
-                          <p>
-                            Triage suggestions accepted: <b>{acc}</b> · overridden: <b>{ov}</b>
-                            {acc + ov > 0 && (
-                              <>
-                                {' '}
-                                · acceptance <b>{(acc / (acc + ov)).toFixed(2)}</b>
-                              </>
-                            )}
-                            .
-                          </p>
-                          <p>
-                            Clinician reviews this session:{' '}
-                            <b>{revVals.filter((v) => v === 'verified').length}</b> verified,{' '}
-                            <b>{revVals.filter((v) => v === 'flagged').length}</b> flagged,{' '}
-                            <b>{revVals.filter((v) => v === 'deferred').length}</b> deferred.
-                          </p>
-                        </>
-                      );
-                    })()}
-                  </div>
-                </section>
-              </section>
-            )}
-
             {/* ==================== SESSION ACTIVITY ==================== */}
             {view === 'audit' && (
               <section aria-label="Session activity">
@@ -5413,45 +5057,6 @@ export default function Home() {
                           Open comparison
                         </button>
                       </div>
-                    </section>
-
-                    <section className="sec" id="o-hf">
-                      <h2 className="h2">
-                        Hugging Face datasets{' '}
-                        <span>{hfDatasetSources.length} open-licensed sources</span>
-                      </h2>
-                      {hfDatasetSources.length === 0 ? (
-                        <p className="empty">No external datasets loaded.</p>
-                      ) : (
-                        <ul className="rows widget-cards">
-                          {hfDatasetSources.map((ds) => (
-                            <li className="row conn" key={ds.id}>
-                              <span className="dot ok" aria-hidden="true" />
-                              <div style={{ minWidth: 0 }}>
-                                <div className="r-name">
-                                  {ds.dataset}
-                                  <span className="active-tag">{ds.license}</span>
-                                </div>
-                                <div className="r-sub">
-                                  Split: <span className="mono">{ds.split}</span> ·{' '}
-                                  {ds.rowCount} curated rows
-                                </div>
-                                <div className="r-sub">{ds.description}</div>
-                              </div>
-                              <div className="r-acts">
-                                <a
-                                  href={ds.sourceUrl}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className="btn quiet"
-                                >
-                                  Dataset
-                                </a>
-                              </div>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
                     </section>
 
                     <div className="bar" style={{ marginBottom: 18 }}>
@@ -5919,23 +5524,6 @@ export interface DataAdapter {
           </div>
         </div>
       )}
-
-      <BacklogCatalogDrawer
-        open={backlogOpen}
-        onClose={closeBacklog}
-        context={{
-          patientLabel: activeScenario.patientLabel,
-          scenarioId: activeScenario.id,
-          report: activeReport,
-          laterSnapshot: activeScenario.later,
-          reviews,
-          socketState: socketStatus.state,
-          evalTested: evalSummary?.totals.tested ?? 0,
-          evalPassed: evalSummary?.totals.passed ?? 0,
-          evalFailed: evalSummary?.totals.failed ?? 0,
-          auditCount: audit.length,
-        }}
-      />
 
       {/* Toast */}
       <div className={`toast${toastMsg ? ' show' : ''}`} id="toast" role="status" aria-live="polite">
