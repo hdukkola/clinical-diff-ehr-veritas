@@ -2590,7 +2590,8 @@ export default function Home() {
   }
 
   const pageNote = widgetNotes[view === 'chat' ? chatChart.id : activeScenario.id]?.[view];
-  const pageWidgets = <WorkspaceWidgets key={`widgets-${view}`} pageId={view} title={widgetTitle} hasPageNote={Boolean(pageNote)}
+  const widgetLayoutId = view === 'patient' && !isDemoPatient ? 'patient-local' : view;
+  const pageWidgets = <WorkspaceWidgets key={`widgets-${widgetLayoutId}`} pageId={widgetLayoutId} title={widgetTitle} hasPageNote={Boolean(pageNote)}
     widgets={[...widgets, metric('Page note', undefined, pageNote ?? 'Add a note for this page.', 'Edit page note', () => openWidgetEdit(view))]} />;
 
   /* ---- FHIR Preview Bundle ---- */

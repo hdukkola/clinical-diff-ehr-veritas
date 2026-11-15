@@ -157,6 +157,39 @@ describe('Clinical Diff Veritas Editorial UI', () => {
     expect(signatures.size).toBe(7);
   });
 
+  it('customizes each workspace independently and keeps keyboard focus on the moved widget', async () => {
+    const user = userEvent.setup();
+    render(<Home />);
+    const home = () => within(screen.getByRole('region', { name: 'Workspace overview' }));
+    const titles = () => home().getAllByRole('article').map((card) => within(card).getByRole('heading').textContent);
+    const defaults = titles();
+    const name = 'Ask about a patient';
+
+    await user.click(home().getByRole('button', { name: 'Add widgets' }));
+    await user.click(home().getByRole('button', { name: `Add ${name}` }));
+    const grip = home().getByRole('button', { name: `Reorder ${name}` });
+    expect(grip).toHaveFocus();
+    expect(titles()).toEqual([...defaults, name]);
+    expect(home().queryByRole('button', { name: `Add ${name}` })).not.toBeInTheDocument();
+    await user.keyboard('{ArrowUp}');
+    expect(grip).toHaveFocus();
+    expect(titles()).toEqual([...defaults.slice(0, -1), name, defaults.at(-1)]);
+
+    await openCompare(user);
+    const compare = within(screen.getByRole('region', { name: 'Comparison tools' }));
+    expect(compare.queryByRole('button', { name: `Reorder ${name}` })).not.toBeInTheDocument();
+    await user.click(within(getWorkspaceNav()).getByRole('button', { name: 'Home' }));
+    expect(titles()).toEqual([...defaults.slice(0, -1), name, defaults.at(-1)]);
+
+    await user.click(home().getByRole('button', { name: 'Add widgets' }));
+    await user.click(home().getByRole('button', { name: `Remove ${name}` }));
+    const add = home().getByRole('button', { name: `Add ${name}` });
+    expect(add).toHaveFocus();
+    await user.click(add);
+    await user.click(home().getByRole('button', { name: 'Reset widget layout' }));
+    expect(titles()).toEqual(defaults);
+  });
+
   it('saves fictional patients and drafts across reloads without sending them to an API', async () => {
     const user = userEvent.setup();
     const request = vi.spyOn(globalThis, 'fetch').mockResolvedValue(Response.json({}));

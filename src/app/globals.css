@@ -4466,25 +4466,100 @@ pre.code .c {
   margin-inline-start: 8px;
 }
 
-.page-widget[data-dragging] { opacity: .5; }
-.page-widget[data-drop-target], .cw-card[data-drop-target] { outline: 2px solid var(--accent-ink); outline-offset: -2px; }
-.page-widget-grip { cursor: grab; color: var(--muted); padding: 0 3px; font-size: 19px; line-height: 1; }
-.page-widget-grip:active { cursor: grabbing; }
-.page-widget-catalog {
+.page-widget[data-dragging] {
+  border-color: var(--accent-ink);
+  background: var(--sunk);
+  opacity: .58;
+}
+
+.cw-card[data-drop-target], .page-widget-catalog[data-drop-target] {
+  outline: 2px solid var(--accent-ink);
+  outline-offset: -2px;
+}
+
+.page-widget-grip {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 185px), 1fr));
-  gap: 8px 16px;
-  min-width: 0;
-  margin-bottom: 12px;
-  padding: 10px 12px;
-  border: 1px solid var(--line-2);
+  flex: 0 0 auto;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  margin-block-start: -6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  cursor: grab;
+  font-size: 20px;
+  line-height: 1;
+  touch-action: none;
+  user-select: none;
+}
+
+.page-widget-grip:hover, .page-widget-grip:focus-visible { background: var(--sunk); color: var(--strong); }
+.page-widget-grip:active { cursor: grabbing; }
+
+.page-widget-workbench[data-editing] {
+  display: grid;
+  gap: 12px;
+  align-items: start;
+}
+
+.page-widget-workbench[data-editing] .page-widget-grid {
+  min-height: 88px;
+  padding: 6px;
+  border: 1px dashed var(--line-2);
   border-radius: var(--widget-radius-sm);
 }
-.page-widget-catalog legend { padding-inline: 6px; color: var(--strong); font-size: 13px; }
-.page-widget-catalog label { display: flex; align-items: center; gap: 8px; font-size: 13px; }
-.page-widget-catalog input[type='checkbox'], .patient-chat-confirm input { appearance: auto; accent-color: var(--accent-ink); }
+
+.page-widget-grid[data-drop-active] { outline: 1px solid var(--accent-ink); outline-offset: -1px; }
+
+.page-widget-catalog {
+  display: grid;
+  gap: 9px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--widget-radius-sm);
+  background: var(--raised);
+}
+
+.page-widget-catalog h3 { margin: 0; font-size: 13px; color: var(--strong); }
+.page-widget-catalog p, .page-widget-empty { margin: 0; color: var(--muted); font-size: 12px; }
+.page-widget-catalog ul { display: grid; gap: 4px; max-height: 112px; overflow: auto; margin: 0; padding: 2px; list-style: none; }
+.page-widget-catalog li { display: flex; align-items: center; gap: 5px; min-height: 42px; font-size: 12px; }
+.page-widget-catalog li > span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.page-widget-catalog li > .btn { min-height: 34px; }
+.page-widget-catalog .page-widget-grip { margin: 0; }
+.page-widget-catalog > .btn { justify-self: start; }
+.page-widget-empty { grid-column: 1 / -1; place-self: center; }
+.patient-chat-confirm input { appearance: auto; accent-color: var(--accent-ink); }
+
+.page-widget-drag-preview {
+  position: fixed;
+  inset: 0 auto auto 0;
+  z-index: 150;
+  max-width: min(190px, 42vw);
+  padding: 6px 10px;
+  border: 1px solid var(--accent-ink);
+  border-radius: var(--widget-radius-sm);
+  background: var(--raised);
+  color: var(--strong);
+  pointer-events: none;
+  font-size: 12px;
+  box-shadow: 0 6px 18px rgb(0 0 0 / .25);
+}
+
 .page-widget-move { display: flex; flex-wrap: wrap; gap: 5px; width: 100%; margin-top: 8px; }
-.page-widget-move .btn { font-size: 11px; padding: 3px 6px; }
+.page-widget-move .btn { font-size: 11px; padding: 3px 6px; min-height: 32px; }
+
+@media (min-width: 1200px) {
+  .page-widget-workbench[data-editing] { grid-template-columns: minmax(155px, 210px) minmax(0, 1fr); }
+  .page-widget-catalog ul { max-height: 240px; }
+}
+
+@media (pointer: coarse) {
+  .page-widget-grip, .page-widget-catalog li > .btn, .page-widget-move .btn { min-width: 44px; min-height: 44px; }
+}
 
 .patient-chat { display: grid; gap: 14px; width: min(100%, 940px); }
 .patient-chat header p, .patient-chat-scope, .patient-chat-status { color: var(--muted); font-size: 13px; }
