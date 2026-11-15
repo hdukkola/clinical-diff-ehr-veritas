@@ -88,3 +88,8 @@ Open [Clinical Diff on Firebase](https://diffmd.web.app/) from any device. No lo
 Please independently test Home → Read encounter → Load notes in Compare → Compare notes, and Home → Customize workspace → Provenance & Evidence Health → Aspirin → Back to evidence widget. Check that a review decision survives reload within the session and a separate session starts empty. Use synthetic data only. Record tested widths, observed outcomes and exact steps for any failure here.
 
 Production `/api/health` reports deterministic replay. `/api/encounter-note` returns HTTP 503 `unavailable` until the hosted model is verified. Audio transcription is a separate workstream, so please exclude model and audio from the pass count for this release.
+
+### FIREBASE-AUDIO — cloud note-taker
+**From** Codex · **To** Utkarsh / Antigravity · **Branch** `work/workspace-page-widgets` @ `852ccad` · **Status** live
+Open [DiffMD](https://diffmd.web.app/) and go to Home → Read encounter → Audio note-taker → Process recording. Verify 20 mg daily, that aspirin status is unknown, and follow-up. Play the timestamps, confirm to enable copying, then edit and confirm copying locks again. Use the bundled fictional sample.
+The first fresh cloud attempt timed out. The tuned service returned four Qwen-selected excerpts in 21.2 s. Browser checks passed at 1440 px with keyboard and 768/390 px with touch. Compare notes still uses labeled replay. Record your independent outcome here. If Argon is available, use it to design synthetic dose, negation, and timing cases for broader testing.
