@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import Home from '@/app/page';
@@ -39,6 +39,47 @@ describe('Clinical Diff Veritas Editorial UI', () => {
   beforeEach(() => {
     localStorage.clear();
     document.documentElement.dataset.palette = 'void';
+    vi.stubEnv('NEXT_PUBLIC_CLINICAL_DIFF_EXAMPLE_WORKSPACE', '1');
+  });
+
+  afterEach(() => vi.unstubAllEnvs());
+
+  it('starts the public workspace empty and compares only notes the reviewer enters', async () => {
+    vi.stubEnv('NEXT_PUBLIC_CLINICAL_DIFF_EXAMPLE_WORKSPACE', '0');
+    localStorage.setItem('diffmd-patient-v1:LOCAL-AAAAAAAAAAAA', 'Old example');
+    const user = userEvent.setup();
+    const network = vi.spyOn(globalThis, 'fetch').mockResolvedValue(Response.json({}));
+    try {
+      render(<Home />);
+
+      expect(within(getPatientsGroup()).queryAllByRole('button')).toHaveLength(0);
+      expect(screen.queryByText(/Morgan Lee|Old example|October 15|Read encounter/i)).not.toBeInTheDocument();
+      await openCompare(user);
+      const main = within(screen.getByRole('main'));
+      expect(main.getByText('Add a patient to get started.')).toBeVisible();
+      expect(main.queryByRole('textbox')).not.toBeInTheDocument();
+
+      await user.click(main.getByRole('button', { name: 'Add patient' }));
+      await user.type(main.getByRole('textbox', { name: 'Case reference' }), 'Case QA-001');
+      await user.click(main.getByRole('button', { name: 'Create patient' }));
+      expect(main.getByRole('heading', { name: 'Case QA-001' })).toBeVisible();
+      await openCompare(user);
+      const earlierNote = main.getByRole('textbox', { name: 'Earlier note' });
+      const laterNote = main.getByRole('textbox', { name: 'Later note' });
+      expect(earlierNote).toHaveValue('');
+      expect(laterNote).toHaveValue('');
+      await user.type(earlierNote, 'Lisinopril 10 mg daily');
+      await user.type(laterNote, 'Lisinopril 20 mg daily');
+      await user.click(main.getByRole('button', { name: 'Compare notes' }));
+      const result = await main.findByRole('region', { name: 'Mention differences' });
+      expect(result).toHaveTextContent('Lisinopril 10 mg daily');
+      expect(result).toHaveTextContent('Lisinopril 20 mg daily');
+      await user.click(within(result).getByRole('button', { name: 'Flag for clarification' }));
+      expect(result).toHaveTextContent('1 flagged for clarification');
+      expect(network.mock.calls.map(([input]) => String(input))).not.toContain('/api/reviews');
+    } finally {
+      network.mockRestore();
+    }
   });
 
   it('renders exact assistant evidence and clears it on abstention or unverified output', async () => {
@@ -263,7 +304,7 @@ describe('Clinical Diff Veritas Editorial UI', () => {
 
     await user.click(within(main).getByRole('button', { name: 'Compare notes' }));
     expect(screen.getByRole('alert')).toHaveTextContent(
-      'Each note needs between 1 and 12,000 characters of fictional text.',
+      'Each note needs between 1 and 12,000 characters.',
     );
 
     // Load example restores default notes

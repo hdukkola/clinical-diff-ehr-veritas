@@ -1,5 +1,6 @@
 /** The remote trained-model service has not yet been identified or verified. */
 export async function POST(request: Request) {
+  if (process.env.NEXT_PUBLIC_CLINICAL_DIFF_EXAMPLE_WORKSPACE === '0') return new Response(null, { status: 404 });
   const headers = { 'Cache-Control': 'no-store' };
   let body: unknown;
   try {

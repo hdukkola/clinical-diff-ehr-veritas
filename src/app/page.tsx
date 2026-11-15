@@ -850,17 +850,23 @@ function toPatientScenario({ id, name }: BrowserPatient): SyntheticScenario {
   };
 }
 
+const EMPTY_WORKSPACE = toPatientScenario({ id: '', name: '' });
 const noBrowserPatients = () => '[]';
 const emptyBrowserNote = () => '';
 
 export default function Home() {
+  const exampleWorkspace = process.env.NEXT_PUBLIC_CLINICAL_DIFF_EXAMPLE_WORKSPACE === '1';
+  const initialPatientId = exampleWorkspace ? DEMO_PATIENT.id : '';
   const savedPatients = useSyncExternalStore(subscribeToPatients, readBrowserPatients, noBrowserPatients);
   const [unsavedNotes, setUnsavedNotes] = useState<Record<string, Partial<Record<'earlier' | 'later', string>>>>({});
   const [creatingPatient, setCreatingPatient] = useState(false);
   const [patientFormError, setPatientFormError] = useState('');
   const patientScenarios = useMemo(
-    () => [DEMO_PATIENT, ...(JSON.parse(savedPatients) as BrowserPatient[]).map(toPatientScenario)],
-    [savedPatients],
+    () => [
+      ...(exampleWorkspace ? [DEMO_PATIENT] : []),
+      ...(JSON.parse(savedPatients) as BrowserPatient[]).map(toPatientScenario),
+    ],
+    [exampleWorkspace, savedPatients],
   );
   /* ---- Navigation & Theme ---- */
   const [view, setView] = useState<ViewId>('home');
@@ -878,7 +884,7 @@ export default function Home() {
   const [announcement, setAnnouncement] = useState('');
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const [focusHeadingNonce, setFocusHeadingNonce] = useState(0);
-  const [chatChartId, setChatChartId] = useState(DEMO_PATIENT.id);
+  const [chatChartId, setChatChartId] = useState(initialPatientId);
   const [chatAspect, setChatAspect] = useState<ChartAspect>('timeline');
   const [chatThreads, setChatThreads] = useState<ChatThreads>({});
   const [chartCorrections, setChartCorrections] = useState<ChartCorrection[]>([]);
@@ -888,8 +894,8 @@ export default function Home() {
   const [pinnedOpen, setPinnedOpen] = useState(false);
 
   /* ---- Compare notes state ---- */
-  const [exampleEarlierNote, setEarlierNoteText] = useState<string>(DEFAULT_EARLIER_NOTE);
-  const [exampleLaterNote, setLaterNoteText] = useState<string>(DEFAULT_LATER_NOTE);
+  const [exampleEarlierNote, setEarlierNoteText] = useState(exampleWorkspace ? DEFAULT_EARLIER_NOTE : '');
+  const [exampleLaterNote, setLaterNoteText] = useState(exampleWorkspace ? DEFAULT_LATER_NOTE : '');
   const [extractError, setExtractError] = useState<string>('');
   const [extractStatusText, setExtractStatusText] = useState<string>(
     'Standby · local extractor',
@@ -912,7 +918,7 @@ export default function Home() {
   }>());
 
   /* ---- Snapshot review state ---- */
-  const [selectedScenarioId, setSelectedScenarioId] = useState<string>(DEMO_PATIENT.id);
+  const [selectedScenarioId, setSelectedScenarioId] = useState(initialPatientId);
   const [diffTab, setDiffTab] = useState<DiffTab>('diff');
   const [diffFilter, setDiffFilter] = useState<DiffFilter>('all');
   const [selectedMedId, setSelectedMedId] = useState<string | null>(null);
@@ -932,7 +938,7 @@ export default function Home() {
   const [audit, setAudit] = useState<AuditEntry[]>([]);
   const [auditFilter, setAuditFilter] = useState<string>('all');
   const [modelsTab, setModelsTab] = useState<ModelsTab>('connections');
-  const [connections, setConnections] = useState<ConnectionItem[]>(INITIAL_CONNECTIONS);
+  const [connections, setConnections] = useState<ConnectionItem[]>(exampleWorkspace ? INITIAL_CONNECTIONS : []);
   const [connLog, setConnLog] = useState<{ id: string; ts: string; msg: string }[]>([]);
   const [newConnKind, setNewConnKind] = useState<'db' | 'model'>('db');
   const [newConnDriver, setNewConnDriver] = useState<string>('fixtures');
@@ -955,9 +961,10 @@ export default function Home() {
   /* ---- Derived Data ---- */
   const activeScenario = useMemo(
     () =>
-      patientScenarios.find((s) => s.id === selectedScenarioId) ?? DEMO_PATIENT,
+      patientScenarios.find((s) => s.id === selectedScenarioId) ?? EMPTY_WORKSPACE,
     [patientScenarios, selectedScenarioId],
   );
+  const hasSelectedPatient = Boolean(activeScenario.id);
   const isDemoPatient = activeScenario.id === DEMO_PATIENT.id;
   const getSavedEarlier = useCallback(
     () => isDemoPatient ? '' : readBrowserNote(activeScenario.id, 'earlier'),
@@ -1121,7 +1128,10 @@ export default function Home() {
   }, [reviewSession]);
 
   useEffect(() => {
-    if (typeof fetch !== 'function') return;
+    if (!exampleWorkspace || typeof fetch !== 'function') {
+      reviewSession.finish();
+      return;
+    }
     let active = true;
 
     async function hydrateFromReviewsApi() {
@@ -1176,7 +1186,7 @@ export default function Home() {
     return () => {
       active = false;
     };
-  }, [reviewSession]);
+  }, [exampleWorkspace, reviewSession]);
   const showToast = useCallback((msg: string) => {
     setToastMsg(msg);
   }, []);
@@ -1452,7 +1462,7 @@ export default function Home() {
     if (hostedComparePending.current) return;
     const name = String(new FormData(event.currentTarget).get('patient-name') ?? '').trim();
     if (!name || name.length > 80) {
-      setPatientFormError('Enter a name between 1 and 80 characters.');
+      setPatientFormError(exampleWorkspace ? 'Enter a name between 1 and 80 characters.' : 'Enter a case reference between 1 and 80 characters.');
       return;
     }
     const patient = createBrowserPatient(name);
@@ -1709,7 +1719,7 @@ export default function Home() {
         laterLen > 12000
       ) {
         setExtractResult(null);
-        setExtractError('Each note needs between 1 and 12,000 characters of fictional text.');
+        setExtractError('Each note needs between 1 and 12,000 characters.');
         return;
       }
 
@@ -2114,12 +2124,12 @@ export default function Home() {
         action: 'palette' as const,
         target: p.id,
       })),
-      {
+      ...(isDemoPatient ? [{
         id: 'act-triage',
         label: `Run AI triage for ${cleanPatientName(activeScenario.patientLabel)}`,
         hint: 'action',
-        action: 'triage',
-      },
+        action: 'triage' as const,
+      }] : []),
       {
         id: 'act-export',
         label: 'Export audit log',
@@ -2134,7 +2144,7 @@ export default function Home() {
             item.label.toLowerCase().includes(q) || item.hint.toLowerCase().includes(q),
         )
       : items;
-  }, [activeScenario.patientLabel, patientScenarios, cmdQuery]);
+  }, [activeScenario.patientLabel, patientScenarios, cmdQuery, isDemoPatient]);
 
   const executeCommandItem = useCallback(
     (item: CommandItem | undefined) => {
@@ -2317,7 +2327,7 @@ export default function Home() {
         ['o-limits', 'Limits'],
       ];
     }
-    if (view === 'triage') {
+    if (view === 'triage' && isDemoPatient) {
       return [
         ['o-model', 'Model'],
         ['o-queue', 'Queue'],
@@ -2326,7 +2336,7 @@ export default function Home() {
     if (view === 'audit') {
       return [['o-trail', 'Trail']];
     }
-    if (view === 'models') {
+    if (view === 'models' && exampleWorkspace) {
       if (modelsTab === 'connections') {
         return [
           ['o-db', 'Databases'],
@@ -2346,7 +2356,7 @@ export default function Home() {
       ];
     }
     return [];
-  }, [diffTab, isDemoPatient, modelsTab, view]);
+  }, [diffTab, exampleWorkspace, isDemoPatient, modelsTab, view]);
 
   /* ---- Snapshot Review Counts ---- */
   const diffEntriesCount = snapshotEntries.filter((r) => r.kind === 'changed').length;
@@ -2378,9 +2388,10 @@ export default function Home() {
     : 'Deterministic local fallback';
 
   const isOverview = view === 'home' || view === 'patient';
+  const patientRequired = !hasSelectedPatient && ['patient', 'diff', 'triage', 'extract', 'chat'].includes(view);
   const isPatientWorkflow = view === 'patient' || view === 'diff' || view === 'triage' || view === 'extract';
   const pendingReviews = reviewableCount - reviewedCount;
-  const patientName = cleanPatientName(activeScenario.patientLabel);
+  const patientName = hasSelectedPatient ? cleanPatientName(activeScenario.patientLabel) : 'No patient selected';
   const suggestions = triageByScenario[activeScenario.id] ?? [];
   const socketReady = deriveSocketReadiness(socketStatus);
   const compareStatus = extractResult ? (extractResult.simulated ? 'Rules' : 'Hosted model') : 'Not run';
@@ -2454,14 +2465,20 @@ export default function Home() {
     case 'home':
       widgetTitle = 'Workspace overview';
       widgets = [
-        metric('Patient workspace', patientName, activeScenario.patientId, 'Open patient', () => selectPatient(activeScenario.id)),
+        metric('Patient workspace', patientName, activeScenario.patientId,
+          hasSelectedPatient ? 'Open patient' : 'Add patient',
+          () => {
+            if (hasSelectedPatient) selectPatient(activeScenario.id);
+            else showPatientForm();
+          }),
         jump('Medication review', pendingReviews, 'diff', 'Open snapshot review', 'Changes awaiting a decision'),
         jump('Note comparison', compareStatus, 'extract', 'Open Compare notes', 'Compare earlier and later notes'),
         metric('Ask about a patient', patientName, undefined, 'Open AI chat', openChartChat),
         jump('Suggestion queue', openTriageCount, 'triage', 'Open suggestions', 'Decisions pending'),
         metric('Patients in this browser', patientScenarios.length),
         jump('Activity log', audit.length, 'audit', 'Open session activity', audit[0]?.action),
-        jump('Model connection', serviceStatus, 'models', 'Open connections'),
+        exampleWorkspace ? jump('Model connection', serviceStatus, 'models', 'Open connections')
+          : jump('External connections', 'None configured', 'models', 'View processing settings'),
         isDemoPatient ? metric('Encounter record', 'October 15', 'Discharge conversation and recording consent', 'Open transcript', () => {
           navigateTo('patient', false);
           focusSection('transcript-title');
@@ -2530,7 +2547,10 @@ export default function Home() {
       break;
     case 'triage':
       widgetTitle = 'Suggestion tools';
-      widgets = [
+      widgets = !isDemoPatient ? [
+        metric('Review queue', noteFlaggedCount, 'Differences flagged for clarification'),
+        metric('Decisions recorded', noteDecidedCount, undefined, 'Open note comparison', () => navigateTo('extract')),
+      ] : [
         metric('Suggestions generated', suggestions.length, undefined, 'Open queue', () => focusSection('o-queue')),
         metric('Awaiting decision', openTriageCount),
         metric('Accepted for review', suggestions.filter((suggestion) => suggestion.decision === 'accepted').length),
@@ -2569,7 +2589,7 @@ export default function Home() {
           chatAspect === 'earlier' || chatAspect === 'later' ? chatChart[chatAspect].source : chatChart.title,
           'Change scope', () => focusSection('chat-scope-select')),
         metric('Reviewed corrections', chartCorrections.filter((item) => item.scenarioId === chatChart.id).length,
-          'Corrections in this demo session', 'Open chat', () => focusSection('patient-chat-title')),
+          'Corrections in this session', 'Open chat', () => focusSection('patient-chat-title')),
       ];
       break;
     case 'models':
@@ -2823,7 +2843,18 @@ export default function Home() {
           </div>
 
           <div className={isOverview ? "col overview-col" : "col"}>
-            {isPatientWorkflow && <section
+            {patientRequired && (
+              <section className="workspace-overview">
+                <header className="workspace-overview-heading">
+                  <div>
+                    <h1 className="h1" ref={headingRef} tabIndex={-1}>{VIEW_NAMES[view]}</h1>
+                    <p>{patientScenarios.length ? 'Select a patient from the navigation to continue.' : 'Add a patient to get started.'}</p>
+                  </div>
+                  <button type="button" className="btn primary" onClick={showPatientForm}>Add patient</button>
+                </header>
+              </section>
+            )}
+            {isPatientWorkflow && !patientRequired && <section
               className="patient-context-bar"
               aria-label="Active patient and encounter context"
             >
@@ -2905,7 +2936,7 @@ export default function Home() {
                 )}
               </div>
             </section>}
-            {isOverview && (
+            {isOverview && !patientRequired && (
               <section className="workspace-overview" aria-label={VIEW_NAMES[view]}>
                 <header className="workspace-overview-heading">
                   <div>
@@ -2929,8 +2960,11 @@ export default function Home() {
                 {view === 'home' && creatingPatient && (
                   <form className="patient-create-form" onSubmit={createPatient} aria-labelledby="new-patient-title">
                     <h2 id="new-patient-title" className="h2">Add patient</h2>
-                    <p id="new-patient-help">Use a fictional name. Added patients and their notes are saved in this browser and shared across its DiffMD tabs.</p>
-                    <label htmlFor="new-patient-name">Patient name</label>
+                    <p id="new-patient-help">
+                      {exampleWorkspace ? 'Use a fictional name.' : 'Use a de-identified case reference without a patient name or medical record number.'}
+                      {' '}Cases and note drafts are saved in this browser and available in its DiffMD tabs.
+                    </p>
+                    <label htmlFor="new-patient-name">{exampleWorkspace ? 'Patient name' : 'Case reference'}</label>
                     <input id="new-patient-name" name="patient-name" className="search" required maxLength={80}
                       autoComplete="off" aria-describedby="new-patient-help" aria-invalid={Boolean(patientFormError)}
                       onChange={() => setPatientFormError('')} />
@@ -2975,7 +3009,7 @@ export default function Home() {
                 )}
               </section>
             )}
-            <details
+            {(exampleWorkspace || hasSelectedPatient) && <details
               className="workspace-extra"
               hidden={view !== 'home'}
               open={pinnedOpen}
@@ -2995,8 +3029,8 @@ export default function Home() {
                 order={widgetOrder}
                 onOrderChange={setWidgetOrder}
               />
-            </details>
-            {view === 'chat' && (
+            </details>}
+            {view === 'chat' && !patientRequired && (
               <PatientChat key={widgetEditPage ?? 'chat'} headingRef={headingRef} charts={patientScenarios}
                 chart={chatChart} allowModelFollowUp={chatChart.id === DEMO_PATIENT.id}
                 onChartChange={setChatChartId} aspect={chatAspect} onAspectChange={setChatAspect}
@@ -3009,7 +3043,7 @@ export default function Home() {
             )}
 
             {/* ==================== COMPARE NOTES (DEFAULT) ==================== */}
-            {view === 'extract' && (
+            {view === 'extract' && !patientRequired && (
               <section className="extract-workspace" aria-label="Compare notes workspace">
                 <header className="extract-hero">
                   <h1 className="h1" ref={headingRef} tabIndex={-1}>
@@ -3046,7 +3080,7 @@ export default function Home() {
                   </div>
 
                   <p className="extract-scope" style={{ marginTop: 8 }}>
-                    {!isDemoPatient ? 'Use fictional notes only. Drafts save in this browser. Run the comparison again after reloading.'
+                    {!isDemoPatient ? 'Enter de-identified notes only. Drafts save in this browser. Run the comparison again after reloading.'
                       : HOSTED_COMPARE_ENABLED
                       ? 'Qwen 4B can read the bundled example. Edited or alternate example notes use rules in this browser. Use fictional records only.'
                       : 'Use example records only. The status above identifies the comparison method.'}
@@ -3285,8 +3319,11 @@ export default function Home() {
                                 </div>
                                 {dec === 'clarify' && (
                                   <p className="extract-followup">
-                                    Why does {entry.name} appear only in the{' '}
-                                    {entry.label.toLowerCase()}?
+                                    {entry.kind === 'regimen_changed'
+                                      ? `Can you confirm the documented change for ${entry.name}?`
+                                      : entry.kind === 'discontinued'
+                                        ? `Can you confirm the documented stop for ${entry.name}?`
+                                        : `Why does ${entry.name} appear only in the ${entry.label.toLowerCase()}?`}
                                   </p>
                                 )}
                               </li>
@@ -3337,11 +3374,17 @@ export default function Home() {
             )}
 
             {/* ==================== SNAPSHOT REVIEW ==================== */}
-            {view === 'diff' && !isDemoPatient && (
+            {view === 'diff' && !isDemoPatient && !patientRequired && (
               <section aria-label="Snapshot review">
                 <h1 className="h1" ref={headingRef} tabIndex={-1}>{patientName}</h1>
-                <p className="lede">This patient has no structured medication lists. You can compare an earlier and a later note.</p>
-                <button type="button" className="btn" onClick={() => navigateTo('extract')}>Compare patient notes</button>
+                <p className="lede">{extractResult
+                  ? `${noteDiffCount} medication differences and ${noteDecidedCount} review decisions in the current comparison.`
+                  : 'Compare an earlier and a later note to review the medication differences.'}</p>
+                {extractResult && <button type="button" className="btn" onClick={() => {
+                  navigateTo('extract', false);
+                  focusSection('extraction-result-title');
+                }}>Review comparison evidence</button>}
+                {!extractResult && <button type="button" className="btn" onClick={() => navigateTo('extract')}>Compare patient notes</button>}
               </section>
             )}
             {view === 'diff' && isDemoPatient && (
@@ -4786,7 +4829,20 @@ export default function Home() {
             )}
 
             {/* ==================== REVIEW SUGGESTIONS ==================== */}
-            {view === 'triage' && (
+            {view === 'triage' && !patientRequired && !isDemoPatient && (
+              <section aria-label="Review suggestions">
+                <h1 className="h1" ref={headingRef} tabIndex={-1}>Review suggestions</h1>
+                <p className="lede">{noteFlaggedCount
+                  ? `${noteFlaggedCount} ${noteFlaggedCount === 1 ? 'difference flagged' : 'differences flagged'} for clarification.`
+                  : 'Flag medication differences during comparison to prepare follow-up questions.'}</p>
+                <button type="button" className="btn" onClick={() => {
+                  navigateTo('extract', !extractResult);
+                  if (extractResult) focusSection('extraction-result-title');
+                }}>Open note comparison</button>
+                {noteFlaggedCount > 0 && <button type="button" className="btn quiet" onClick={handleExportFollowUps}>Download follow-ups</button>}
+              </section>
+            )}
+            {view === 'triage' && isDemoPatient && (
               <section aria-label="Review suggestions">
                 <h1 className="h1" ref={headingRef} tabIndex={-1}>
                   Suggestions waiting for a clinician
@@ -5080,7 +5136,13 @@ export default function Home() {
             )}
 
             {/* ==================== DEVELOPER SETTINGS ==================== */}
-            {view === 'models' && (
+            {view === 'models' && !exampleWorkspace && (
+              <section aria-label="Developer settings">
+                <h1 className="h1" ref={headingRef} tabIndex={-1}>Developer settings</h1>
+                <p className="lede">Note comparisons run in this browser. This workspace has no external data source or inference connection.</p>
+              </section>
+            )}
+            {view === 'models' && exampleWorkspace && (
               <section aria-label="Developer settings">
                 <h1 className="h1" ref={headingRef} tabIndex={-1}>
                   Developer settings
@@ -5549,7 +5611,7 @@ export interface DataAdapter {
                 )}
               </section>
             )}
-            {!isOverview && pageWidgets}
+            {!isOverview && !patientRequired && (view !== 'models' || exampleWorkspace) && pageWidgets}
           </div>
 
         {outlineSections.length > 0 && (

@@ -3,6 +3,7 @@ import { compareBundledNotes, EncounterInferenceError, isEmptyEncounterRequest }
 const headers = { 'Cache-Control': 'no-store' };
 
 export async function POST(request: Request) {
+  if (process.env.NEXT_PUBLIC_CLINICAL_DIFF_EXAMPLE_WORKSPACE === '0') return new Response(null, { status: 404 });
   if (!(await isEmptyEncounterRequest(request))) {
     return Response.json({ status: 'invalid-request' }, { status: 400, headers });
   }

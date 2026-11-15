@@ -4,7 +4,7 @@ import styles from './privacy.module.css';
 
 export const metadata: Metadata = {
   title: 'Privacy and cookies | DiffMD',
-  description: 'How the DiffMD public demo handles sessions, browser storage and example records.',
+  description: 'How DiffMD handles browser storage and web requests.',
 };
 
 export default function PrivacyPage() {
@@ -12,47 +12,33 @@ export default function PrivacyPage() {
     <main className={styles.page}>
       <Link href="/" prefetch={false}>Back to DiffMD</Link>
       <h1>Privacy and cookies</h1>
-      <p>Use this public demo with fictional records only. Keep patient information, real visit recordings and other identifying details out of the app.</p>
+      <p>Use de-identified case references and notes in the public workspace. Keep names, medical record numbers and visit recordings out of the site.</p>
 
-      <section aria-labelledby="privacy-session">
-        <h2 id="privacy-session">Demo reviews and browser storage</h2>
+      <section aria-labelledby="privacy-browser">
+        <h2 id="privacy-browser">What stays in your browser</h2>
         <p>
-          When the workspace loads, DiffMD uses a session cookie with a random ID to keep your review
-          activity together. The server can store your demo review choices and audit entries under that ID.
-          This app uses browser storage to remember your display palette, widget layouts and that you saw this notice.
+          Case references, note drafts and widget layouts are stored in this browser. Your DiffMD tabs can
+          access that storage. Clear this site&apos;s browser storage to remove saved data and preferences.
         </p>
         <p>
-          Clear this site&apos;s cookies and storage in your browser to start a fresh session and reset those
-          preferences. Clearing them disconnects your browser from the old session. Server logs and
-          previously saved demo activity are handled separately.
+          Comparison results, review decisions, activity and chat history are kept in the current tab.
+          Reload the page and compare your saved notes again to rebuild the results.
         </p>
       </section>
 
       <section aria-labelledby="privacy-processing">
         <h2 id="privacy-processing">What gets sent</h2>
         <p>
-          Our hosting provider, Google Cloud, can log request details such as IP address, browser information,
-          the requested URL and time. DiffMD uses its demo review service to load and save review activity.
-        </p>
-        <p>
-          Added fictional patient names and note drafts are saved in this browser and shared across its DiffMD tabs.
-          Clear site storage to remove them. Comparison results, chat history, reviewed chart corrections and page notes
-          stay in the tab and clear on reload. A configured development or private cloud preview can send an unclear question about the
-          bundled Morgan Lee chart to Qwen to help ask a follow-up. That request contains the question you typed.
-        </p>
-        <p>
-          The public workspace can ask the hosted model to compare the bundled notes or process the bundled
-          encounter recording. It processes edited notes and added charts in your browser. Keep personal information
-          out of all text fields. This app uses no advertising or analytics trackers.
+          The public comparison runs in your browser. Google Cloud can log request details such as IP address,
+          browser information, requested URL and time. This app uses no advertising or analytics trackers.
         </p>
       </section>
 
-      <section aria-labelledby="privacy-ai">
-        <h2 id="privacy-ai">AI notes are in beta</h2>
+      <section aria-labelledby="privacy-review">
+        <h2 id="privacy-review">Review the source notes</h2>
         <p>
-          This demo is for evaluation. Transcripts and drafts can omit facts or get the medication, dose,
-          timing or negation wrong. Clinicians should take their own notes during a visit and check any AI-assisted
-          draft against the original source and their own notes before using it.
+          A comparison can miss medication mentions or clinical context. Check each finding in the original
+          notes before relying on it.
         </p>
       </section>
     </main>

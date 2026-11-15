@@ -105,6 +105,7 @@ async function handleMutation(req: NextRequest, method: 'POST' | 'PUT') {
 }
 
 export async function GET(req: NextRequest) {
+  if (process.env.NEXT_PUBLIC_CLINICAL_DIFF_EXAMPLE_WORKSPACE === '0') return new Response(null, { status: 404 });
   try {
     const session = reviewSession(req);
     return session.respond(await getSessionStore(session.options));
@@ -123,14 +124,17 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  if (process.env.NEXT_PUBLIC_CLINICAL_DIFF_EXAMPLE_WORKSPACE === '0') return new Response(null, { status: 404 });
   return handleMutation(req, 'POST');
 }
 
 export async function PUT(req: NextRequest) {
+  if (process.env.NEXT_PUBLIC_CLINICAL_DIFF_EXAMPLE_WORKSPACE === '0') return new Response(null, { status: 404 });
   return handleMutation(req, 'PUT');
 }
 
 export async function DELETE(req: NextRequest) {
+  if (process.env.NEXT_PUBLIC_CLINICAL_DIFF_EXAMPLE_WORKSPACE === '0') return new Response(null, { status: 404 });
   try {
     const session = reviewSession(req);
     return session.respond(await resetSessionStore(session.options));
@@ -149,6 +153,7 @@ export async function DELETE(req: NextRequest) {
 }
 
 export async function OPTIONS() {
+  if (process.env.NEXT_PUBLIC_CLINICAL_DIFF_EXAMPLE_WORKSPACE === '0') return new Response(null, { status: 404 });
   return new NextResponse(null, {
     status: 204,
     headers: {

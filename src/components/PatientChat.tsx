@@ -134,7 +134,7 @@ export function PatientChat({
     else onWidgetApproval(proposal.change);
     setEdit(null);
     setStatus(proposal.kind === 'chart'
-      ? 'Correction applied to this demo chart. The original record is preserved.'
+      ? 'Correction applied to this chart. The original record is preserved.'
       : 'Page note updated after review.');
   }
 
@@ -142,7 +142,9 @@ export function PatientChat({
     <section className="patient-chat" aria-label="AI chat">
       <header>
         <h1 className="h1" ref={headingRef} id="patient-chat-title" tabIndex={-1}>AI chat</h1>
-        <p>Demo chart assistant · Fictional records only</p>
+        <p>{allowModelFollowUp
+          ? 'Chart assistant'
+          : 'Chart assistant · Runs in this browser. Answers are limited to available chart records.'}</p>
         {cloudChat && allowModelFollowUp && <p>Cloud Qwen may process your question to help ask a follow-up. Do not enter real patient information.</p>}
       </header>
       <div className="patient-chat-context">
@@ -305,7 +307,7 @@ function EditProposal({
         <form onSubmit={preview}>
           {kind === 'chart' ? (
             <>
-              <p>Correct a transcription in this demo chart using a source you can verify. Medication orders stay in the clinical system.</p>
+              <p>Correct a transcription in this chart using a source you can verify. Medication orders stay in the clinical system.</p>
               <div className="patient-chat-context">
                 <label>Record
                   <select value={scope} onChange={(event) => {

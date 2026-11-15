@@ -28,10 +28,10 @@ export function FirstVisitPrivacyNotice() {
   return (
     <aside className={styles.notice} aria-labelledby="privacy-notice-heading">
       <div>
-        <h2 id="privacy-notice-heading">Privacy in this demo</h2>
+        <h2 id="privacy-notice-heading">Privacy and data</h2>
         <p>
-          DiffMD uses a session cookie to keep your demo reviews together. Our hosting provider can log
-          requests. Use fictional records and keep real patient information out of this site.
+          Use de-identified case references and notes. They stay in this browser. Our hosting provider
+          can log basic details about visits to the site.
         </p>
       </div>
       <div className={styles.actions}>

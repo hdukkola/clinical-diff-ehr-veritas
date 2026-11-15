@@ -1,4 +1,4 @@
-const prefix = 'diffmd-patient-v1:';
+const prefix = 'diffmd-case-v1:';
 const changeEvent = 'diffmd-patients-change';
 const patientIdPattern = /^LOCAL-[A-F0-9]{12}$/;
 
