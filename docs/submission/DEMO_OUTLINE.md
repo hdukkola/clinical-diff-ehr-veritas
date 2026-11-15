@@ -6,3 +6,7 @@
 - **70–100 s.** Report 49 exact matches out of 60 reference names, with 11 unmatched predictions and 11 missed names on 40 synthetic notes. Show the Advil versus ibuprofen example and explain that this evaluation measures name extraction. Close with “This project is a prototype and is not medical advice.”
 
 Before recording, use only fictional notes and the actual app mode shown. Confirm team credits, organizer eligibility, and view access before submission.
+
+## Recorded draft
+
+The team-review MP4 runs for 49 seconds. It uses the live 4B comparison on fictional notes, the actual downloaded handoff, and the documented benchmark counts. It includes computer-generated narration and a selectable English caption track. Hosting and submission require the team's decision.

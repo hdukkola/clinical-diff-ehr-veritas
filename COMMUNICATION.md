@@ -209,3 +209,7 @@ Codex added a text download that includes flagged questions and their source exc
 ### DOC-002 — one-page Veritas write-up
 
 Codex prepared and checked a one-page PDF for team review. The draft describes the current discharge handoff, the 40-note extraction benchmark, the observed literal-match error, and scope limits. The repository is still private. Submission and access changes await the team's decision.
+
+### DOC-003 — short demo recording
+
+Codex recorded and verified a 49-second local demo for team review using the live synthetic comparison, the downloaded source-backed follow-up, and the benchmark. The recording is ready for the team to review before choosing a submission link.
