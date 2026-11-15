@@ -30,6 +30,12 @@ npm run dev
 
 Open `http://localhost:3000`. Configure optional live AI endpoints using `.env.example` copied to `.env.local` (never commit `.env*` or credentials).
 
+### Patient chat and widget review
+
+Open **AI chat** and pick a fictional patient and record scope. Answers use that chart's documented entries and cite their source. You can start a chart correction with `Correct the chart: Lisinopril dose to 15 mg`, or a widget draft with `Set the Home page note to "Review the discharge summary."`. Check the source and target before selecting **Approve and apply**. Reviewed corrections preserve the original source and are held in the current browser tab. The demo has no clinician sign-in.
+
+For optional local Qwen clarifications, run a Qwen llama.cpp server on `127.0.0.1:18080` and set `CLINICAL_DIFF_LOCAL_CHAT_MODEL` to the exact ID reported by its `/v1/models` response. The local model can suggest which detail to clarify. Chart answers and approvals are handled by the app. Hosting uses the chart assistant without a model server.
+
 ## Verification Commands
 
 ```sh

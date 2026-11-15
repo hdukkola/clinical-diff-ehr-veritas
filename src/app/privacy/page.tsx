@@ -19,7 +19,7 @@ export default function PrivacyPage() {
         <p>
           When the workspace loads, DiffMD uses a session cookie with a random ID to keep your review
           activity together. The server can store your demo review choices and audit entries under that ID.
-          This app uses browser storage to remember your display palette and that you saw this notice.
+          This app uses browser storage to remember your display palette, widget layouts and that you saw this notice.
         </p>
         <p>
           Clear this site&apos;s cookies and storage in your browser to start a fresh session and reset those
@@ -33,6 +33,9 @@ export default function PrivacyPage() {
         <p>
           Our hosting provider, Google Cloud, can log request details such as IP address, browser information,
           the requested URL and time. DiffMD uses its demo review service to load and save review activity.
+        </p>
+        <p>
+          On the hosted demo, chat questions, reviewed chart corrections and page notes stay in this browser tab and clear on reload. An optional local development model can process questions on the same computer.
         </p>
         <p>
           When hosted AI is available and you request a comparison, the text you submit can be sent to the
