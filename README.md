@@ -27,7 +27,7 @@ npm run dev
 
 Open `http://localhost:3000`. Configure optional live AI endpoints using `.env.example` copied to `.env.local` (never commit `.env*` or credentials).
 
-### Example chart access for development
+### Local QA fixtures
 
 Set `NEXT_PUBLIC_CLINICAL_DIFF_EXAMPLE_WORKSPACE=1` in `.env.local` to exercise the internal QA fixture, transcript and chart assistant. Review decisions in that fixture can use the example session API. For optional local Qwen clarifications, point `CLINICAL_DIFF_LOCAL_CHAT_MODEL` at the exact model ID reported by a Qwen llama.cpp server on `127.0.0.1:18080`.
 
@@ -36,6 +36,10 @@ The Firebase release builds with `NEXT_PUBLIC_CLINICAL_DIFF_EXAMPLE_WORKSPACE=0`
 The optional account workspace uses Firebase Authentication with Google and Cloud Firestore. Build it with the web app's public SDK configuration in `NEXT_PUBLIC_DIFFMD_FIREBASE_API_KEY`, `NEXT_PUBLIC_DIFFMD_FIREBASE_APP_ID`, `NEXT_PUBLIC_DIFFMD_FIREBASE_PROJECT`, and `NEXT_PUBLIC_DIFFMD_FIREBASE_AUTH_DOMAIN`. Use a Firebase Hosting domain authorized for sign-in. Deploy `firestore.rules` and `firestore.indexes.json` before exposing the account controls. To grant an account access, an administrator creates an empty `workspaceAccounts/{verified-google-email}` document. A user can read and update only their own cases.
 
 Browser cases stay local when signing in. Account cases and explicitly saved de-identified notes sync between signed-in devices. A stale edit cannot overwrite another device's save. Run the comparison again after reopening a saved case. Account review decisions and activity stay in the tab.
+
+Invited users can open a synced case and upload a permitted, de-identified English recording (up to 30 seconds). DiffMD transcribes it using the private Cloud Run worker in `deploy/recording-transcription`. The user reviews and edits the transcript, then explicitly imports it into a draft and saves the note separately. The worker uses [OpenAI Whisper base.en](https://github.com/openai/whisper) via [whisper.cpp](https://github.com/ggml-org/whisper.cpp), writes only temporary working files, and does not store the recording or transcript.
+
+Build with `NEXT_PUBLIC_DIFFMD_RECORDING_TRANSCRIPTION=1` and configure the private HTTPS worker URL in the server variable `DIFFMD_RECORDING_TRANSCRIPTION_URL`. Grant Cloud Run invoker on that worker only to the web service identity. Keep the worker's minimum instances at zero, maximum instances at one, and concurrency at one.
 
 ## Verification Commands
 
@@ -63,7 +67,7 @@ node tests/model-eval/run_model_eval.mjs --dry-run
 
 ## Limitations
 
-The public workspace supports de-identified, browser-local review. Authenticated clinical records, EHR synchronization and live model inference for entered notes are outstanding. Keep identifiable records and visit recordings out of the public workspace.
+The workspace supports de-identified case review, with optional private account sync. EHR synchronization, clinical validation and hosted Qwen inference for entered notes are outstanding. Keep identifiable records and recordings out of DiffMD.
 
 ## Hackathon Submission Details
 
