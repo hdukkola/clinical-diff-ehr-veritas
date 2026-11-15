@@ -81,6 +81,25 @@ describe('Clinical Diff Veritas Editorial UI', () => {
       await user.click(within(result).getByRole('button', { name: 'Flag for clarification' }));
       expect(result).toHaveTextContent('1 flagged for clarification');
 
+      await openSnapshot(user);
+      const snapshotWidgets = main.getByRole('region', { name: 'Snapshot tools' });
+      expect(snapshotWidgets.querySelector('[data-page-widget="Comparison items"]')).toHaveTextContent('Lisinopril');
+      expect(snapshotWidgets.querySelector('[data-page-widget="Awaiting decision"] .page-widget-value')).toHaveTextContent(/^0$/);
+      await user.click(within(snapshotWidgets.querySelector<HTMLElement>('[data-page-widget="Comparison items"]')!)
+        .getByRole('button', { name: 'Open comparison' }));
+      await waitFor(() => expect(main.getByRole('heading', { name: 'Mention differences' })).toHaveFocus());
+      await user.click(within(getWorkspaceNav()).getByRole('button', { name: 'Review suggestions' }));
+      expect(main.getByRole('region', { name: 'Suggestion tools' })
+        .querySelector('[data-page-widget="Review queue"] .page-widget-value')).toHaveTextContent(/^1$/);
+      await openCompare(user);
+      fireEvent.change(main.getByRole('textbox', { name: 'Later note' }), { target: { value: 'Lisinopril 30 mg daily' } });
+      await openSnapshot(user);
+      expect(main.getByRole('region', { name: 'Snapshot tools' })
+        .querySelector('[data-page-widget="Comparison items"]')).toHaveTextContent('Run a comparison for this case');
+      expect(main.getByRole('region', { name: 'Snapshot tools' })).not.toHaveTextContent('Lisinopril');
+      await openCompare(user);
+      fireEvent.change(main.getByRole('textbox', { name: 'Later note' }), { target: { value: 'Lisinopril 20 mg daily' } });
+
       workspace.unmount();
       render(<Home />);
       await user.click(within(getPatientsGroup()).getByRole('button', { name: /^Case QA-001/ }));
