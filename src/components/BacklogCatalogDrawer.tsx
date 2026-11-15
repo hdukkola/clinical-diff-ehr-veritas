@@ -7,7 +7,24 @@ import {
   buildBacklogWidgetData,
   type BacklogBuildContext,
   type BacklogSectionId,
+  type BacklogWidgetData,
 } from '@/lib/backlog-widgets';
+import { buildClinicalWidgetData } from '@/lib/widgets-clinical';
+import { buildSpecialtyWidgetData, SPECIALTY_WIDGET_IDS } from '@/lib/widgets-specialty';
+
+const SPECIALTY_WIDGET_ID_SET = new Set<number>(SPECIALTY_WIDGET_IDS);
+
+function resolveBacklogWidgetData(
+  id: number,
+  context: BacklogBuildContext,
+): BacklogWidgetData {
+  const clinical = buildClinicalWidgetData(id, context);
+  if (clinical) return clinical;
+  if (SPECIALTY_WIDGET_ID_SET.has(id)) {
+    return buildSpecialtyWidgetData(id, context);
+  }
+  return buildBacklogWidgetData(id, context);
+}
 
 interface BacklogCatalogDrawerProps {
   open: boolean;
@@ -53,7 +70,7 @@ export function BacklogCatalogDrawer({
   }, [activeSection, query]);
 
   const activeWidget = useMemo(
-    () => buildBacklogWidgetData(selectedId, context),
+    () => resolveBacklogWidgetData(selectedId, context),
     [selectedId, context],
   );
 
@@ -87,17 +104,34 @@ export function BacklogCatalogDrawer({
         </header>
 
         <div className="backlog-toolbar">
-          <label className="sr-only" htmlFor="backlog-search-input">
-            Filter widget catalog
-          </label>
-          <input
-            id="backlog-search-input"
-            type="search"
-            className="backlog-search-input"
-            placeholder="Filter by ID (14–100) or widget name..."
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-          />
+          <div className="backlog-search-row">
+            <label className="sr-only" htmlFor="backlog-search-input">
+              Filter widget catalog
+            </label>
+            <input
+              id="backlog-search-input"
+              type="search"
+              className="backlog-search-input"
+              placeholder="Filter by ID (01–100) or widget name..."
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+            <span className="backlog-filter-count">
+              {filteredItems.length} of {BACKLOG_WIDGET_CATALOG.length}
+            </span>
+            {(query.trim() !== '' || activeSection !== 'all') && (
+              <button
+                type="button"
+                className="btn-ghost backlog-reset-btn"
+                onClick={() => {
+                  setQuery('');
+                  setActiveSection('all');
+                }}
+              >
+                Reset
+              </button>
+            )}
+          </div>
           <div className="backlog-section-pills" role="tablist" aria-label="Widget categories">
             <button
               type="button"
@@ -175,7 +209,10 @@ export function BacklogCatalogDrawer({
                     const max = Math.max(...activeWidget.series!.map((s) => s.value), 1);
                     const pct = Math.max(12, Math.round((pt.value / max) * 100));
                     return (
-                      <div key={pt.label} className="backlog-series-col">
+                      <div
+                        key={pt.label}
+                        className={`backlog-series-col${pt.comparable ? '' : ' non-comparable'}`}
+                      >
                         <div className="backlog-series-bar" style={{ height: `${pct}%` }} />
                         <span className="backlog-series-val">{pt.value}</span>
                         <span className="backlog-series-lbl">{pt.label}</span>
@@ -195,11 +232,11 @@ export function BacklogCatalogDrawer({
                   </thead>
                   <tbody>
                     {activeWidget.series.map((pt) => (
-                      <tr key={pt.recordedAt}>
+                      <tr key={pt.recordedAt} className={pt.comparable ? '' : 'non-comparable'}>
                         <td>{pt.recordedAt}</td>
                         <td>{pt.value}</td>
                         <td>{pt.unit}</td>
-                        <td>{pt.comparable ? 'Yes' : 'No'}</td>
+                        <td>{pt.comparable ? 'Yes' : 'No (unit/scale change)'}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -212,9 +249,10 @@ export function BacklogCatalogDrawer({
                 <li key={r.id} className={`backlog-row status-${r.status}`}>
                   <div className="backlog-row-top">
                     <strong>{r.label}</strong>
-                    <span className="backlog-row-badge">{r.status}</span>
+                    <span className={`backlog-row-badge status-${r.status}`}>{r.status}</span>
                   </div>
                   <p className="backlog-row-val">{r.value}</p>
+                  {r.detail && <p className="backlog-row-detail">{r.detail}</p>}
                   <p className="backlog-row-meta">
                     Source: {r.sourceLabel} · {r.recordedAt ?? 'Date unknown'}
                   </p>
