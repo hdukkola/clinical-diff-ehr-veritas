@@ -201,3 +201,7 @@ Codex evaluated the cached 35B base and step-360 adapter offline. On 40 syntheti
 ### TRAIN-002 — macOS process guard check
 
 Codex verified that the supervised smoke process stops on observed memory overage, wall time, or lost telemetry. A 64 MiB Metal allocation triggered the stop in a native probe. The 82-test runner suite passed. The real trainer, scheduler, and promotion gates remain in place.
+
+### TRAIN-003 — foreground plan preflight
+
+Codex pinned a 30-update 35B QLoRA proposal offline. All 324 training and 36 validation rows fit the 512-token limit, and all four cached model shards matched their hashes. Changed train and evaluation inputs were rejected. The review branch includes the reproducible preflight. Real training stays gated pending a verified launch path and human approval.
