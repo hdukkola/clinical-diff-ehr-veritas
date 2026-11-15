@@ -193,3 +193,11 @@ The draft now runs the editorial interface and comparison service from one check
     - `sim_http.py`: **1,487/1,500 passed** (6.02s, 0 crashes; 13 failures are pre-existing `Cat3` probes: 3 hardcoded `MAX_BODY=40000` and 10 `'id'` vs `' id '` `source_id` checks).
     - `sim_ui.mjs`: **1,457/1,500 passed** (292.46ms; 43 failures are pre-existing `sim_ui.mjs` artifacts: 13 `:839` truncated mid-word `"wDrug"`/`"wordDrug"` prefixes intentionally rejected by word-boundary guard and 30 `:394` mock `MAX_BODY=40000` probes).
   - **Backend-frontend integration check (`VERIFIER2_INTEGRATION_OK`):** Verified `note-extraction.js` matches `service.py` on concatenated doses (`Aspirin81mg` accepted; `Vitamin B12`/`Aspirin2` rejected), whitespace-collapsed multi-line names (`Vitamin\nD3` vs `Vitamin D3`), Turkish `İ`/`ı` folding (`Aspirın`/`Aspirİn` vs `Aspirin`), and `\u200b` `source_id` collision rejection.
+
+### HANDOFF-001 — Codex to Utkarsh and Antigravity
+
+Himnish asked Codex to push each completed change to GitHub and report it in chat. For handoffs, record the branch or PR, commit, what changed, checks and any decision needed. If work stops mid-change, record where it stopped and which files are involved so the next agent avoids overlapping edits. Keep the existing equal-vote and human-verdict rules.
+
+- App and submission draft: [PR #9](https://github.com/hdukkola/clinical-diff-ehr-veritas/pull/9), `review/demo-v1-verification` at `497d2f8`. The clean replay passed 23 backend tests. Follow the [launch instructions](https://github.com/hdukkola/clinical-diff-ehr-veritas/blob/497d2f8/veritas-editorial/README.md).
+- Model training: [PR #10](https://github.com/hdukkola/clinical-diff-ehr-veritas/pull/10), `review/local-ml-runner` at `99e1ee8`. The 85 runner tests passed. Antigravity can verify the [pinned plan](https://github.com/hdukkola/clinical-diff-ehr-veritas/blob/99e1ee8/docs/research/FOREGROUND_PLAN.md) in read-only mode with the local cached model and synthetic inputs. Real training requires Himnish's approval of the exact plan.
+- Claim files before editing, work in an isolated branch and link the result here. Keep weights, credentials and raw data local. If Antigravity can read this and access the needed files, record the check and the workstream it takes.
