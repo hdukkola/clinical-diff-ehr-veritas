@@ -1248,4 +1248,43 @@ describe('Clinical Diff Veritas Editorial UI', () => {
     await user.click(unavailTrigger);
     expect(onSelectEvidenceChange).toHaveBeenCalledWith('m-unavail');
   });
+
+  it('jumps between cited mentions in Note navigator while keeping note identity, timestamp, and source position visible', async () => {
+    const user = userEvent.setup();
+    render(<Home />);
+
+    const cockpit = screen.getByRole('region', { name: 'Clinical cockpit widgets' });
+    const provenanceCard = cockpit.querySelector<HTMLElement>('[data-widget-id="provenance-health"]')!;
+    const lisinoprilTrigger = within(provenanceCard).getByRole('button', { name: /Lisinopril/i });
+    await user.click(lisinoprilTrigger);
+
+    const noteNav = screen.getByRole('region', { name: 'Note navigator for Lisinopril' });
+    expect(noteNav).toHaveTextContent('Citation 1 of 2');
+    expect(noteNav).toHaveTextContent('Fictional outpatient medication list');
+    expect(noteNav).toHaveTextContent('2026-10-01');
+    expect(noteNav).toHaveTextContent('earlier snapshot');
+
+    const prevBtn = within(noteNav).getByRole('button', { name: 'Previous citation' });
+    const nextBtn = within(noteNav).getByRole('button', { name: 'Next citation' });
+    expect(prevBtn).toBeDisabled();
+    expect(nextBtn).toBeEnabled();
+
+    await user.click(nextBtn);
+    expect(noteNav).toHaveTextContent('Citation 2 of 2');
+    expect(noteNav).toHaveTextContent('Fictional discharge medication list');
+    expect(noteNav).toHaveTextContent('2026-10-15');
+    expect(noteNav).toHaveTextContent('later snapshot');
+    expect(nextBtn).toBeDisabled();
+    expect(prevBtn).toBeEnabled();
+
+    const evidenceRegion = screen.getByLabelText('Evidence and provenance for Lisinopril');
+    const items = within(evidenceRegion).getAllByRole('listitem');
+    expect(items[1]).toHaveAttribute('aria-current', 'true');
+    expect(items[0]).not.toHaveAttribute('aria-current');
+
+    await user.click(prevBtn);
+    expect(noteNav).toHaveTextContent('Citation 1 of 2');
+    expect(noteNav).toHaveTextContent('Fictional outpatient medication list');
+    expect(items[0]).toHaveAttribute('aria-current', 'true');
+  });
 });

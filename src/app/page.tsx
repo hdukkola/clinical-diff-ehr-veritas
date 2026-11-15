@@ -944,6 +944,7 @@ export default function Home() {
   const [diffFilter, setDiffFilter] = useState<DiffFilter>('all');
   const [selectedMedId, setSelectedMedId] = useState<string | null>(null);
   const [evidenceReturnMedId, setEvidenceReturnMedId] = useState<string | null>(null);
+  const [activeCitationByMed, setActiveCitationByMed] = useState<Record<string, number>>({});
   const [reviews, setReviews] = useState<Record<string, ReviewDecision>>({});
   const [notes, setNotes] = useState<Record<string, string>>({});
 
@@ -1245,6 +1246,23 @@ export default function Home() {
       });
     },
     [evidenceReturnMedId],
+  );
+
+  const jumpToCitation = useCallback(
+    (medId: string, nextIdx: number, total: number, summaryLabel: string) => {
+      if (total <= 0) return;
+      const clamped = Math.max(0, Math.min(total - 1, nextIdx));
+      const key = `${activeScenario.id}:${medId}`;
+      setActiveCitationByMed((curr) => ({ ...curr, [key]: clamped }));
+      setAnnouncement(`Citation ${clamped + 1} of ${total}: ${summaryLabel}`);
+      requestAnimationFrame(() => {
+        const item = document.querySelector<HTMLElement>(
+          `.entry[data-value="${CSS.escape(medId)}"] .evidence-item[data-citation-idx="${clamped}"]`,
+        );
+        item?.scrollIntoView?.({ block: 'nearest' });
+      });
+    },
+    [activeScenario.id],
   );
 
   const selectPatient = useCallback(
@@ -3289,73 +3307,250 @@ export default function Home() {
                                         )}
 
                                         {entryLinks.length > 0 ? (
-                                          <ul className="evidence-list">
-                                            {entryLinks.map((link, idx) => {
-                                              const linkState = classifyLinkEvidenceState(link, entry.change);
-                                              const isUnavailable = linkState === 'unavailable_document';
-                                              const isMissingRef = linkState === 'missing_reference';
-                                              const isConflicting = linkState === 'conflicting_excerpts';
+                                          <>
+                                            {(() => {
+                                              const citationKey = `${activeScenario.id}:${entry.id}`;
+                                              const rawIdx = activeCitationByMed[citationKey] ?? 0;
+                                              const activeIdx = Math.max(
+                                                0,
+                                                Math.min(entryLinks.length - 1, rawIdx),
+                                              );
+                                              const activeLink = entryLinks[activeIdx];
+                                              const activeState = classifyLinkEvidenceState(
+                                                activeLink,
+                                                entry.change,
+                                              );
+                                              const noteIdentity =
+                                                activeLink.sourceLabel ??
+                                                activeLink.noteId ??
+                                                activeLink.sourceId ??
+                                                (activeLink.side === 'earlier'
+                                                  ? activeScenario.earlier.source
+                                                  : activeLink.side === 'later'
+                                                    ? activeScenario.later.source
+                                                    : 'Unattributed source');
+                                              const noteTimestamp =
+                                                activeLink.recordedAt ??
+                                                (activeLink.side === 'earlier'
+                                                  ? activeScenario.earlier.recordedAt
+                                                  : activeLink.side === 'later'
+                                                    ? activeScenario.later.recordedAt
+                                                    : null) ??
+                                                'Undated';
+                                              const sourcePos = activeLink.span
+                                                ? `${activeLink.section ? `${activeLink.section} · ` : ''}${
+                                                    activeLink.span.line !== undefined
+                                                      ? `line ${activeLink.span.line} · `
+                                                      : ''
+                                                  }chars ${activeLink.span.start}–${activeLink.span.end}`
+                                                : activeLink.section
+                                                  ? activeLink.section
+                                                  : activeState === 'unavailable_document' ||
+                                                      activeState === 'missing_reference'
+                                                    ? 'Source unavailable'
+                                                    : activeLink.side
+                                                      ? `${activeLink.side} snapshot`
+                                                      : 'Position unrecorded';
+
+                                              const formatSummary = (idx: number) => {
+                                                const target = entryLinks[idx];
+                                                const id =
+                                                  target?.sourceLabel ??
+                                                  target?.noteId ??
+                                                  target?.sourceId ??
+                                                  'Unattributed source';
+                                                const ts = target?.recordedAt ?? 'Undated';
+                                                return `${id}, ${ts}`;
+                                              };
+
                                               return (
-                                                <li className="evidence-item" key={idx}>
-                                                  <div className="evidence-meta">
-                                                    {link.side && (
-                                                      <span className="e-tag">{link.side}</span>
-                                                    )}
-                                                    <span
-                                                      className={`e-tag evidence-state-${linkState}${
-                                                        isUnavailable || isMissingRef ? ' unavailable' : ''
-                                                      }`}
-                                                    >
-                                                      {EVIDENCE_STATE_LABELS[linkState]}
-                                                    </span>
-                                                    <span
-                                                      className={`e-tag prov-${link.provenanceStatus}`}
-                                                    >
-                                                      {PROVENANCE_STATUS_LABELS[link.provenanceStatus]}
-                                                    </span>
-                                                    {link.sourceLabel && (
-                                                      <span>{link.sourceLabel}</span>
-                                                    )}
-                                                    {link.recordedAt && (
-                                                      <span>{link.recordedAt}</span>
-                                                    )}
-                                                    {link.section && <span>{link.section}</span>}
-                                                    {link.span && (
-                                                      <span className="mono">
-                                                        [{link.span.start}–{link.span.end}]
+                                                <div
+                                                  className="note-nav"
+                                                  role="region"
+                                                  aria-label={`Note navigator for ${entry.name}`}
+                                                >
+                                                  <div className="note-nav-bar">
+                                                    <div className="note-nav-controls">
+                                                      <button
+                                                        type="button"
+                                                        className="note-nav-btn"
+                                                        aria-label="Previous citation"
+                                                        disabled={activeIdx === 0}
+                                                        onClick={() =>
+                                                          jumpToCitation(
+                                                            entry.id,
+                                                            activeIdx - 1,
+                                                            entryLinks.length,
+                                                            formatSummary(activeIdx - 1),
+                                                          )
+                                                        }
+                                                      >
+                                                        Prev
+                                                      </button>
+                                                      <span className="note-nav-count">
+                                                        Citation {activeIdx + 1} of{' '}
+                                                        {entryLinks.length}
                                                       </span>
+                                                      <button
+                                                        type="button"
+                                                        className="note-nav-btn"
+                                                        aria-label="Next citation"
+                                                        disabled={
+                                                          activeIdx === entryLinks.length - 1
+                                                        }
+                                                        onClick={() =>
+                                                          jumpToCitation(
+                                                            entry.id,
+                                                            activeIdx + 1,
+                                                            entryLinks.length,
+                                                            formatSummary(activeIdx + 1),
+                                                          )
+                                                        }
+                                                      >
+                                                        Next
+                                                      </button>
+                                                    </div>
+                                                    {entryLinks.length > 1 && (
+                                                      <div
+                                                        className="note-nav-pills"
+                                                        role="group"
+                                                        aria-label={`Jump to citation for ${entry.name}`}
+                                                      >
+                                                        {entryLinks.map((lnk, idx) => (
+                                                          <button
+                                                            key={idx}
+                                                            type="button"
+                                                            className="note-nav-pill"
+                                                            aria-pressed={idx === activeIdx}
+                                                            aria-label={`Citation ${idx + 1}${lnk.side ? ` (${lnk.side})` : ''}`}
+                                                            onClick={() =>
+                                                              jumpToCitation(
+                                                                entry.id,
+                                                                idx,
+                                                                entryLinks.length,
+                                                                formatSummary(idx),
+                                                              )
+                                                            }
+                                                          >
+                                                            {idx + 1}
+                                                            {lnk.side ? ` · ${lnk.side}` : ''}
+                                                          </button>
+                                                        ))}
+                                                      </div>
                                                     )}
                                                   </div>
-                                                  {link.excerpt ? (
-                                                    <p>&ldquo;{link.excerpt}&rdquo;</p>
-                                                  ) : isUnavailable ? (
-                                                    <p className="nd">
-                                                      Source unavailable
-                                                      {link.note ? ` — ${link.note}` : '.'}
-                                                    </p>
-                                                  ) : isMissingRef ? (
-                                                    <p className="nd">
-                                                      Missing reference
-                                                      {link.note
-                                                        ? ` — ${link.note}`
-                                                        : ' — no source citation or excerpt recorded.'}
-                                                    </p>
-                                                  ) : isConflicting ? (
-                                                    <p className="nd">
-                                                      Conflicting excerpts
-                                                      {link.note
-                                                        ? ` — ${link.note}`
-                                                        : ' — conflicting or ambiguous attribution across sources.'}
-                                                    </p>
-                                                  ) : (
-                                                    <p className="nd">
-                                                      {link.note ?? 'No supporting excerpt attached.'}
-                                                    </p>
-                                                  )}
-                                                </li>
+                                                  <div className="note-nav-meta">
+                                                    <span>
+                                                      <b>Note</b> {noteIdentity}
+                                                    </span>
+                                                    <span>
+                                                      <b>Date</b> {noteTimestamp}
+                                                    </span>
+                                                    <span>
+                                                      <b>Position</b>{' '}
+                                                      <span className="mono">{sourcePos}</span>
+                                                    </span>
+                                                  </div>
+                                                </div>
                                               );
-                                            })}
-                                          </ul>
+                                            })()}
+                                            <ul className="evidence-list">
+                                              {entryLinks.map((link, idx) => {
+                                                const citationKey = `${activeScenario.id}:${entry.id}`;
+                                                const activeIdx = Math.max(
+                                                  0,
+                                                  Math.min(
+                                                    entryLinks.length - 1,
+                                                    activeCitationByMed[citationKey] ?? 0,
+                                                  ),
+                                                );
+                                                const isActiveCitation = idx === activeIdx;
+                                                const linkState = classifyLinkEvidenceState(
+                                                  link,
+                                                  entry.change,
+                                                );
+                                                const isUnavailable =
+                                                  linkState === 'unavailable_document';
+                                                const isMissingRef =
+                                                  linkState === 'missing_reference';
+                                                const isConflicting =
+                                                  linkState === 'conflicting_excerpts';
+                                                return (
+                                                  <li
+                                                    className={`evidence-item${isActiveCitation ? ' is-active' : ''}`}
+                                                    data-citation-idx={idx}
+                                                    aria-current={
+                                                      isActiveCitation ? 'true' : undefined
+                                                    }
+                                                    key={idx}
+                                                  >
+                                                    <div className="evidence-meta">
+                                                      {link.side && (
+                                                        <span className="e-tag">{link.side}</span>
+                                                      )}
+                                                      <span
+                                                        className={`e-tag evidence-state-${linkState}${
+                                                          isUnavailable || isMissingRef
+                                                            ? ' unavailable'
+                                                            : ''
+                                                        }`}
+                                                      >
+                                                        {EVIDENCE_STATE_LABELS[linkState]}
+                                                      </span>
+                                                      <span
+                                                        className={`e-tag prov-${link.provenanceStatus}`}
+                                                      >
+                                                        {
+                                                          PROVENANCE_STATUS_LABELS[
+                                                            link.provenanceStatus
+                                                          ]
+                                                        }
+                                                      </span>
+                                                      {link.sourceLabel && (
+                                                        <span>{link.sourceLabel}</span>
+                                                      )}
+                                                      {link.recordedAt && (
+                                                        <span>{link.recordedAt}</span>
+                                                      )}
+                                                      {link.section && <span>{link.section}</span>}
+                                                      {link.span && (
+                                                        <span className="mono">
+                                                          [{link.span.start}–{link.span.end}]
+                                                        </span>
+                                                      )}
+                                                    </div>
+                                                    {link.excerpt ? (
+                                                      <p>&ldquo;{link.excerpt}&rdquo;</p>
+                                                    ) : isUnavailable ? (
+                                                      <p className="nd">
+                                                        Source unavailable
+                                                        {link.note ? ` — ${link.note}` : '.'}
+                                                      </p>
+                                                    ) : isMissingRef ? (
+                                                      <p className="nd">
+                                                        Missing reference
+                                                        {link.note
+                                                          ? ` — ${link.note}`
+                                                          : ' — no source citation or excerpt recorded.'}
+                                                      </p>
+                                                    ) : isConflicting ? (
+                                                      <p className="nd">
+                                                        Conflicting excerpts
+                                                        {link.note
+                                                          ? ` — ${link.note}`
+                                                          : ' — conflicting or ambiguous attribution across sources.'}
+                                                      </p>
+                                                    ) : (
+                                                      <p className="nd">
+                                                        {link.note ??
+                                                          'No supporting excerpt attached.'}
+                                                      </p>
+                                                    )}
+                                                  </li>
+                                                );
+                                              })}
+                                            </ul>
+                                          </>
                                         ) : (
                                           <p className="nd" style={{ fontSize: 12 }}>
                                             Missing reference — no supporting evidence links attached to this change.
