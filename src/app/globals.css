@@ -3197,6 +3197,11 @@ pre.code .c {
   gap: 8px;
 }
 
+.patient-context-id > .mono {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .patient-context-name {
   font-size: 13.5px;
   font-weight: 600;

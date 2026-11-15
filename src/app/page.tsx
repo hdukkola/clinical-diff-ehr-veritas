@@ -2928,7 +2928,8 @@ function Workspace({ session }: { session: ReturnType<typeof useCloudSession> })
                     onClick={() => selectPatient(scenario.id)}
                   >
                     <span className="item-label">{cleanPatientName(scenario.patientLabel)}</span>
-                    <small>{scenario.id === DEMO_PATIENT.id ? (openCount ? `${openCount} open` : 'done') : scenario.patientId}</small>
+                    <small>{scenario.id === DEMO_PATIENT.id ? (openCount ? `${openCount} open` : 'done')
+                      : cloudUser ? `#${scenario.patientId.slice(-6)}` : scenario.patientId}</small>
                   </button>
                 );
               })}
