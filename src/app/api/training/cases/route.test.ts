@@ -31,6 +31,7 @@ vi.mock('firebase-admin/firestore', () => ({
               create: (value: object) => records.set(id, value),
               get: async () => ({ exists: records.has(id), get: () => records.get(id)?.version }),
               update: (value: object) => records.set(id, { ...records.get(id), ...value }),
+              delete: () => records.delete(id),
             }),
           }),
         };
@@ -40,6 +41,7 @@ vi.mock('firebase-admin/firestore', () => ({
       get: (record: { get: () => unknown }) => record.get(),
       create: (record: { create: (value: object) => void }, value: object) => record.create(value),
       update: (record: { update: (value: object) => void }, value: object) => record.update(value),
+      delete: (record: { delete: () => void }) => record.delete(),
     }),
   }),
 }));
@@ -97,5 +99,20 @@ describe('Clerk training cases', () => {
   it('rejects large note bodies and invalid case IDs', async () => {
     expect((await post({ action: 'create', name: 'x'.repeat(151_000) })).status).toBe(400);
     expect((await post({ action: 'save', id: '../../case', earlier: '', later: '', version: 1 })).status).toBe(400);
+  });
+
+  it('removes only the current version of an owned training case', async () => {
+    const { record } = await (await post({ action: 'create', name: 'Synthetic case to remove' })).json();
+    const remove = { action: 'remove', id: record.id, version: 1 };
+    mocks.auth.mockResolvedValueOnce({ userId: 'user_B', sessionId: 'sess_b' });
+    expect((await post({ ...remove, uid: 'user_A' })).status).toBe(409);
+    expect((await post({ ...remove, version: 2 })).status).toBe(409);
+    expect((await post({ ...remove, id: '../case' })).status).toBe(400);
+    expect(await (await post({ action: 'list' })).json()).toEqual({ cases: [record] });
+    const removed = await post(remove);
+    expect(removed.status).toBe(200);
+    expect(await removed.json()).toEqual({ removed: true });
+    expect(await (await post({ action: 'list' })).json()).toEqual({ cases: [] });
+    expect((await post(remove)).status).toBe(409);
   });
 });

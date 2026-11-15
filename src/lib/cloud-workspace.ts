@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { User } from 'firebase/auth';
 import type { BrowserPatient } from '@/lib/browser-patients';
 import { clerkTrainingEnabled } from '@/lib/clerk-training';
@@ -138,6 +138,7 @@ export function useCloudCases(uid: string | undefined, getToken?: GetToken) {
   const [connected, setConnected] = useState(false);
   const [error, setError] = useState('');
   const [attempt, setAttempt] = useState(0);
+  const caseRevision = useRef(0);
 
   useEffect(() => {
     if (!uid) return;
@@ -158,17 +159,18 @@ export function useCloudCases(uid: string | undefined, getToken?: GetToken) {
       async function load() {
         if (!getToken || inFlight || lifetime.signal.aborted) return;
         inFlight = true;
+        const revision = caseRevision.current;
         try {
           const result: { cases: CloudCase[] } = await clerkCaseRequest(getToken, { action: 'list' },
             AbortSignal.any([lifetime.signal, AbortSignal.timeout(8000)]));
-          if (!canceled) {
+          if (!canceled && revision === caseRevision.current) {
             setCases(result.cases);
             setConnected(true);
             setLoading(false);
             setError('');
           }
         } catch (error) {
-          failed(error);
+          if (revision === caseRevision.current) failed(error);
         } finally {
           inFlight = false;
         }
@@ -213,7 +215,16 @@ export function useCloudCases(uid: string | undefined, getToken?: GetToken) {
     setAttempt((current) => current + 1);
   }
 
-  return { cases, loading, connected, error, retry };
+  function applyTrainingCaseChange(id: string, record?: CloudCase) {
+    caseRevision.current++;
+    setCases((current) => {
+      const remaining = current.filter((item) => item.id !== id);
+      return record ? [...remaining, record] : remaining;
+    });
+    retry(true);
+  }
+
+  return { cases, loading, connected, error, retry, applyTrainingCaseChange };
 }
 
 export async function createCloudCase(uid: string, name: string, getToken?: GetToken): Promise<CloudCase> {
@@ -247,6 +258,10 @@ export async function saveCloudCaseNotes(uid: string, record: CloudCase, notes: 
     transaction.update(destination, { ...notes, version });
     return version;
   });
+}
+
+export async function removeTrainingCase({ id, version }: CloudCase, getToken: GetToken): Promise<void> {
+  await clerkCaseRequest(getToken, { action: 'remove', id, version }, AbortSignal.timeout(8000));
 }
 
 export class CloudCaseConflict extends Error {}

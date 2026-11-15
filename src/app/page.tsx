@@ -43,7 +43,7 @@ import {
   type NoteReviewDecision,
 } from '@/lib/browser-patients';
 import {
-  CLOUD_CASE_LIMIT, CloudCaseConflict, cloudWorkspaceEnabled, createCloudCase,
+  CLOUD_CASE_LIMIT, CloudCaseConflict, cloudWorkspaceEnabled, createCloudCase, removeTrainingCase,
   saveCloudCaseNotes, trainingWorkspace, useCloudCases, useCloudSession, type CaseNotes, type CloudSession,
 } from '@/lib/cloud-workspace';
 import { BRAND_NAME } from '@/lib/branding';
@@ -931,6 +931,7 @@ function Workspace({ session }: { session: CloudSession }) {
   const [cloudWrite, setCloudWrite] = useState(false);
   const cloudWritePending = useRef(false);
   const [cloudSaveError, setCloudSaveError] = useState<{ id: string; message: string }>();
+  const [caseRemovalError, setCaseRemovalError] = useState<{ id: string; message: string }>();
   const hasUnsavedCloudNotes = Object.values(cloudDrafts).some((draft) => !draft.savedVersion);
   const cloudCases = useMemo(() => newCloudCase && !cloud.cases.some((item) => item.id === newCloudCase.id)
     && !cloud.error ? [...cloud.cases, newCloudCase] : cloud.cases, [cloud.cases, cloud.error, newCloudCase]);
@@ -1587,10 +1588,10 @@ function Workspace({ session }: { session: CloudSession }) {
       setCloudWrite(true);
       try {
         const patient = await createCloudCase(cloudUser, name, clerkToken);
-        setNewCloudCase(patient);
+        if (clerkToken) cloud.applyTrainingCaseChange(patient.id, patient);
+        else setNewCloudCase(patient);
         setRailFilter('');
         openPatient(toPatientScenario(patient));
-        if (clerkToken) cloud.retry(true);
       } catch {
         setPatientFormError('Could not create the cloud case. Check your connection and try again.');
       } finally {
@@ -1606,6 +1607,43 @@ function Workspace({ session }: { session: CloudSession }) {
     }
     setRailFilter('');
     openPatient(toPatientScenario(patient));
+  }
+
+  async function removeSelectedTrainingCase() {
+    if (!clerkToken || !cloudCase || !cloud.connected || cloudWritePending.current || hostedComparePending.current) return;
+    const { id, name } = cloudCase;
+    if (!window.confirm(`Remove “${name}” and its saved notes from the training workspace? This cannot be undone.`)) return;
+
+    setCaseRemovalError(undefined);
+    cloudWritePending.current = true;
+    setCloudWrite(true);
+    try {
+      await removeTrainingCase(cloudCase, clerkToken);
+      cloud.applyTrainingCaseChange(id);
+      setSelectedScenarioId((current) => current === id ? '' : current);
+      setChatChartId((current) => current === id ? '' : current);
+      setCloudDrafts((current) => {
+        const remaining = { ...current };
+        delete remaining[id];
+        return remaining;
+      });
+      setComparisonDrafts((current) => {
+        const remaining = new Map(current);
+        remaining.delete(id);
+        return remaining;
+      });
+      setCompletedComparison((current) => current?.patientId === id ? null : current);
+      setFocusHeadingNonce((current) => current + 1);
+      setAnnouncement('Training case removed.');
+    } catch (error) {
+      setCaseRemovalError({ id, message: error instanceof CloudCaseConflict
+        ? 'This case changed in another tab or was already removed. Check the latest case before trying again.'
+        : 'Could not remove this case. Check your connection and try again.' });
+      cloud.retry(true);
+    } finally {
+      cloudWritePending.current = false;
+      setCloudWrite(false);
+    }
   }
 
   function changeWorkspaceAccount() {
@@ -3235,7 +3273,12 @@ function Workspace({ session }: { session: CloudSession }) {
                     </p>}
                   </div>
                   {view === 'patient' && !isDemoPatient && (
-                    <button type="button" className="btn primary" onClick={() => navigateTo('extract')}>Edit patient notes</button>
+                    <div className="patient-create-actions">
+                      <button type="button" className="btn primary" onClick={() => navigateTo('extract')}>Edit patient notes</button>
+                      {clerkToken && cloudCase && <button type="button" className="btn quiet"
+                        disabled={cloudWrite || hostedCompareBusy || !cloud.connected}
+                        onClick={() => void removeSelectedTrainingCase()}>Remove patient</button>}
+                    </div>
                   )}
                   {view === 'home' && <div className="patient-create-actions">
                     <button type="button" className="btn quiet" disabled={hostedCompareBusy} onClick={showPatientForm}>Add patient</button>
@@ -3246,6 +3289,9 @@ function Workspace({ session }: { session: CloudSession }) {
                     <button type="button" className="btn" onClick={() => navigateTo('extract')}>Start comparison</button>
                   </div>}
                 </header>
+                {view === 'patient' && caseRemovalError?.id === activeScenario.id && (
+                  <p role="alert">{caseRemovalError.message}</p>
+                )}
                 {view === 'patient' && cloudCase && session.user && !clerkTrainingEnabled && process.env.NEXT_PUBLIC_DIFFMD_RECORDING_TRANSCRIPTION === '1' && (
                   <RecordingTranscription key={session.user.uid + '/' + cloudCase.id} uid={session.user.uid}
                     caseId={cloudCase.id} getToken={() => session.user!.getIdToken()}

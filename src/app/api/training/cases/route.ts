@@ -81,6 +81,21 @@ export async function POST(request: Request) {
       });
       return created ? reply(201, { record: { ...initialCase, id } }) : reply(409, { error: 'case_limit' });
     }
+    if (data.action === 'remove') {
+      const { id, version } = data;
+      if (typeof id !== 'string' || !caseId.test(id) || typeof version !== 'number'
+        || !Number.isSafeInteger(version) || version < 1) {
+        return reply(400, { error: 'invalid_case' });
+      }
+      const record = records.doc(id);
+      const removed = await database.runTransaction(async (transaction) => {
+        const current = await transaction.get(record);
+        if (!current.exists || current.get('version') !== version) return false;
+        transaction.delete(record);
+        return true;
+      });
+      return removed ? reply(200, { removed: true }) : reply(409, { error: 'case_conflict' });
+    }
     if (data.action === 'save') {
       const { id, earlier, later, version } = data;
       if (typeof id !== 'string' || !caseId.test(id) || typeof earlier !== 'string' || earlier.length > 12000
