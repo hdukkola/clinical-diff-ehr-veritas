@@ -23,7 +23,7 @@ describe('buildWorkspaceWidgetCatalog', () => {
     expect(get(context, 'awaiting-review').value).toBe(1);
     expect(get(context, 'clarifications').value).toBe(1);
     expect(get(context, 'comparison-mode').detail).toMatch(/Simulated/);
-    expect(get(context, 'earlier-only').detail).toMatch(/does not establish/);
+    expect(get(context, 'earlier-only').detail).toMatch(/explicit documentation/);
   });
   it('does not leak results, notes, or decisions from another case', () => {
     const other = { ...context, activeCase: { id: 'case-b', name: 'Case B' } };
