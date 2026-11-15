@@ -59,6 +59,8 @@ export interface CockpitAuditEntry {
   actor: string;
   action: string;
   target?: string;
+  targetView?: CockpitViewId;
+  medicationId?: string;
 }
 
 export type CockpitReportSummary = Pick<
@@ -1204,39 +1206,72 @@ export function CockpitWidgets({
           { key: 'ai', value: auditStats.ai, color: 'var(--add)' },
           { key: 'system', value: auditStats.system, color: 'var(--unk)' },
         ];
+        const linkedDecisions = audit
+          .filter((entry) => Boolean(entry.targetView || entry.medicationId))
+          .slice(0, 3);
         return (
-          <button type="button" className="cw-drill-btn" onClick={() => onNavigate('audit')}>
-            <div className="cw-activity-wrap">
-              <div className="cw-hero-row">
-                <div className="cw-hero">
-                  <span className="cw-hero-num">{auditStats.total}</span>
-                  <span className="cw-hero-cap">{auditStats.total === 1 ? 'action' : 'actions'}</span>
+          <div className="cw-activity-wrap">
+            <button type="button" className="cw-drill-btn" onClick={() => onNavigate('audit')}>
+              <div className="cw-activity-wrap">
+                <div className="cw-hero-row">
+                  <div className="cw-hero">
+                    <span className="cw-hero-num">{auditStats.total}</span>
+                    <span className="cw-hero-cap">{auditStats.total === 1 ? 'action' : 'actions'}</span>
+                  </div>
+                  <div className="cw-activity-counts">
+                    <span className="tone-accent">
+                      <span className="cw-dot" aria-hidden="true" />
+                      <b>{auditStats.clinician}</b> clinician
+                    </span>
+                    <span className="tone-add">
+                      <span className="cw-dot" aria-hidden="true" />
+                      <b>{auditStats.ai}</b> AI
+                    </span>
+                    <span className="tone-unk">
+                      <span className="cw-dot" aria-hidden="true" />
+                      <b>{auditStats.system}</b> system
+                    </span>
+                  </div>
                 </div>
-                <div className="cw-activity-counts">
-                  <span className="tone-accent">
-                    <span className="cw-dot" aria-hidden="true" />
-                    <b>{auditStats.clinician}</b> clinician
-                  </span>
-                  <span className="tone-add">
-                    <span className="cw-dot" aria-hidden="true" />
-                    <b>{auditStats.ai}</b> AI
-                  </span>
-                  <span className="tone-unk">
-                    <span className="cw-dot" aria-hidden="true" />
-                    <b>{auditStats.system}</b> system
-                  </span>
-                </div>
+
+                <ActivitySpark
+                  spark={auditStats.spark}
+                  idle={auditStats.total === 0}
+                  ariaLabel={`Session activity sparkline: ${auditStats.total} total actions (${auditStats.clinician} clinician, ${auditStats.ai} AI, ${auditStats.system} system)`}
+                />
+
+                <StackedBar segments={mix} total={auditStats.total} height={5} />
               </div>
+            </button>
 
-              <ActivitySpark
-                spark={auditStats.spark}
-                idle={auditStats.total === 0}
-                ariaLabel={`Session activity sparkline: ${auditStats.total} total actions (${auditStats.clinician} clinician, ${auditStats.ai} AI, ${auditStats.system} system)`}
-              />
-
-              <StackedBar segments={mix} total={auditStats.total} height={5} />
-            </div>
-          </button>
+            {linkedDecisions.length > 0 && (
+              <ul className="cw-evidence-list" aria-label="Recent review decisions">
+                {linkedDecisions.map((entry) => (
+                  <li key={entry.id}>
+                    <button
+                      type="button"
+                      className="cw-evidence-btn"
+                      onClick={() =>
+                        entry.medicationId && onSelectEvidenceChange
+                          ? onSelectEvidenceChange(entry.medicationId)
+                          : onNavigate(entry.targetView ?? 'audit')
+                      }
+                    >
+                      <span className="cw-evidence-name">
+                        <strong>
+                          {entry.action}
+                          {entry.target ? ` · ${entry.target}` : ''}
+                        </strong>
+                      </span>
+                      <span className="cw-pill mono">
+                        <span>{entry.ts.slice(11, 19)}Z</span>
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
         );
       }
     }

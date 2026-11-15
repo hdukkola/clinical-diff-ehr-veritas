@@ -778,6 +778,8 @@ type AuditEntry = {
   actor: string;
   action: string;
   target: string;
+  targetView?: ViewId;
+  medicationId?: string;
 };
 
 type EvalSummary = {
@@ -1187,19 +1189,31 @@ export default function Home() {
   }, []);
 
   const createAuditEntry = useCallback(
-    (actor: string, action: string, target: string): AuditEntry => ({
+    (
+      actor: string,
+      action: string,
+      target: string,
+      meta?: { targetView?: ViewId; medicationId?: string },
+    ): AuditEntry => ({
       id: `aud-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       ts: new Date().toISOString(),
       actor,
       action,
       target,
+      ...(meta?.targetView ? { targetView: meta.targetView } : {}),
+      ...(meta?.medicationId ? { medicationId: meta.medicationId } : {}),
     }),
     [],
   );
 
   const addAudit = useCallback(
-    (actor: string, action: string, target: string) => {
-      const entry = createAuditEntry(actor, action, target);
+    (
+      actor: string,
+      action: string,
+      target: string,
+      meta?: { targetView?: ViewId; medicationId?: string },
+    ) => {
+      const entry = createAuditEntry(actor, action, target, meta);
       setAudit((prev) => [entry, ...prev]);
       void persistSessionUpdate({ auditEntry: entry });
     },
@@ -1422,6 +1436,7 @@ export default function Home() {
         'Clinician',
         cleared ? `Cleared ${choice}` : `Marked ${choice}`,
         `${cleanPatientName(activeScenario.patientLabel)} · ${medName}`,
+        { targetView: 'diff', medicationId: medId },
       );
       setReviews((curr) => {
         const next = { ...curr };
@@ -3794,6 +3809,7 @@ export default function Home() {
                                           'Clinician',
                                           'Edited note',
                                           `${cleanPatientName(activeScenario.patientLabel)} · ${entry.name}`,
+                                          { targetView: 'diff', medicationId: entry.id },
                                         )
                                       }
                                     />
@@ -4303,7 +4319,9 @@ export default function Home() {
                                               : item,
                                         ),
                                       }));
-                                      addAudit('Clinician', `Overrode suggestion: ${reason}`, s.proposal);
+                                      addAudit('Clinician', `Overrode suggestion: ${reason}`, s.proposal, {
+                                        targetView: 'triage',
+                                      });
                                     }}
                                   >
                                     {reason}
@@ -4352,6 +4370,7 @@ export default function Home() {
                                         ? 'Accepted suggestion'
                                         : 'Skipped suggestion',
                                       s.proposal,
+                                      { targetView: 'triage' },
                                     );
                                   }
                                 }}
@@ -4514,27 +4533,54 @@ export default function Home() {
                     </li>
                     {audit
                       .filter((a) => auditFilter === 'all' || a.actor === auditFilter)
-                      .map((a) => (
-                        <li className="row audit" key={a.id}>
-                          <span className="mono" style={{ color: 'var(--faint)' }}>
-                            {a.ts.slice(11, 19)}Z
-                          </span>
-                          <span style={{ color: 'var(--strong)' }}>{a.actor}</span>
-                          <span>{a.action}</span>
-                          <span
-                            className="mono"
-                            style={{
-                              fontSize: 11.5,
-                              color: 'var(--muted)',
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis',
-                              whiteSpace: 'nowrap',
-                            }}
-                          >
-                            {a.target}
-                          </span>
-                        </li>
-                      ))}
+                      .map((a) => {
+                        const matchedMed =
+                          a.medicationId ??
+                          snapshotEntries.find((e) => a.target.endsWith(`· ${e.name}`))?.id;
+                        const canJump = Boolean(matchedMed || a.targetView);
+                        return (
+                          <li className="row audit" key={a.id}>
+                            <span
+                              className="mono"
+                              style={{ color: 'var(--faint)' }}
+                              title={a.ts}
+                            >
+                              {a.ts.slice(0, 19).replace('T', ' ')}Z
+                            </span>
+                            <span style={{ color: 'var(--strong)' }}>{a.actor}</span>
+                            <span>{a.action}</span>
+                            {canJump ? (
+                              <button
+                                type="button"
+                                className="audit-item-link mono"
+                                aria-label={`Open ${a.target} from ${a.action}`}
+                                onClick={() => {
+                                  if (matchedMed) {
+                                    handleSelectEvidenceChange(matchedMed);
+                                  } else if (a.targetView) {
+                                    navigateTo(a.targetView);
+                                  }
+                                }}
+                              >
+                                {a.target}
+                              </button>
+                            ) : (
+                              <span
+                                className="mono"
+                                style={{
+                                  fontSize: 11.5,
+                                  color: 'var(--muted)',
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                  whiteSpace: 'nowrap',
+                                }}
+                              >
+                                {a.target}
+                              </span>
+                            )}
+                          </li>
+                        );
+                      })}
                   </ul>
                 </section>
               </section>

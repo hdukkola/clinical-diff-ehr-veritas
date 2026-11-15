@@ -1474,4 +1474,35 @@ describe('Clinical Diff Veritas Editorial UI', () => {
     ]);
     await waitFor(() => expect(placementBtn).toHaveFocus());
   });
+
+  it('links simulated review decisions in Session activity to their item and timestamp', async () => {
+    const user = userEvent.setup();
+    render(<Home />);
+
+    // Make a simulated review decision on Lisinopril
+    await user.click(within(getPatientsGroup()).getAllByRole('button')[0]);
+    const lisinoprilGroup = screen.getByRole('group', { name: 'Review Lisinopril' });
+    await user.click(within(lisinoprilGroup).getByRole('button', { name: 'Verify' }));
+
+    // Cockpit Session Activity widget shows the linked decision with timestamp
+    const cockpit = screen.getByRole('region', { name: 'Clinical cockpit widgets' });
+    const sessionCard = cockpit.querySelector<HTMLElement>('[data-widget-id="session-activity"]')!;
+    const widgetDecisionBtn = within(sessionCard).getByRole('button', {
+      name: /Marked verified · Morgan Lee · Lisinopril/i,
+    });
+    expect(widgetDecisionBtn).toBeInTheDocument();
+
+    // Navigate to Session activity log -> verify timestamp and clickable item link
+    await user.click(within(getWorkspaceNav()).getByRole('button', { name: /^Session activity/i }));
+    const trail = document.getElementById('o-trail')!;
+    const auditLink = within(trail).getByRole('button', {
+      name: /Open Morgan Lee · Lisinopril from Marked verified/i,
+    });
+    expect(auditLink.closest('li')).toHaveTextContent(/\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}Z/);
+
+    // Activating the decision link navigates directly to Lisinopril's expanded evidence
+    await user.click(auditLink);
+    const evidenceRegion = screen.getByLabelText('Evidence and provenance for Lisinopril');
+    await waitFor(() => expect(evidenceRegion).toHaveFocus());
+  });
 });

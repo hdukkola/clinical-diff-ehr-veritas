@@ -1242,6 +1242,38 @@ kbd {
   color: var(--text);
 }
 
+.audit-item-link {
+  justify-self: start;
+  max-width: 100%;
+  padding: 3px 8px;
+  min-height: 28px;
+  border-radius: 6px;
+  border: 1px solid var(--line-2);
+  background: var(--sunk);
+  color: var(--strong);
+  font-size: 11.5px;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.audit-item-link:hover {
+  border-color: var(--accent);
+}
+
+.audit-item-link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+@media (hover: none), (max-width: 780px) {
+  .audit-item-link {
+    min-height: 44px;
+  }
+}
+
 .timeline-list {
   list-style: none;
   margin: 0;
