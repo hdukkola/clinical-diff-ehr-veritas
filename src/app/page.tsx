@@ -2755,19 +2755,6 @@ export default function Home() {
             Menu
           </button>
 
-          {view !== 'extract' && (
-            <button
-              type="button"
-              className="ghost health-btn"
-              id="health"
-              title="Connection health"
-              onClick={() => navigateTo('models')}
-            >
-              <span className="dot degraded" aria-hidden="true" />
-              Local standby
-            </button>
-          )}
-
           <div className="menu-wrap" ref={paletteWrapRef}>
             <button
               type="button"
