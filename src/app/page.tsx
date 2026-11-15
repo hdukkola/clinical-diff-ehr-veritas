@@ -3321,7 +3321,7 @@ export default function Home() {
                     Results{' '}
                     <span>{evalSummary ? `run ${evalSummary.ts.slice(11, 19)}Z` : 'not run'}</span>
                   </h2>
-                  <ul className="rows">
+                  <ul className="rows widget-table-card">
                     <li className="row eval head">
                       <span>Method</span>
                       <span>Cases</span>
@@ -3427,7 +3427,7 @@ export default function Home() {
                     </div>
                   </div>
 
-                  <ul className="rows">
+                  <ul className="rows widget-table-card">
                     <li className="row audit head">
                       <span>Time</span>
                       <span>Actor</span>
@@ -3578,7 +3578,7 @@ export default function Home() {
                       {hfDatasetSources.length === 0 ? (
                         <p className="empty">No external synthetic datasets loaded.</p>
                       ) : (
-                        <ul className="rows">
+                        <ul className="rows widget-cards">
                           {hfDatasetSources.map((ds) => (
                             <li className="row conn" key={ds.id}>
                               <span className="dot ok" aria-hidden="true" />
@@ -3660,7 +3660,7 @@ export default function Home() {
                             {kind === 'db' ? 'source of snapshots' : 'used by AI triage'}
                           </span>
                         </h2>
-                        <ul className="rows">
+                        <ul className="rows widget-cards">
                           {connections
                             .filter((c) => c.kind === kind)
                             .map((c) => (
@@ -3772,7 +3772,7 @@ export default function Home() {
 
                     <section className="sec" id="o-log">
                       <h2 className="h2">Connection events</h2>
-                      <ul className="rows">
+                      <ul className="rows widget-table-card">
                         {connLog.slice(0, 10).map((l) => (
                           <li
                             key={l.id}
