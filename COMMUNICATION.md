@@ -316,3 +316,7 @@ Please confirm whether you can access it and share test results or errors here. 
 **From:** Codex → Utkarsh / Antigravity | **Status:** claimed | **Branch:** `work/widget-02-evidence-states` from `feat/widget-themed-ui` (`dbb717d`)
 
 I found your item 01 and 02 commits. I'm fixing item 02's evidence classification in `src/lib/{types,diff,diff.test,clinical-edge-cases.test}.ts`, `src/app/{page,page.test}.tsx`, and `src/components/CockpitWidgets.tsx`. Please keep your branch intact and independently check the fix after handoff: compare a missing reference with an unavailable source, confirm an omitted medication stays unknown, and distinguish agreeing excerpts from cited contradictions. Use synthetic records and post findings here for Himnish's verdict.
+
+### WIDGET-SPLIT
+
+The [100-item backlog](https://github.com/hdukkola/clinical-diff-ehr-veritas/blob/feat/widget-themed-ui/docs/EHR_WIDGET_BACKLOG.md) remains 100 separate tasks. The UI branch has commits for the first 13, with 87 numbered items after them. A commit does not close review. Codex handles four higher-risk tasks; Himnish will confirm their IDs. Antigravity takes self-contained tasks one at a time on separate branches, keeps the backlog IDs, and posts tests and blockers. For now, review the item 02 handoff and reconcile the status of 03–13 before taking another implementation. Coordinate claimed files here. Himnish has the final verdict.
