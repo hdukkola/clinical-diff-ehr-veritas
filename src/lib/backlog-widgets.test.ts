@@ -28,21 +28,21 @@ function makeContext(): BacklogBuildContext {
   };
 }
 
-describe('100-Item EHR Widget Backlog (84 Remaining Antigravity Surfaces)', () => {
-  it('catalogs all 100 unique widget IDs across all 10 sections', () => {
-    expect(BACKLOG_WIDGET_CATALOG.length).toBe(100);
+describe('90-Item EHR Widget Backlog (76 Remaining Antigravity Surfaces)', () => {
+  it('catalogs all 90 unique widget IDs across all 9 sections', () => {
+    expect(BACKLOG_WIDGET_CATALOG.length).toBe(90);
     const ids = new Set(BACKLOG_WIDGET_CATALOG.map((w) => w.id));
-    expect(ids.size).toBe(100);
-    for (let i = 1; i <= 100; i++) {
+    expect(ids.size).toBe(90);
+    for (let i = 1; i <= 90; i++) {
       expect(ids.has(i)).toBe(true);
     }
     const coveredSections = new Set(BACKLOG_WIDGET_CATALOG.map((w) => w.section));
     expect(coveredSections.size).toBe(BACKLOG_SECTIONS.length);
   });
 
-  it('tracks Codex-owned items (02, 17, 94, 96) separately from the 84 remaining Antigravity items', () => {
+  it('tracks Codex-owned items (02, 17) separately from the 76 remaining Antigravity items', () => {
     const codexIds = BACKLOG_WIDGET_CATALOG.filter((w) => w.owner === 'codex').map((w) => w.id);
-    expect(codexIds).toEqual([2, 17, 94, 96]);
+    expect(codexIds).toEqual([2, 17]);
     expect(REMAINING_ANTIGRAVITY_IDS.length).toBe(84);
   });
 

@@ -28,7 +28,6 @@ export const BACKLOG_SECTIONS: readonly BacklogSectionMeta[] = [
   { id: 'specialty', label: 'Specialty surfaces', range: '61–72' },
   { id: 'patient-facing', label: 'Patient-facing views', range: '73–80' },
   { id: 'operations', label: 'Operations & oversight', range: '81–90' },
-  { id: 'model-platform', label: 'Model quality & platform', range: '91–100' },
 ] as const;
 
 export type BacklogOwner = 'antigravity' | 'codex';
@@ -210,17 +209,6 @@ export const BACKLOG_WIDGET_CATALOG: readonly BacklogWidgetMeta[] = [
   item(88, 'Privacy and access audit', 'operations', 'Show synthetic access events, actor role, and recorded action.'),
   item(89, 'Chart completeness dashboard', 'operations', 'Count missing and unresolved fixture fields and link each count to affected records.'),
   item(90, 'Surveillance board', 'operations', 'Present pre-labeled synthetic events and explain which fixture supplied each flag.'),
-
-  item(91, 'Suggestion explanation', 'model-platform', 'Explain the evidence behind an existing synthetic suggestion and show uncertainty.'),
-  item(92, 'Suggestion review outcomes', 'model-platform', 'Extend the existing triage view with evidence-linked accept, reject, and defer outcomes.'),
-  item(93, 'Model status card', 'model-platform', 'Distinguish unavailable, local, replay, and verified hosted states with accurate labels.'),
-  item(94, 'Evaluation breakdown', 'model-platform', 'Show exact tested denominators, passes, failures, timeouts, and case-family counts.', 'codex'),
-  item(95, 'Evaluation failure drill-down', 'model-platform', 'Open a synthetic failed case and display expected result, actual result, and error type.'),
-  item(96, 'Assistant evidence rendering', 'model-platform', 'Verify question responses can display sources and abstentions using synthetic test responses.', 'codex'),
-  item(97, 'Workflow presets', 'model-platform', 'Validate focused layouts for review, results, and care coordination with a predictable default.'),
-  item(98, 'Cross-widget accessibility check', 'model-platform', 'Verify tab order, announcements, readable charts, focus return, and reduced motion across presets.'),
-  item(99, 'Performance check', 'model-platform', 'Measure existing chart interactions with a larger synthetic fixture and address any regression.'),
-  item(100, 'Demo walkthrough', 'model-platform', 'Verify one synthetic medication change from note comparison through evidence review, follow-up, and audit.'),
 ];
 
 export const REMAINING_ANTIGRAVITY_IDS: readonly number[] = BACKLOG_WIDGET_CATALOG

@@ -25,8 +25,8 @@ function makeContext(
 }
 
 describe('Specialty, Patient-Facing, Operations, and Model/Platform Widgets (61-93, 95, 97-100)', () => {
-  it('covers the exact 38 assigned widget IDs without Codex-owned 94 or 96', () => {
-    expect(SPECIALTY_WIDGET_IDS.length).toBe(38);
+  it('covers the exact 30 assigned widget IDs (61-90)', () => {
+    expect(SPECIALTY_WIDGET_IDS.length).toBe(30);
     expect(SPECIALTY_WIDGET_IDS).not.toContain(94);
     expect(SPECIALTY_WIDGET_IDS).not.toContain(96);
     for (let id = 61; id <= 93; id++) {
@@ -110,9 +110,9 @@ describe('Specialty, Patient-Facing, Operations, and Model/Platform Widgets (61-
     }
   });
 
-  it('provides accessible checklists for workflow/form widgets 63, 69, 76, 79, 98, and 100', () => {
+  it('provides accessible checklists for workflow/form widgets 63, 69, 76, and 79', () => {
     const ctx = makeContext();
-    for (const id of [63, 69, 76, 79, 98, 100]) {
+    for (const id of [63, 69, 76, 79]) {
       const data = buildSpecialtyWidgetData(id, ctx);
       expect(data.checklist).toBeDefined();
       expect(data.checklist!.length).toBeGreaterThanOrEqual(3);
@@ -123,7 +123,7 @@ describe('Specialty, Patient-Facing, Operations, and Model/Platform Widgets (61-
     }
   });
 
-  it('wires dynamic report, review, audit, and model state into 73, 74, 88-93, and 95', () => {
+  it('wires dynamic report, review, and audit state into 73, 74, and 88-90', () => {
     const missingCtx = makeContext('scenario-missing-undocumented-fields', {
       socketState: 'live',
       evalTested: 21,
@@ -148,38 +148,20 @@ describe('Specialty, Patient-Facing, Operations, and Model/Platform Widgets (61-
 
     const w90 = buildSpecialtyWidgetData(90, missingCtx);
     expect(w90.rows[0]?.value).toContain('scenario-missing-undocumented-fields');
-
-    const w91 = buildSpecialtyWidgetData(91, missingCtx);
-    expect(w91.rows.some((r) => r.value.includes('Uncertainty:'))).toBe(true);
-
-    const w92 = buildSpecialtyWidgetData(92, missingCtx);
-    expect(w92.rows.find((r) => r.id === '92-1')?.value).toBe('1 item(s)');
-    expect(w92.rows.find((r) => r.id === '92-2')?.value).toBe('1 item(s)');
-    expect(w92.rows.find((r) => r.id === '92-3')?.value).toBe('1 item(s)');
-
-    const w93 = buildSpecialtyWidgetData(93, missingCtx);
-    expect(w93.rows.find((r) => r.id === '93-1')?.value).toContain('Verified hosted');
-    expect(w93.rows.find((r) => r.id === '93-1')?.status).toBe('completed');
-
-    const w95 = buildSpecialtyWidgetData(95, missingCtx);
-    expect(w95.rows.some((r) => r.value.includes('Expected:'))).toBe(true);
-    expect(w95.rows.find((r) => r.id === '95-3')?.status).toBe('completed');
   });
 
-  it('handles empty-change scenarios cleanly in dynamic builders 73, 74, and 91', () => {
+  it('handles empty-change scenarios cleanly in dynamic builders 73 and 74', () => {
     const emptyCtx = makeContext('scenario-empty-snapshots', {
       socketState: 'replay',
     });
     expect(buildSpecialtyWidgetData(73, emptyCtx).rows[0]?.id).toBe('73-none');
     expect(buildSpecialtyWidgetData(74, emptyCtx).rows[0]?.id).toBe('74-empty');
-    expect(buildSpecialtyWidgetData(91, emptyCtx).rows[0]?.id).toBe('91-abstain');
-    expect(buildSpecialtyWidgetData(93, emptyCtx).rows[0]?.value).toContain('Replay mode');
   });
 
-  it('falls back to buildBacklogWidgetData for IDs outside 61-93, 95, 97-100', () => {
+  it('falls back to buildBacklogWidgetData for IDs outside 61-90', () => {
     const ctx = makeContext();
-    const fallback = buildSpecialtyWidgetData(94, ctx);
-    expect(fallback.id).toBe(94);
+    const fallback = buildSpecialtyWidgetData(17, ctx);
+    expect(fallback.id).toBe(17);
     expect(fallback.owner).toBe('codex');
   });
 });
