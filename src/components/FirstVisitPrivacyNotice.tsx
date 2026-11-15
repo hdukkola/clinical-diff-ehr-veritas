@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useState, useSyncExternalStore } from 'react';
-import { cloudWorkspaceEnabled } from '@/lib/cloud-workspace';
+import { cloudWorkspaceEnabled, trainingWorkspace } from '@/lib/cloud-workspace';
 import styles from './FirstVisitPrivacyNotice.module.css';
 
 const noticeKey = 'diffmd-privacy-notice-v1';
@@ -31,7 +31,7 @@ export function FirstVisitPrivacyNotice() {
       <div>
         <h2 id="privacy-notice-heading">Privacy and data</h2>
         <p>
-          Use de-identified case references and notes. {cloudWorkspaceEnabled
+          {trainingWorkspace ? 'Use synthetic case references and notes only.' : 'Use de-identified case references and notes.'} {cloudWorkspaceEnabled
             ? 'Browser cases stay here. In an account workspace, saved notes sync to Firebase.'
             : 'They stay in this browser.'} Our hosting provider can log basic details about visits.
         </p>

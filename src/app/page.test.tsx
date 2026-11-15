@@ -191,7 +191,7 @@ describe('Clinical Diff Veritas Editorial UI', () => {
       await waitFor(() => expect(save).toHaveBeenCalledExactlyOnceWith(uid, caseRecord, {
         earlier: 'Earlier note text.',
         later: 'Existing later note.\n\nThe library opens at 9 a.m.',
-      }));
+      }, undefined));
     } finally {
       network.mockRestore();
       playback.mockRestore();

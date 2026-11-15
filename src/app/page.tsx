@@ -1,5 +1,8 @@
 'use client';
 
+import { ClerkProvider, SignIn, useAuth, useClerk } from '@clerk/nextjs';
+import { clerkTrainingEnabled } from '@/lib/clerk-training';
+
 import {
   useCallback,
   useEffect,
@@ -41,7 +44,7 @@ import {
 } from '@/lib/browser-patients';
 import {
   CLOUD_CASE_LIMIT, CloudCaseConflict, cloudWorkspaceEnabled, createCloudCase,
-  saveCloudCaseNotes, trainingWorkspace, useCloudCases, useCloudSession, type CaseNotes,
+  saveCloudCaseNotes, trainingWorkspace, useCloudCases, useCloudSession, type CaseNotes, type CloudSession,
 } from '@/lib/cloud-workspace';
 import { BRAND_NAME } from '@/lib/branding';
 import { WorkspaceWidgets, type WorkspaceWidget } from '@/components/WorkspaceWidgets';
@@ -864,17 +867,62 @@ const emptyBrowserNote = () => '';
 const emptyBrowserReviews = () => '[]';
 
 export default function Home() {
+  if (clerkTrainingEnabled) {
+    return <ClerkProvider><ClerkTrainingHome /></ClerkProvider>;
+  }
+  return <ExistingHome />;
+}
+
+function ExistingHome() {
   const session = useCloudSession();
   return <Workspace key={session.user?.uid ?? 'browser'} session={session} />;
 }
 
+function ClerkTrainingHome() {
+  const { isLoaded, userId, getToken } = useAuth();
+  const { signOut } = useClerk();
+  const [error, setError] = useState('');
+  const getIdToken = useCallback(async () => {
+    const token = await getToken();
+    if (!token) throw new Error('Training sign-in required.');
+    return token;
+  }, [getToken]);
+  if (!isLoaded || !userId) {
+    return (
+      <main className="canvas">
+        <div className="col">
+          <aside className="training-workspace-notice" aria-label="Training workspace">
+            <strong>DiffMD Training</strong>
+            <span>Synthetic patient data only. Sign in with your invited email.</span>
+          </aside>
+          {isLoaded ? <SignIn routing="hash" forceRedirectUrl="/" /> : <p role="status">Loading secure sign-in…</p>}
+        </div>
+      </main>
+    );
+  }
+  return <Workspace key={userId} session={{
+    user: { uid: userId, getIdToken },
+    pending: false,
+    error,
+    changeAccount: async () => {
+      setError('');
+      try {
+        await signOut();
+      } catch {
+        setError('Could not sign out. Try again.');
+      }
+    },
+  }} />;
+}
+
 type CloudDraft = CaseNotes & { baseVersion: number; savedVersion?: number };
 
-function Workspace({ session }: { session: ReturnType<typeof useCloudSession> }) {
-  const exampleWorkspace = process.env.NEXT_PUBLIC_CLINICAL_DIFF_EXAMPLE_WORKSPACE === '1';
+function Workspace({ session }: { session: CloudSession }) {
+  const exampleWorkspace = !clerkTrainingEnabled && process.env.NEXT_PUBLIC_CLINICAL_DIFF_EXAMPLE_WORKSPACE === '1';
   const initialPatientId = exampleWorkspace ? DEMO_PATIENT.id : '';
   const cloudUser = session.user?.uid;
-  const cloud = useCloudCases(cloudUser);
+  const clerkToken = clerkTrainingEnabled ? session.user?.getIdToken : undefined;
+  const cloud = useCloudCases(cloudUser, clerkToken);
   const [newCloudCase, setNewCloudCase] = useState<Awaited<ReturnType<typeof createCloudCase>>>();
   const [cloudDrafts, setCloudDrafts] = useState<Record<string, CloudDraft>>({});
   const [cloudWrite, setCloudWrite] = useState(false);
@@ -1535,10 +1583,11 @@ function Workspace({ session }: { session: ReturnType<typeof useCloudSession> })
       cloudWritePending.current = true;
       setCloudWrite(true);
       try {
-        const patient = await createCloudCase(cloudUser, name);
+        const patient = await createCloudCase(cloudUser, name, clerkToken);
         setNewCloudCase(patient);
         setRailFilter('');
         openPatient(toPatientScenario(patient));
+        if (clerkToken) cloud.retry(true);
       } catch {
         setPatientFormError('Could not create the cloud case. Check your connection and try again.');
       } finally {
@@ -1576,9 +1625,10 @@ function Workspace({ session }: { session: ReturnType<typeof useCloudSession> })
     cloudWritePending.current = true;
     setCloudWrite(true);
     try {
-      const savedVersion = await saveCloudCaseNotes(cloudUser, { ...cloudCase, version: baseVersion }, { earlier, later });
+      const savedVersion = await saveCloudCaseNotes(cloudUser, { ...cloudCase, version: baseVersion }, { earlier, later }, clerkToken);
       setCloudDrafts((current) => ({ ...current, [id]: { ...cloudDraft, savedVersion } }));
       setAnnouncement('Notes saved to your account.');
+      if (clerkToken) cloud.retry(true);
     } catch (error) {
       setCloudSaveError({ id, message: error instanceof CloudCaseConflict
         ? 'Another tab or device changed these notes. Copy your edits before loading the saved version.'
@@ -2812,6 +2862,24 @@ function Workspace({ session }: { session: ReturnType<typeof useCloudSession> })
   /* ------------------------------------------------------------------
      Render
      ------------------------------------------------------------------ */
+  if (clerkTrainingEnabled && !cloud.connected) {
+    return (
+      <main className="canvas">
+        <div className="col">
+          <aside className="training-workspace-notice" aria-label="Training workspace">
+            <strong>DiffMD Training</strong>
+            <span>Synthetic patient data only.</span>
+          </aside>
+          {cloud.loading && <p role="status">Checking training access…</p>}
+          {(session.error || cloud.error) && <p role="alert">{session.error || cloud.error}</p>}
+          <div className="btn-row">
+            {cloud.error && <button type="button" className="btn quiet" onClick={() => cloud.retry()}>Retry connection</button>}
+            <button type="button" className="btn quiet" onClick={() => void session.changeAccount(false)}>Sign out</button>
+          </div>
+        </div>
+      </main>
+    );
+  }
   return (
     <div className="app-shell">
       <a href="#main-content" className="skip-link">
@@ -3130,7 +3198,7 @@ function Workspace({ session }: { session: ReturnType<typeof useCloudSession> })
                     <button type="button" className="btn" onClick={() => navigateTo('extract')}>Start comparison</button>
                   </div>}
                 </header>
-                {view === 'patient' && cloudCase && session.user && process.env.NEXT_PUBLIC_DIFFMD_RECORDING_TRANSCRIPTION === '1' && (
+                {view === 'patient' && cloudCase && session.user && !clerkTrainingEnabled && process.env.NEXT_PUBLIC_DIFFMD_RECORDING_TRANSCRIPTION === '1' && (
                   <RecordingTranscription key={session.user.uid + '/' + cloudCase.id} uid={session.user.uid}
                     caseId={cloudCase.id} getToken={() => session.user!.getIdToken()}
                     noteExists={Boolean(laterNoteText.trim())} disabled={cloudWrite || !cloud.connected}
@@ -3162,7 +3230,7 @@ function Workspace({ session }: { session: ReturnType<typeof useCloudSession> })
                         onClick={changeWorkspaceAccount}>
                         {cloudUser ? 'Sign out' : 'Sign in with Google'}
                       </button>
-                      {cloud.error && <button type="button" className="btn quiet" onClick={cloud.retry}>Retry connection</button>}
+                      {cloud.error && <button type="button" className="btn quiet" onClick={() => cloud.retry()}>Retry connection</button>}
                     </div>
                   </section>
                 )}

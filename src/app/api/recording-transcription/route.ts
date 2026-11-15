@@ -1,6 +1,7 @@
 import {
   isRecordingTranscript, RECORDING_WAV_BYTES,
 } from '@/lib/recording-transcription';
+import { clerkTrainingEnabled } from '@/lib/clerk-training';
 
 const headers = { 'Cache-Control': 'no-store' };
 const tokenPattern = /^[\w-]+\.[\w-]+\.[\w-]+$/;
@@ -49,6 +50,7 @@ function workerOrigin() {
 }
 
 export async function POST(request: Request) {
+  if (clerkTrainingEnabled) return failure(503, 'unavailable');
   const origin = workerOrigin();
   const project = process.env.NEXT_PUBLIC_DIFFMD_FIREBASE_PROJECT;
   if (!origin || !project || !/^[a-z0-9-]+$/.test(project)) return failure(503, 'unavailable');

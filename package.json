@@ -14,7 +14,9 @@
     "eval:model": "node tests/model-eval/run_model_eval.mjs"
   },
   "dependencies": {
+    "@clerk/nextjs": "7.10.0",
     "firebase": "13.3.0",
+    "firebase-admin": "14.5.1",
     "next": "16.4.6",
     "react": "19.3.0",
     "react-dom": "19.3.0"

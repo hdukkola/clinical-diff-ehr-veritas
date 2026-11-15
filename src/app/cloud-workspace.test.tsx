@@ -53,14 +53,14 @@ describe('Account workspace', () => {
     await user.click(within(screen.getByRole('region', { name: 'Home' })).getByRole('button', { name: 'Add patient' }));
     await user.type(screen.getByRole('textbox', { name: 'Case reference' }), cloudRecord.name);
     await user.click(screen.getByRole('button', { name: 'Create patient' }));
-    expect(mocked.create).toHaveBeenCalledWith('account-a', cloudRecord.name);
+    expect(mocked.create).toHaveBeenCalledWith('account-a', cloudRecord.name, undefined);
     await openNotes(user);
     const earlier = screen.getByRole('textbox', { name: 'Earlier note' });
     fireEvent.change(earlier, { target: { value: 'Continue metformin 500 mg daily.' } });
     expect(mocked.save).not.toHaveBeenCalled();
     expect(localStorage.getItem(`diffmd-case-v1:${cloudRecord.id}:earlier`)).toBeNull();
     await user.click(screen.getByRole('button', { name: 'Save notes' }));
-    expect(mocked.save).toHaveBeenCalledWith('account-a', cloudRecord, { earlier: 'Continue metformin 500 mg daily.', later: '' });
+    expect(mocked.save).toHaveBeenCalledWith('account-a', cloudRecord, { earlier: 'Continue metformin 500 mg daily.', later: '' }, undefined);
     expect(screen.getByText('Notes are synced')).toBeInTheDocument();
     mocked.uid = undefined;
     rerender(<Home />);
