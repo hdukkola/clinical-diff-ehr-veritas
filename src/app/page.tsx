@@ -27,6 +27,14 @@ import {
   type ChartSearchMatch,
   type NoteRegimenChangeCategory,
 } from '@/lib/diff';
+import {
+  createBrowserPatient,
+  readBrowserNote,
+  readBrowserPatients,
+  saveBrowserNote,
+  subscribeToPatients,
+  type BrowserPatient,
+} from '@/lib/browser-patients';
 import { BRAND_NAME } from '@/lib/branding';
 import { WorkspaceWidgets, type WorkspaceWidget } from '@/components/WorkspaceWidgets';
 import Link from 'next/link';
@@ -828,11 +836,32 @@ function getPaletteServerSnapshot(): PaletteId {
 /* ------------------------------------------------------------------
    Main Component
    ------------------------------------------------------------------ */
+function toPatientScenario({ id, name }: BrowserPatient): SyntheticScenario {
+  return {
+    id,
+    patientId: id,
+    patientLabel: name,
+    title: 'Patient workspace',
+    summary: '',
+    category: 'empty-no-change',
+    tags: [],
+    earlier: { id: `${id}-earlier`, source: 'Earlier medication list', recordedAt: null, medications: [] },
+    later: { id: `${id}-later`, source: 'Later medication list', recordedAt: null, medications: [] },
+  };
+}
+
+const noBrowserPatients = () => '[]';
+const emptyBrowserNote = () => '';
+
 export default function Home() {
-  const [localPatients, setLocalPatients] = useState<SyntheticScenario[]>([]);
+  const savedPatients = useSyncExternalStore(subscribeToPatients, readBrowserPatients, noBrowserPatients);
+  const [unsavedNotes, setUnsavedNotes] = useState<Record<string, Partial<Record<'earlier' | 'later', string>>>>({});
   const [creatingPatient, setCreatingPatient] = useState(false);
   const [patientFormError, setPatientFormError] = useState('');
-  const patientScenarios = useMemo(() => [DEMO_PATIENT, ...localPatients], [localPatients]);
+  const patientScenarios = useMemo(
+    () => [DEMO_PATIENT, ...(JSON.parse(savedPatients) as BrowserPatient[]).map(toPatientScenario)],
+    [savedPatients],
+  );
   /* ---- Navigation & Theme ---- */
   const [view, setView] = useState<ViewId>('home');
   const palette = useSyncExternalStore(
@@ -859,8 +888,8 @@ export default function Home() {
   const [pinnedOpen, setPinnedOpen] = useState(false);
 
   /* ---- Compare notes state ---- */
-  const [earlierNoteText, setEarlierNoteText] = useState<string>(DEFAULT_EARLIER_NOTE);
-  const [laterNoteText, setLaterNoteText] = useState<string>(DEFAULT_LATER_NOTE);
+  const [exampleEarlierNote, setEarlierNoteText] = useState<string>(DEFAULT_EARLIER_NOTE);
+  const [exampleLaterNote, setLaterNoteText] = useState<string>(DEFAULT_LATER_NOTE);
   const [extractError, setExtractError] = useState<string>('');
   const [extractStatusText, setExtractStatusText] = useState<string>(
     'Standby · local extractor',
@@ -869,7 +898,11 @@ export default function Home() {
   const [hostedCompareBusy, setHostedCompareBusy] = useState(false);
   const hostedComparePending = useRef(false);
   const [socketStatus, setSocketStatus] = useState<SocketStatus>(INITIAL_SOCKET_STATUS);
-  const [extractResult, setExtractResult] = useState<NoteComparisonResult | null>(null);
+  const [completedComparison, setCompletedComparison] = useState<{
+    result: NoteComparisonResult;
+    earlier: string;
+    later: string;
+  } | null>(null);
   const [noteReviewDecisions, setNoteReviewDecisions] = useState<Record<string, NoteReviewDecision>>({});
   const [comparisonDrafts, setComparisonDrafts] = useState(() => new Map<string, {
     earlier: string;
@@ -926,6 +959,24 @@ export default function Home() {
     [patientScenarios, selectedScenarioId],
   );
   const isDemoPatient = activeScenario.id === DEMO_PATIENT.id;
+  const getSavedEarlier = useCallback(
+    () => isDemoPatient ? '' : readBrowserNote(activeScenario.id, 'earlier'),
+    [activeScenario.id, isDemoPatient],
+  );
+  const getSavedLater = useCallback(
+    () => isDemoPatient ? '' : readBrowserNote(activeScenario.id, 'later'),
+    [activeScenario.id, isDemoPatient],
+  );
+  const savedEarlierNote = useSyncExternalStore(subscribeToPatients, getSavedEarlier, emptyBrowserNote);
+  const savedLaterNote = useSyncExternalStore(subscribeToPatients, getSavedLater, emptyBrowserNote);
+  const unsavedPatientNotes = unsavedNotes[activeScenario.id];
+  const earlierNoteText = isDemoPatient ? exampleEarlierNote : unsavedPatientNotes?.earlier ?? savedEarlierNote;
+  const laterNoteText = isDemoPatient ? exampleLaterNote : unsavedPatientNotes?.later ?? savedLaterNote;
+  const extractResult = completedComparison?.earlier === earlierNoteText && completedComparison.later === laterNoteText
+    ? completedComparison.result : null;
+  const setExtractResult = useCallback((result: NoteComparisonResult | null) => {
+    setCompletedComparison(result ? { result, earlier: earlierNoteText, later: laterNoteText } : null);
+  }, [earlierNoteText, laterNoteText]);
   const earlierNoteLabel = 'Earlier note';
   const laterNoteLabel = isDemoPatient ? 'Discharge note' : 'Later note';
 
@@ -1356,9 +1407,11 @@ export default function Home() {
         setComparisonDrafts((current) => new Map(current).set(selectedScenarioId, draft));
         const next = comparisonDrafts.get(targetScenario.id);
         const openingExample = targetScenario.id === DEMO_PATIENT.id;
-        setEarlierNoteText(next?.earlier ?? (openingExample ? DEFAULT_EARLIER_NOTE : ''));
-        setLaterNoteText(next?.later ?? (openingExample ? DEFAULT_LATER_NOTE : ''));
-        setExtractResult(next?.result ?? null);
+        if (openingExample) {
+          setEarlierNoteText(next?.earlier ?? DEFAULT_EARLIER_NOTE);
+          setLaterNoteText(next?.later ?? DEFAULT_LATER_NOTE);
+        }
+        setCompletedComparison(next?.result ? { earlier: next.earlier, later: next.later, result: next.result } : null);
         setNoteReviewDecisions(next?.decisions ?? {});
         setExtractError('');
         setChartSearchQuery('');
@@ -1402,21 +1455,13 @@ export default function Home() {
       setPatientFormError('Enter a name between 1 and 80 characters.');
       return;
     }
-    const patientId = `LOCAL-${localPatients.length + 1}`;
-    const patient: SyntheticScenario = {
-      id: patientId,
-      patientId,
-      patientLabel: name,
-      title: 'Patient workspace',
-      summary: '',
-      category: 'empty-no-change',
-      tags: [],
-      earlier: { id: `${patientId}-earlier`, source: 'Earlier medication list', recordedAt: null, medications: [] },
-      later: { id: `${patientId}-later`, source: 'Later medication list', recordedAt: null, medications: [] },
-    };
-    setLocalPatients((current) => [...current, patient]);
+    const patient = createBrowserPatient(name);
+    if (!patient) {
+      setPatientFormError('Could not save this patient. Check that browser storage is available and try again.');
+      return;
+    }
     setRailFilter('');
-    openPatient(patient);
+    openPatient(toPatientScenario(patient));
   }
 
   const changePalette = useCallback(
@@ -1516,16 +1561,33 @@ export default function Home() {
     setExtractResult(null);
     setNoteReviewDecisions({});
     setAnnouncement('Loaded example notes');
-  }, []);
+  }, [setExtractResult]);
+
+  const updateNote = useCallback((side: 'earlier' | 'later', value: string) => {
+    if (isDemoPatient) {
+      const setNote = side === 'earlier' ? setEarlierNoteText : setLaterNoteText;
+      setNote(value);
+      return;
+    }
+    const id = activeScenario.id;
+    const saved = saveBrowserNote(id, side, value);
+    setUnsavedNotes((current) => {
+      if (saved && current[id]?.[side] === undefined) return current;
+      const next = { ...current, [id]: { ...current[id] } };
+      if (saved) delete next[id][side];
+      else next[id][side] = value;
+      return next;
+    });
+  }, [activeScenario.id, isDemoPatient]);
 
   const handleClearNotes = useCallback(() => {
-    setEarlierNoteText('');
-    setLaterNoteText('');
+    updateNote('earlier', '');
+    updateNote('later', '');
     setExtractError('');
     setExtractResult(null);
     setNoteReviewDecisions({});
     setAnnouncement('Cleared notes');
-  }, []);
+  }, [setExtractResult, updateNote]);
 
   const applySocketStatus = useCallback((raw: Partial<SocketStatus>): SocketStatus => {
     const normalized = normalizeSocketStatusPayload(raw);
@@ -1860,6 +1922,7 @@ export default function Home() {
       isDemoPatient,
       laterNoteLabel,
       laterNoteText,
+      setExtractResult,
     ],
   );
 
@@ -2396,7 +2459,7 @@ export default function Home() {
         jump('Note comparison', compareStatus, 'extract', 'Open Compare notes', 'Compare earlier and later notes'),
         metric('Ask about a patient', patientName, undefined, 'Open AI chat', openChartChat),
         jump('Suggestion queue', openTriageCount, 'triage', 'Open suggestions', 'Decisions pending'),
-        metric('Patients in this tab', patientScenarios.length),
+        metric('Patients in this browser', patientScenarios.length),
         jump('Activity log', audit.length, 'audit', 'Open session activity', audit[0]?.action),
         jump('Model connection', serviceStatus, 'models', 'Open connections'),
         isDemoPatient ? metric('Encounter record', 'October 15', 'Discharge conversation and recording consent', 'Open transcript', () => {
@@ -2848,9 +2911,13 @@ export default function Home() {
                     <h1 className="h1" ref={headingRef} tabIndex={-1}>
                       {view === 'patient' ? cleanPatientName(activeScenario.patientLabel) : 'Home'}
                     </h1>
-                    {view === 'patient' && <p>{activeScenario.patientId}{isDemoPatient ? ' · Outpatient to discharge' : ' · This browser tab'}</p>}
+                    {view === 'patient' && <p>{activeScenario.patientId}{isDemoPatient ? ' · Outpatient to discharge' : ' · Saved in this browser'}</p>}
                   </div>
+                  {view === 'patient' && !isDemoPatient && (
+                    <button type="button" className="btn primary" onClick={() => navigateTo('extract')}>Edit patient notes</button>
+                  )}
                   {view === 'home' && <div className="patient-create-actions">
+                    <button type="button" className="btn quiet" disabled={hostedCompareBusy} onClick={showPatientForm}>Add patient</button>
                     {isDemoPatient && <button type="button" className="btn quiet" onClick={() => {
                       navigateTo('patient', false);
                       focusSection('transcript-title');
@@ -2861,7 +2928,7 @@ export default function Home() {
                 {view === 'home' && creatingPatient && (
                   <form className="patient-create-form" onSubmit={createPatient} aria-labelledby="new-patient-title">
                     <h2 id="new-patient-title" className="h2">Add patient</h2>
-                    <p id="new-patient-help">Use a fictional name. Patients and notes you add stay in this tab and clear when you reload.</p>
+                    <p id="new-patient-help">Use a fictional name. Added patients and their notes are saved in this browser and shared across its DiffMD tabs.</p>
                     <label htmlFor="new-patient-name">Patient name</label>
                     <input id="new-patient-name" name="patient-name" className="search" required maxLength={80}
                       autoComplete="off" aria-describedby="new-patient-help" aria-invalid={Boolean(patientFormError)}
@@ -2978,7 +3045,7 @@ export default function Home() {
                   </div>
 
                   <p className="extract-scope" style={{ marginTop: 8 }}>
-                    {!isDemoPatient ? 'Use fictional notes only. Both notes and their results stay in this tab.'
+                    {!isDemoPatient ? 'Use fictional notes only. Drafts save in this browser. Run the comparison again after reloading.'
                       : HOSTED_COMPARE_ENABLED
                       ? 'Qwen 4B can read the bundled example. Edited or alternate example notes use rules in this browser. Use fictional records only.'
                       : 'Use example records only. The status above identifies the comparison method.'}
@@ -3021,6 +3088,9 @@ export default function Home() {
                     </div>
                   </details>}
 
+                  {!isDemoPatient && (unsavedPatientNotes?.earlier !== undefined || unsavedPatientNotes?.later !== undefined) && (
+                    <p role="alert">Browser storage is unavailable. Copy unsaved notes before closing this tab.</p>
+                  )}
                   <form id="extraction-form" onSubmit={handleCompareNotes} aria-busy={hostedCompareBusy}>
                     <div className="extract-note-grid">
                       <div className="extract-note">
@@ -3032,7 +3102,7 @@ export default function Home() {
                           placeholder="Enter example note text"
                           value={earlierNoteText}
                           onChange={(e) => {
-                            setEarlierNoteText(e.target.value);
+                            updateNote('earlier', e.target.value);
                             setExtractResult(null);
                             setExtractError('');
                           }}
@@ -3055,7 +3125,7 @@ export default function Home() {
                           placeholder="Enter example note text"
                           value={laterNoteText}
                           onChange={(e) => {
-                            setLaterNoteText(e.target.value);
+                            updateNote('later', e.target.value);
                             setExtractResult(null);
                             setExtractError('');
                           }}

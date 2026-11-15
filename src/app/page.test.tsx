@@ -157,11 +157,11 @@ describe('Clinical Diff Veritas Editorial UI', () => {
     expect(signatures.size).toBe(7);
   });
 
-  it('creates blank patient charts and keeps note comparisons isolated in the tab', async () => {
+  it('saves fictional patients and drafts across reloads without sending them to an API', async () => {
     const user = userEvent.setup();
     const request = vi.spyOn(globalThis, 'fetch').mockResolvedValue(Response.json({}));
     try {
-      render(<Home />);
+      const { unmount } = render(<Home />);
       expect(within(getPatientsGroup()).getAllByRole('button')).toHaveLength(1);
       expect(within(getPatientsGroup()).getByRole('button', { name: /Morgan Lee/ })).toBeVisible();
       expect(within(getWorkspaceNav()).queryByRole('button', { name: /evaluation/i })).not.toBeInTheDocument();
@@ -200,6 +200,13 @@ describe('Clinical Diff Veritas Editorial UI', () => {
       expect(screen.getByRole('textbox', { name: 'Earlier note' })).toHaveValue('Lisinopril 10 mg daily');
       expect(screen.getByRole('textbox', { name: 'Later note' })).toHaveValue('Lisinopril 20 mg daily');
       expect(screen.getByRole('region', { name: 'Mention differences' })).toHaveTextContent('Lisinopril 20 mg daily');
+      unmount();
+      render(<Home />);
+      await user.click(within(getPatientsGroup()).getByRole('button', { name: /Alex Example/ }));
+      await openCompare(user);
+      expect(screen.getByRole('textbox', { name: 'Earlier note' })).toHaveValue('Lisinopril 10 mg daily');
+      expect(screen.getByRole('textbox', { name: 'Later note' })).toHaveValue('Lisinopril 20 mg daily');
+      expect(screen.queryByRole('region', { name: 'Mention differences' })).not.toBeInTheDocument();
       expect(request.mock.calls.some(([, init]) => init?.method === 'POST')).toBe(false);
     } finally {
       request.mockRestore();
@@ -1343,9 +1350,10 @@ describe('Clinical Diff Veritas Editorial UI', () => {
     await user.click(within(getWorkspaceNav()).getByRole('button', { name: 'AI chat' }));
     const chat = within(screen.getByRole('region', { name: 'AI chat' }));
     const patient = chat.getByRole('combobox', { name: 'Patient' });
-    expect(patient).toHaveValue('LOCAL-1');
+    const localPatientId = (patient as HTMLSelectElement).value;
+    expect(localPatientId).toMatch(/^LOCAL-[A-F0-9]{12}$/);
     expect(within(patient).getAllByRole('option').map((option) => option.textContent)).toEqual([
-      'Morgan Lee · DEMO-001', 'Alex Fictional · LOCAL-1',
+      'Morgan Lee · DEMO-001', `Alex Fictional · ${localPatientId}`,
     ]);
     await user.selectOptions(patient, 'scenario-morgan-lee-baseline');
     expect(patient).toHaveValue('scenario-morgan-lee-baseline');
@@ -1364,7 +1372,7 @@ describe('Clinical Diff Veritas Editorial UI', () => {
     await ask('Correct the chart: Lisinopril dose to 15 mg');
     await preview();
     await user.click(chat.getByRole('checkbox', { name: /I verified/ }));
-    await user.selectOptions(patient, 'LOCAL-1');
+    await user.selectOptions(patient, localPatientId);
     expect(chat.queryByRole('button', { name: 'Approve and apply' })).not.toBeInTheDocument();
     await ask('What medications are documented?');
     const added = chat.getByRole('log', { name: 'Conversation for Alex Fictional' });

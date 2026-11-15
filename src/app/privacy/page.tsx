@@ -35,8 +35,9 @@ export default function PrivacyPage() {
           the requested URL and time. DiffMD uses its demo review service to load and save review activity.
         </p>
         <p>
-          Added charts, chat history, reviewed chart corrections and page notes stay in the browser tab and clear
-          on reload. A configured development or private cloud preview can send an unclear question about the
+          Added fictional patient names and note drafts are saved in this browser and shared across its DiffMD tabs.
+          Clear site storage to remove them. Comparison results, chat history, reviewed chart corrections and page notes
+          stay in the tab and clear on reload. A configured development or private cloud preview can send an unclear question about the
           bundled Morgan Lee chart to Qwen to help ask a follow-up. That request contains the question you typed.
         </p>
         <p>
