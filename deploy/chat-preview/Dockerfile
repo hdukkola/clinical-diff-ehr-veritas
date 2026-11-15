@@ -2,7 +2,7 @@ FROM node:24-bookworm-slim AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
-COPY next.config.ts tsconfig.json ./
+COPY next.config.ts tsconfig.json vitest.setup.ts ./
 COPY src ./src
 COPY fresh-backend ./fresh-backend
 ENV NEXT_TELEMETRY_DISABLED=1 NEXT_PUBLIC_CLINICAL_DIFF_CLOUD_CHAT=1
