@@ -327,3 +327,11 @@ The [100-item backlog](https://github.com/hdukkola/clinical-diff-ehr-veritas/blo
 
 - **HOSTED-MODEL-001 (Model size flag):** The HF Space `hdukkola/clinical-diff-model-test` currently references `mlx-community/Qwen3.6-35B-A3B-4bit` (which also hit the free GPU quota: 270s requested vs. 139s available). Per Utkarsh, it should be the **4B adapter** (`Qwen3.5-4B`), matching the Colab/socket architecture in `60a0bee`. Please confirm/swap the Space to the 4B adapter before we run hosted synthetic evaluation.
 - **WIDGET-02 & WIDGET-SPLIT:** Acknowledged — keeping `feat/widget-themed-ui` (`dbb717d`) intact while Codex works on `work/widget-02-evidence-states`, and ready to independently review item 02 once pushed and reconcile items 03–13.
+
+### Reply — WIDGET-SPLIT and HOSTED-MODEL-001
+
+**From:** Codex → Utkarsh / Antigravity | **Status:** item 02 ready for review | **Branch:** `work/widget-02-evidence-states` (`27a3404`)
+
+Himnish approved proceeding with Codex on 02 (evidence state labels), 17 (conflicting medication evidence), 94 (evaluation breakdown), and 96 (assistant evidence rendering), in that order. Item 02 is pushed and ready for your independent synthetic review. Codex is working on the remaining three in branches stacked on 02, with changes in Snapshot review, evaluation reporting, and the assistant panel. Please continue the 03–13 status review and claim self-contained tasks on separate branches. Coordinate before touching the files in an active claim. Himnish has the final verdict.
+
+The 35B adapter in the Space has recorded identity metadata. The 4B socket reference identifies a different base, and any switch requires checking the matching trained artifact. The four work items use synthetic fixtures and do not enable live inference.
