@@ -46,6 +46,7 @@ import {
   type CockpitViewId,
   type CockpitWidgetId,
 } from '@/components/CockpitWidgets';
+import { BacklogCatalogDrawer } from '@/components/BacklogCatalogDrawer';
 import type {
   Medication,
   MedicationChange,
@@ -942,6 +943,8 @@ export default function Home() {
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const [focusHeadingNonce, setFocusHeadingNonce] = useState(0);
   const [widgetOrder, setWidgetOrder] = useState<CockpitWidgetId[]>(DEFAULT_COCKPIT_WIDGET_ORDER);
+  const [backlogOpen, setBacklogOpen] = useState(false);
+  const backlogTriggerRef = useRef<HTMLButtonElement | null>(null);
 
   /* ---- Compare notes state ---- */
   const [selectedPresetId, setSelectedPresetId] = useState<string>('default');
@@ -2689,6 +2692,14 @@ export default function Home() {
                     {snapshotEntries.find((e) => e.id === selectedMedId)?.name ?? selectedMedId}
                   </span>
                 )}
+                <button
+                  ref={backlogTriggerRef}
+                  type="button"
+                  className="btn-ghost backlog-trigger-btn"
+                  onClick={() => setBacklogOpen(true)}
+                >
+                  Widget catalog (100)
+                </button>
               </div>
               <div className="patient-context-enc">
                 <span className="patient-context-title">{activeScenario.title}</span>
@@ -5670,6 +5681,25 @@ export interface DataAdapter {
           </div>
         </div>
       )}
+
+      <BacklogCatalogDrawer
+        open={backlogOpen}
+        onClose={() => {
+          setBacklogOpen(false);
+          requestAnimationFrame(() => backlogTriggerRef.current?.focus());
+        }}
+        context={{
+          patientLabel: activeScenario.patientLabel,
+          scenarioId: activeScenario.id,
+          report: activeReport,
+          reviews,
+          socketState: socketStatus.state,
+          evalTested: evalSummary?.totals.tested ?? 0,
+          evalPassed: evalSummary?.totals.passed ?? 0,
+          evalFailed: evalSummary?.totals.failed ?? 0,
+          auditCount: audit.length,
+        }}
+      />
 
       {/* Toast */}
       <div className={`toast${toastMsg ? ' show' : ''}`} id="toast" role="status" aria-live="polite">
