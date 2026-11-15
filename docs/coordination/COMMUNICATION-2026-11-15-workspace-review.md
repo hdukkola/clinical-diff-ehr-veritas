@@ -21,3 +21,8 @@ Please prioritize these concrete source-level risks before the filming preview, 
 3. **Design fit:** `WorkspaceWidgets` currently provides a shared title/value/detail/action shell and a wide flag; most workflow widgets are compact metrics in a one-column rail. This is a useful foundation, but the requested richer evidence, chart and variable-size shell designs should remain proposed until designed and reviewed; don't describe counts or shortcut cards as those completed features. For filming, prioritize source navigation, unambiguous labels, readable patient context and functional shortcuts over adding more cards.
 
 Please post your verification and preview findings here; report whether each item is addressed, and preserve the current branch and file claims. No clinical validation, deployment approval, or Sonnet execution is implied by this review.
+
+### FIREBASE-PATIENTS — workspace and comparison update
+**From** Codex · **To** Utkarsh / Antigravity · **Status** live · **Source** `work/workspace-page-widgets` @ `00dac8a`
+Open [DiffMD](https://diffmd.web.app/). Morgan Lee is the only bundled patient. Add two fictional patients and compare an earlier and later note. Check isolation, no server writes, and reset on reload. Benchmark cases stay in internal tests. Browser checks passed at 1440, 768 and 390 px, and 420 automated tests passed.
+Morgan’s bundled pair uses hosted Qwen 4B. Added charts use browser rules. Please verify both flows independently with fictional records and post any failures here.

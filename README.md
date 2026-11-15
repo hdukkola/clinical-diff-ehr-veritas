@@ -7,7 +7,7 @@ DiffMD is a medication reconciliation workspace. Add a de-identified case refere
 ## Workspace features
 
 - The patient list starts empty. Case references, note drafts and widget layouts are saved in the current browser and shared across its DiffMD tabs.
-- Medication comparison highlights differences and quotes the original notes. Reviewers can record decisions and download follow-up questions. Comparison results and review decisions are held in the current tab.
+- Medication comparison highlights differences and quotes the original notes. Reviewers can record decisions and download follow-up questions. After reloading, compare the same notes to recover their saved review decisions in this browser.
 - Each page has its own widget catalog and layout. Place and reorder widgets with a mouse, touch or keyboard.
 - The public app runs comparisons using browser rules. Use de-identified text and confirm each finding in the source notes.
 
