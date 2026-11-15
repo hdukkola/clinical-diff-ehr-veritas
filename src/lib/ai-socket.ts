@@ -382,11 +382,7 @@ export function resolveSocketConfig(
   const ollamaUrlRaw = env.OLLAMA_BASE_URL?.trim();
   const loopbackPort = parseLoopbackPort(env);
   const loopbackEnabled = isTruthyEnv(env.CLINICAL_DIFF_LOCAL_LOOPBACK_ENABLED);
-  const sharedApiKey =
-    env.CLINICAL_DIFF_API_KEY?.trim() ||
-    env.OPENAI_API_KEY?.trim() ||
-    env.HF_TOKEN?.trim() ||
-    null;
+  const sharedApiKey = env.CLINICAL_DIFF_API_KEY?.trim() || null;
 
   if (hint === null && hintRaw?.trim()) {
     return {
