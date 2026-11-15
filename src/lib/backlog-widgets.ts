@@ -266,7 +266,7 @@ const SYNTHETIC_FIXTURE_ROWS: Record<number, { summaryLine: string; rows: Widget
     summaryLine: 'Synthetic MAR administration entries with explicit scheduled vs. given/missed timestamps.',
     rows: [
       row('19-1', 'Lisinopril 20 mg PO', 'Given at 08:05', 'completed', 'Synthetic MAR', '2026-10-15T08:05:00Z'),
-      row('19-2', 'Metformin 500 mg PO', 'Held — NPO for imaging', 'warning', 'Synthetic MAR', '2026-10-15T12:00:00Z'),
+      row('19-2', 'Metformin 500 mg PO', 'Held: NPO for imaging', 'warning', 'Synthetic MAR', '2026-10-15T12:00:00Z'),
       row('19-3', 'Atorvastatin 20 mg PO', 'Scheduled 21:00 (not yet due)', 'pending', 'Synthetic MAR', '2026-10-15T21:00:00Z'),
     ],
   },
@@ -298,7 +298,7 @@ const SYNTHETIC_FIXTURE_ROWS: Record<number, { summaryLine: string; rows: Widget
       row('23-1', 'Essential hypertension', 'Active · Controlled on titration', 'documented', 'Outpatient Problem List', '2026-10-01'),
       row('23-2', 'Type 2 diabetes mellitus', 'Active · Monitoring A1c', 'documented', 'Outpatient Problem List', '2026-10-01'),
       row('23-3', 'Community-acquired pneumonia', 'Historical · Resolved 2024', 'completed', 'Historical Summary', '2024-11-18'),
-      row('23-4', 'Intermittent palpitations', 'Unclear status — no follow-up ECG', 'unknown', 'Triage Note', '2026-10-12'),
+      row('23-4', 'Intermittent palpitations', 'Unclear status (no follow-up ECG)', 'unknown', 'Triage Note', '2026-10-12'),
     ],
   },
   24: {
@@ -318,8 +318,8 @@ const SYNTHETIC_FIXTURE_ROWS: Record<number, { summaryLine: string; rows: Widget
   26: {
     summaryLine: 'Documented family history preserving explicit unknown where details are absent.',
     rows: [
-      row('26-1', 'Mother — Hypertension', 'Diagnosed age 55 · Living', 'documented', 'Intake Family Hx', '2025-03-10'),
-      row('26-2', 'Paternal cardiac history', 'Unknown — patient unsure of details', 'unknown', 'Intake Family Hx', '2025-03-10'),
+      row('26-1', 'Mother: Hypertension', 'Diagnosed age 55 · Living', 'documented', 'Intake Family Hx', '2025-03-10'),
+      row('26-2', 'Paternal cardiac history', 'Unknown (patient unsure of details)', 'unknown', 'Intake Family Hx', '2025-03-10'),
     ],
   },
   27: {
@@ -398,7 +398,7 @@ const SYNTHETIC_FIXTURE_ROWS: Record<number, { summaryLine: string; rows: Widget
     summaryLine: 'Lab trends explicitly flagging unit shifts and noncomparable assays.',
     rows: [
       row('36-1', 'Creatinine (mg/dL)', '0.91 → 0.96 → 0.94 mg/dL (Comparable)', 'documented', 'Lab Trend Engine', '2026-10-14'),
-      row('36-2', 'External Glucose (mmol/L)', '7.8 mmol/L — unit differs from local mg/dL', 'warning', 'Outside Lab Import', '2026-09-20'),
+      row('36-2', 'External Glucose (mmol/L)', '7.8 mmol/L (unit differs from local mg/dL)', 'warning', 'Outside Lab Import', '2026-09-20'),
     ],
     series: [
       { label: 'Aug 01', value: 0.91, unit: 'mg/dL', recordedAt: '2026-08-01', comparable: true },
@@ -409,7 +409,7 @@ const SYNTHETIC_FIXTURE_ROWS: Record<number, { summaryLine: string; rows: Widget
   37: {
     summaryLine: 'Source-flagged critical lab alerts with mock acknowledgment audit.',
     rows: [
-      row('37-1', 'Troponin I (2026-10-12)', '0.02 ng/mL (Normal — not critical)', 'completed', 'ED Lab Feed', '2026-10-12'),
+      row('37-1', 'Troponin I (2026-10-12)', '0.02 ng/mL (Normal, not critical)', 'completed', 'ED Lab Feed', '2026-10-12'),
       row('37-2', 'Potassium 5.8 mmol/L (Synthetic alert drill)', 'Acknowledged by Dr. A. Patel at 14:18', 'warning', 'Lab Critical Log', '2026-10-13'),
     ],
   },
@@ -417,7 +417,7 @@ const SYNTHETIC_FIXTURE_ROWS: Record<number, { summaryLine: string; rows: Widget
     summaryLine: 'Specimen collection, receipt, processing, and final result milestones.',
     rows: [
       row('38-1', 'SPEC-SYN-401 (BMP)', 'Collected 06:15 → Received 06:28 → Final 07:02', 'completed', 'Lab Specimen Tracker', '2026-10-14T07:02:00Z'),
-      row('38-2', 'SPEC-SYN-409 (Lipid panel)', 'Ordered — specimen not yet collected', 'pending', 'Lab Specimen Tracker', '2026-10-15'),
+      row('38-2', 'SPEC-SYN-409 (Lipid panel)', 'Ordered (specimen not yet collected)', 'pending', 'Lab Specimen Tracker', '2026-10-15'),
     ],
   },
   39: {
@@ -472,8 +472,8 @@ const SYNTHETIC_FIXTURE_ROWS: Record<number, { summaryLine: string; rows: Widget
   45: {
     summaryLine: 'Synthetic note draft compared against source medication list.',
     rows: [
-      row('45-1', 'Draft vs Source — Lisinopril', 'Draft lists 20 mg daily (matches discharge order)', 'completed', 'Draft Comparator', '2026-10-15'),
-      row('45-2', 'Draft vs Source — Amoxicillin', 'Draft omits 7-day duration present in eRx', 'warning', 'Draft Comparator', '2026-10-15'),
+      row('45-1', 'Draft vs Source: Lisinopril', 'Draft lists 20 mg daily (matches discharge order)', 'completed', 'Draft Comparator', '2026-10-15'),
+      row('45-2', 'Draft vs Source: Amoxicillin', 'Draft omits 7-day duration present in eRx', 'warning', 'Draft Comparator', '2026-10-15'),
     ],
   },
   46: {
@@ -661,7 +661,7 @@ const SYNTHETIC_FIXTURE_ROWS: Record<number, { summaryLine: string; rows: Widget
   76: {
     summaryLine: 'Accessible mock intake form with local-only draft submission state.',
     rows: [
-      row('76-1', 'Pre-Visit Symptom & Med Check Form', 'Local draft only — no external EHR write', 'pending', 'Patient Portal Form', '2026-10-15'),
+      row('76-1', 'Pre-Visit Symptom & Med Check Form', 'Local draft only (no external EHR write)', 'pending', 'Patient Portal Form', '2026-10-15'),
     ],
     checklist: [
       { id: 'chk-76-1', text: 'Confirmed current home address & pharmacy', done: true, sourceLabel: 'Intake Form' },

@@ -225,7 +225,7 @@ function buildMedicationReconciliation(
           row(
             '19-2',
             'Metformin 500 mg PO',
-            'Missed / Held — NPO for imaging',
+            'Missed / Held: NPO for imaging',
             'warning',
             'Synthetic MAR',
             '2026-10-15T12:00:00Z',
@@ -257,7 +257,7 @@ function buildMedicationReconciliation(
           row(
             '20-1',
             'Enoxaparin 40 mg',
-            'Missing frequency & duration — verification blocked',
+            'Missing frequency & duration (verification blocked)',
             'missing',
             'Admission Orders Draft',
             '2026-10-14',
@@ -275,7 +275,7 @@ function buildMedicationReconciliation(
           row(
             '20-3',
             'Lisinopril 20 mg oral daily',
-            'Complete order fields — verified',
+            'Complete order fields (verified)',
             'completed',
             'Discharge eRx',
             '2026-10-15',
@@ -394,7 +394,7 @@ function buildChartBasics(id: number): WidgetContent | null {
           row(
             '23-4',
             'Intermittent palpitations',
-            'Unclear status — no follow-up ECG',
+            'Unclear status (no follow-up ECG)',
             'unknown',
             'Triage Note',
             '2026-10-12',
@@ -480,7 +480,7 @@ function buildChartBasics(id: number): WidgetContent | null {
         rows: [
           row(
             '26-1',
-            'Mother — Hypertension',
+            'Mother: Hypertension',
             'Diagnosed age 55 · Living',
             'documented',
             'Intake Family Hx',
@@ -488,7 +488,7 @@ function buildChartBasics(id: number): WidgetContent | null {
           ),
           row(
             '26-2',
-            'Sibling — Type 2 diabetes',
+            'Sibling: Type 2 diabetes',
             'Diagnosed age 48 · Living',
             'documented',
             'Intake Family Hx',
@@ -497,7 +497,7 @@ function buildChartBasics(id: number): WidgetContent | null {
           row(
             '26-3',
             'Paternal cardiac history',
-            'Unknown — patient unsure of details',
+            'Unknown (patient unsure of details)',
             'unknown',
             'Intake Family Hx',
             null,
@@ -839,7 +839,7 @@ function buildResultsAndTrends(id: number): WidgetContent | null {
           row(
             '36-2',
             'External Glucose (mmol/L)',
-            '7.8 mmol/L — unit change vs. local mg/dL (noncomparable without conversion)',
+            '7.8 mmol/L (unit change vs. local mg/dL; noncomparable without conversion)',
             'warning',
             'Outside Lab Import',
             '2026-09-20',
@@ -885,7 +885,7 @@ function buildResultsAndTrends(id: number): WidgetContent | null {
           row(
             '37-1',
             'Troponin I (2026-10-12)',
-            '0.02 ng/mL (Normal — not critical)',
+            '0.02 ng/mL (Normal, not critical)',
             'completed',
             'ED Lab Feed',
             '2026-10-12',
@@ -917,7 +917,7 @@ function buildResultsAndTrends(id: number): WidgetContent | null {
           row(
             '38-2',
             'SPEC-SYN-409 (Lipid panel)',
-            'Ordered — specimen not yet collected',
+            'Ordered (specimen not yet collected)',
             'pending',
             'Lab Specimen Tracker',
             '2026-10-15',
@@ -1126,7 +1126,7 @@ function buildEncountersAndCarePlanning(
         rows: [
           row(
             '45-1',
-            'Draft vs Source — Lisinopril',
+            'Draft vs Source: Lisinopril',
             'Draft lists 20 mg daily (matches discharge order)',
             'completed',
             'Draft Comparator',
@@ -1134,7 +1134,7 @@ function buildEncountersAndCarePlanning(
           ),
           row(
             '45-2',
-            'Draft vs Source — Amoxicillin',
+            'Draft vs Source: Amoxicillin',
             'Draft omits 7-day duration present in eRx',
             'warning',
             'Draft Comparator',
@@ -1190,7 +1190,7 @@ function buildEncountersAndCarePlanning(
           row(
             '47-3',
             'REF-188 · Physical Therapy (2025)',
-            'Closed — patient completed course',
+            'Closed (patient completed course)',
             'completed',
             'Referral Tracker',
             '2025-11-20',

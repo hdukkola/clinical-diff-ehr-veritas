@@ -190,7 +190,7 @@ export function ShortcutsBody() {
     <ul className="ws-shortcuts" aria-label="Workflow shortcuts (mock)">
       {items.map((label) => (
         <li key={label}>
-          <button type="button" disabled aria-disabled="true" title="Design mock — not wired to app navigation">
+          <button type="button" disabled aria-disabled="true" title="Design mock (not wired to app navigation)">
             {label}
           </button>
         </li>

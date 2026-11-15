@@ -185,7 +185,7 @@ export function WidgetShell({
             className="ws-action"
             disabled
             aria-disabled="true"
-            title="Design mock — not wired to app state"
+            title="Design mock (not wired to app state)"
           >
             {actionLabel}
           </button>

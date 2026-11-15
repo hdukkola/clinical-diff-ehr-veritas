@@ -87,12 +87,12 @@ function buildStaticSpecialtyPreset(id: number): SpecialtyPreset | null {
         rows: [
           row('63-1', 'Pre-op consent & NPO status', 'Verified in synthetic drill · No active procedure scheduled', 'completed', 'Periop Board', '2026-10-12T19:00:00Z'),
           row('63-2', 'Anticoagulation / allergy screen', 'Penicillin allergy confirmed; no active anticoagulant', 'documented', 'Periop Med Screen', '2026-10-12T19:15:00Z'),
-          row('63-3', 'Intra-op / PACU handoff', 'Not applicable — non-operative inpatient stay', 'unknown', 'Periop Board', null),
+          row('63-3', 'Intra-op / PACU handoff', 'Not applicable (non-operative inpatient stay)', 'unknown', 'Periop Board', null),
         ],
         checklist: [
           { id: 'chk-63-1', text: 'Verify synthetic patient identity & allergy banner', done: true, sourceLabel: 'Periop Board' },
           { id: 'chk-63-2', text: 'Confirm NPO window prior to contrast/imaging', done: true, sourceLabel: 'Periop Board' },
-          { id: 'chk-63-3', text: 'Complete surgical site marking (N/A — no procedure)', done: false, sourceLabel: 'Periop Board' },
+          { id: 'chk-63-3', text: 'Complete surgical site marking (N/A, no procedure)', done: false, sourceLabel: 'Periop Board' },
         ],
       };
 
@@ -118,7 +118,7 @@ function buildStaticSpecialtyPreset(id: number): SpecialtyPreset | null {
         summaryLine: 'Synthetic L&D maternity board (explicitly inactive for non-obstetric encounter).',
         rows: [
           row('65-1', 'Active obstetric episode', 'None documented on current encounter (not applicable)', 'unknown', 'L&D Board', null),
-          row('65-2', 'Gestational age & delivery milestones', 'Not recorded — no maternity workflow active', 'unknown', 'L&D Board', null),
+          row('65-2', 'Gestational age & delivery milestones', 'Not recorded (no maternity workflow active)', 'unknown', 'L&D Board', null),
           row('65-3', 'Historical PMH reference', 'Gestational hypertension (2012, resolved postpartum)', 'completed', 'PMH Summary', '2012-04-02'),
         ],
       };
@@ -128,7 +128,7 @@ function buildStaticSpecialtyPreset(id: number): SpecialtyPreset | null {
         summaryLine: 'Synthetic oncology cycle & regimen tracker (explicitly inactive for current chart).',
         rows: [
           row('66-1', 'Active chemotherapy protocol', 'None documented for current synthetic patient', 'unknown', 'Oncology Tracker', null),
-          row('66-2', 'Planned cycle & infusion dates', 'Not applicable — no oncology orders on file', 'unknown', 'Oncology Tracker', null),
+          row('66-2', 'Planned cycle & infusion dates', 'Not applicable (no oncology orders on file)', 'unknown', 'Oncology Tracker', null),
           row('66-3', 'Pathology / staging summary', 'No active malignancy documented', 'documented', 'Problem List', '2026-10-01'),
         ],
       };
@@ -141,7 +141,7 @@ function buildStaticSpecialtyPreset(id: number): SpecialtyPreset | null {
           row('67-2', '2026-08-10 · Weight', '73.1 kg (BMI 25.9 kg/m²)', 'documented', 'Clinic Vitals', '2026-08-10'),
           row('67-3', '2026-10-01 · Weight', '72.4 kg (BMI 25.6 kg/m²)', 'documented', 'Clinic Vitals', '2026-10-01'),
           row('67-4', '2026-10-15 · Weight', '71.8 kg (BMI 25.4 kg/m²)', 'completed', 'Discharge Vitals', '2026-10-15'),
-          row('67-5', 'Pediatric percentile curve', 'Not applicable — adult patient baseline', 'unknown', 'Growth Engine', null),
+          row('67-5', 'Pediatric percentile curve', 'Not applicable (adult patient baseline)', 'unknown', 'Growth Engine', null),
         ],
         series: [
           { label: 'Aug 10', value: 73.1, unit: 'kg', recordedAt: '2026-08-10', comparable: true },
@@ -156,7 +156,7 @@ function buildStaticSpecialtyPreset(id: number): SpecialtyPreset | null {
         rows: [
           row('68-1', 'PHQ-2 Depression Screen', 'Score 1 (Negative) · Screened at clinic intake', 'completed', 'Behavioral Screening', '2026-10-01'),
           row('68-2', 'AUDIT-C Alcohol Screen', 'Score 0 (Negative) · Self-reported at intake', 'completed', 'Behavioral Screening', '2026-10-01'),
-          row('68-3', 'GAD-7 Anxiety Screen', 'Not administered — score unknown', 'unknown', 'Behavioral Screening', null),
+          row('68-3', 'GAD-7 Anxiety Screen', 'Not administered (score unknown)', 'unknown', 'Behavioral Screening', null),
         ],
       };
 
@@ -181,7 +181,7 @@ function buildStaticSpecialtyPreset(id: number): SpecialtyPreset | null {
         rows: [
           row('70-1', 'Tooth #19 · Porcelain crown', 'Intact · External dental summary', 'documented', 'Dental Summary', '2025-08-19'),
           row('70-2', 'Tooth #30 · Occlusal amalgam', 'Stable restoration · No acute caries', 'documented', 'Dental Summary', '2025-08-19'),
-          row('70-3', 'Periodontal probing chart', 'Unknown — external perio chart not imported', 'unknown', 'External Dental Feed', null),
+          row('70-3', 'Periodontal probing chart', 'Unknown (external perio chart not imported)', 'unknown', 'External Dental Feed', null),
         ],
       };
 
@@ -200,7 +200,7 @@ function buildStaticSpecialtyPreset(id: number): SpecialtyPreset | null {
         summaryLine: 'Synthetic long-term care goals and review schedule (outpatient setting profile).',
         rows: [
           row('72-1', 'Care setting profile', 'Outpatient home-dwelling (LTC facility not active)', 'documented', 'Care Setting Profile', '2026-10-15'),
-          row('72-2', 'Quarterly LTC care conference', 'Not applicable — non-resident outpatient chart', 'unknown', 'LTC Registry', null),
+          row('72-2', 'Quarterly LTC care conference', 'Not applicable (non-resident outpatient chart)', 'unknown', 'LTC Registry', null),
           row('72-3', 'Fall-risk & ADL baseline', 'Low fall risk · Independent ADLs documented', 'completed', 'Nursing Assessment', '2026-10-15'),
         ],
       };
@@ -220,7 +220,7 @@ function buildStaticSpecialtyPreset(id: number): SpecialtyPreset | null {
       return {
         summaryLine: 'Accessible mock intake forms with local-only draft submission state (no EHR write).',
         rows: [
-          row('76-1', 'Pre-Visit Symptom & Med Check', 'Local draft only — requires patient submit click', 'pending', 'Patient Portal Form', '2026-10-15'),
+          row('76-1', 'Pre-Visit Symptom & Med Check', 'Local draft only (requires patient submit click)', 'pending', 'Patient Portal Form', '2026-10-15'),
           row('76-2', 'Demographics & Pharmacy Confirm', 'Verified in local session', 'completed', 'Patient Portal Form', '2026-10-15'),
         ],
         checklist: [
@@ -281,7 +281,7 @@ function buildStaticSpecialtyPreset(id: number): SpecialtyPreset | null {
         rows: [
           row('81-1', 'Synthetic Identifier', 'DEMO-001 · Registered outpatient/inpatient profile', 'documented', 'Registration', '2026-10-01'),
           row('81-2', 'Preferred Language & Accessibility', 'English · 16pt high-contrast print requested', 'documented', 'Registration', '2026-10-01'),
-          row('81-3', 'Secondary emergency phone', 'Missing (null) — needs front-desk verification', 'missing', 'Registration', null),
+          row('81-3', 'Secondary emergency phone', 'Missing (null); needs front-desk verification', 'missing', 'Registration', null),
           row('81-4', 'Primary Care Attribution', 'Dr. A. Patel (Synthetic PCP)', 'documented', 'Care Team Registry', '2026-10-01'),
         ],
       };
@@ -292,7 +292,7 @@ function buildStaticSpecialtyPreset(id: number): SpecialtyPreset | null {
         rows: [
           row('82-1', 'Primary: Synthetic Health Plan PPO', 'Active · Verified 2026-10-12 · Copay $25', 'completed', 'Eligibility Check', '2026-10-12'),
           row('82-2', 'Pharmacy Benefit (Synthetic PBM)', 'Active · RxBIN 004336 · Tier 1 generics covered', 'completed', 'Eligibility Check', '2026-10-12'),
-          row('82-3', 'Secondary coordination of benefits', 'Unknown — not verified in current encounter', 'unknown', 'Eligibility Check', null),
+          row('82-3', 'Secondary coordination of benefits', 'Unknown (not verified in current encounter)', 'unknown', 'Eligibility Check', null),
         ],
       };
 
@@ -443,7 +443,7 @@ function buildDynamicSpecialtyPreset(id: number, ctx: BacklogBuildContext): Spec
         return row(
           `74-${c.medicationId}-${idx}`,
           c.name,
-          hasMissing ? `${detailText} (some details missing — ask pharmacist)` : detailText,
+          hasMissing ? `${detailText} (some details missing; ask pharmacist)` : detailText,
           hasMissing ? 'missing' : 'documented',
           c.provenance?.later.sourceLabel ?? 'Discharge Med List',
           c.provenance?.later.recordedAt ?? null,

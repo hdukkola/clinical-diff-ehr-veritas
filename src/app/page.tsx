@@ -4358,21 +4358,21 @@ export default function Home() {
                                                     ) : isUnavailable ? (
                                                       <p className="nd">
                                                         Source unavailable
-                                                        {link.note ? ` — ${link.note}` : '.'}
+                                                        {link.note ? `: ${link.note}` : '.'}
                                                       </p>
                                                     ) : isMissingRef ? (
                                                       <p className="nd">
                                                         Missing reference
                                                         {link.note
-                                                          ? ` — ${link.note}`
-                                                          : ' — no source citation or excerpt recorded.'}
+                                                          ? `: ${link.note}`
+                                                          : ': no source citation or excerpt recorded.'}
                                                       </p>
                                                     ) : isAmbiguous ? (
                                                       <p className="nd">
                                                         Ambiguous reference
                                                         {link.note
-                                                          ? ` — ${link.note}`
-                                                          : ' — the source could not be identified with certainty.'}
+                                                          ? `: ${link.note}`
+                                                          : ': the source could not be identified with certainty.'}
                                                       </p>
                                                     ) : (
                                                       <p className="nd">
@@ -4387,7 +4387,7 @@ export default function Home() {
                                           </>
                                         ) : (
                                           <p className="nd" style={{ fontSize: 12 }}>
-                                            Missing reference — no supporting evidence links attached to this change.
+                                            Missing reference: no supporting evidence links attached to this change.
                                           </p>
                                         )}
 

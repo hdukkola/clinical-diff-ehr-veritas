@@ -65,7 +65,7 @@ export function AssistantPanel({
       {open && <div id="assistant-content" className="assistant-content">
         <p>
           Ask which medications are explicitly named in the built-in demo notes for {patientLabel} ({patientId})
-          {encounterTitle ? ` — ${encounterTitle}` : ''}. Edits to the notes are not sent. Review the source before relying on any result.
+          {encounterTitle ? `: ${encounterTitle}` : ''}. Edits to the notes are not sent. Review the source before relying on any result.
         </p>
         <div className="assistant-actions">
           <button type="button" disabled={busy} onClick={() => void ask('earlier')}>Check demo earlier note</button>

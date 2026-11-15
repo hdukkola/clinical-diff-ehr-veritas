@@ -39,7 +39,7 @@ export default function DesignPreviewPage() {
   return (
     <main className="wsp-page" id="main-content">
       <p className="wsp-banner" role="note">
-        Design mock for review — fictional data for {MOCK_PATIENT.label} ({MOCK_PATIENT.id}). Controls are
+        Design mock for review: fictional data for {MOCK_PATIENT.label} ({MOCK_PATIENT.id}). Controls are
         disabled and nothing here is wired to the app, a model, or clinical logic. Each widget is labelled
         Current, Proposed, or Mock data.
       </p>
@@ -60,7 +60,7 @@ export default function DesignPreviewPage() {
           provenance="mocked"
           context={`${MOCK_PATIENT.label}`}
           source="Mock review fixture"
-          freshness="Mock — not measured"
+          freshness="Mock (not measured)"
           actionLabel="Open queue"
         >
           <MetricBody value={7} denominator={12} label="Awaiting a reviewer decision" note="Denominator: all 12 changes for this patient." />
@@ -73,7 +73,7 @@ export default function DesignPreviewPage() {
           provenance="mocked"
           context="Parts of one defined whole: 12 changes"
           source="Mock review fixture"
-          freshness="Mock — not measured"
+          freshness="Mock (not measured)"
           actionLabel="Open Snapshot review"
         >
           <DonutBody />
@@ -87,7 +87,7 @@ export default function DesignPreviewPage() {
           provenance="mocked"
           context="Oldest first · includes undated records separately"
           source="Mock encounter fixture"
-          freshness="Mock — not measured"
+          freshness="Mock (not measured)"
           actionLabel="Open encounter"
         >
           <TimelineBody />
@@ -100,7 +100,7 @@ export default function DesignPreviewPage() {
           provenance="proposed"
           context="Unknown is shown as unknown; absent is not treated as stopped"
           source="Mock snapshot comparison"
-          freshness="Mock — not measured"
+          freshness="Mock (not measured)"
           actionLabel="Open change explorer"
         >
           <EvidenceListBody />
@@ -113,7 +113,7 @@ export default function DesignPreviewPage() {
           provenance="proposed"
           context="Counts against a shared denominator of 12 medication entries"
           source="Mock completeness calculation"
-          freshness="Mock — not measured"
+          freshness="Mock (not measured)"
           actionLabel="Show affected items"
         >
           <CompletenessBarsBody />
@@ -163,9 +163,9 @@ export default function DesignPreviewPage() {
           icon="⇄"
           span="standard"
           provenance="mocked"
-          context={`${MOCK_PATIENT.label} · 7 of 12 documented differences unresolved (fictional count — not confirmed medication errors)`}
+          context={`${MOCK_PATIENT.label} · 7 of 12 documented differences unresolved (fictional count, not confirmed medication errors)`}
           source="Mock snapshot comparison"
-          freshness="Mock — last updated 2026-11-15"
+          freshness="Mock (last updated 2026-11-15)"
           actionLabel="Open medication review"
         >
           <EvidenceListBody />
