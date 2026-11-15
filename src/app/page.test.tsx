@@ -1633,4 +1633,26 @@ describe('Clinical Diff Veritas Editorial UI', () => {
       }
     }
   });
+
+  it('traces encounter transcript utterances directly to earlier note, discharge note, and Aspirin snapshot evidence', async () => {
+    const user = userEvent.setup();
+    render(<Home />);
+
+    await user.click(within(getPatientsGroup()).getByRole('button', { name: /Morgan Lee/ }));
+    const transcript = screen.getByRole('region', { name: 'Encounter transcript' });
+    expect(transcript).toHaveTextContent('Recording consent at 00:08');
+
+    await user.click(within(transcript).getByRole('button', { name: /Trace to discharge note/i }));
+    await waitFor(() => expect(screen.getByLabelText(/Discharge note/i)).toHaveFocus());
+
+    await user.click(within(getPatientsGroup()).getByRole('button', { name: /Morgan Lee/ }));
+    const transcriptAgain = screen.getByRole('region', { name: 'Encounter transcript' });
+    await user.click(
+      within(transcriptAgain).getByRole('button', { name: /Trace Aspirin in Snapshot review/i }),
+    );
+    const aspirinEvidence = screen.getByLabelText('Evidence and provenance for Aspirin');
+    await waitFor(() => expect(aspirinEvidence).toHaveFocus());
+    await user.click(within(aspirinEvidence).getByRole('button', { name: 'Back to encounter transcript' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Trace Aspirin in Snapshot review' })).toHaveFocus());
+  });
 });

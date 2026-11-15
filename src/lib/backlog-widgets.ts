@@ -1,4 +1,4 @@
-import type { SnapshotComparisonReport } from './types';
+import type { Snapshot, SnapshotComparisonReport } from './types';
 
 export type BacklogSectionId =
   | 'foundations'
@@ -85,6 +85,7 @@ export interface BacklogBuildContext {
   patientLabel: string;
   scenarioId: string;
   report: SnapshotComparisonReport;
+  laterSnapshot?: Snapshot;
   reviews: Record<string, string | undefined>;
   socketState: string;
   evalTested: number;

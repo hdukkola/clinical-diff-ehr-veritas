@@ -1,6 +1,6 @@
 # DiffMD — Clinical Diff EHR
 
-A clinician-reviewed, synthetic-only medication reconciliation and clinical-diff workbench built during the Veritas hackathon. It compares clinical snapshots and notes, preserves source labels, dates, and quoted evidence, and enforces safety gates before any review action is finalized.
+A synthetic-only medication reconciliation workbench prepared for the Veritas hackathon. It compares clinical snapshots and notes, preserves source labels, dates and quoted evidence, and lets a human reviewer record decisions.
 
 > **Synthetic data only:** All records, scenarios, and benchmarks use fictional data. Differences are review observations—not confirmed medical errors, prescriptions, or clinical advice. Never enter real patient information (PHI).
 

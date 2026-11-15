@@ -7,7 +7,26 @@ import {
   buildBacklogWidgetData,
   type BacklogBuildContext,
   type BacklogSectionId,
+  type BacklogWidgetData,
 } from '@/lib/backlog-widgets';
+import { buildClinicalWidgetData } from '@/lib/widgets-clinical';
+import { buildSpecialtyWidgetData, SPECIALTY_WIDGET_IDS } from '@/lib/widgets-specialty';
+
+const SPECIALTY_WIDGET_ID_SET = new Set<number>(SPECIALTY_WIDGET_IDS);
+const COMPARISON_WIDGET_IDS = new Set([14, 16, 51, 54, 73, 74, 89]);
+const SESSION_WIDGET_IDS = new Set([93]);
+
+function resolveBacklogWidgetData(
+  id: number,
+  context: BacklogBuildContext,
+): BacklogWidgetData {
+  const clinical = buildClinicalWidgetData(id, context);
+  if (clinical) return clinical;
+  if (SPECIALTY_WIDGET_ID_SET.has(id)) {
+    return buildSpecialtyWidgetData(id, context);
+  }
+  return buildBacklogWidgetData(id, context);
+}
 
 interface BacklogCatalogDrawerProps {
   open: boolean;
@@ -25,6 +44,7 @@ export function BacklogCatalogDrawer({
   const [selectedId, setSelectedId] = useState<number>(14);
   const [localChecks, setLocalChecks] = useState<Record<string, boolean>>({});
   const closeBtnRef = useRef<HTMLButtonElement | null>(null);
+  const dialogRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -33,6 +53,18 @@ export function BacklogCatalogDrawer({
       if (e.key === 'Escape') {
         e.preventDefault();
         onClose();
+      }
+      if (e.key !== 'Tab') return;
+      const controls = dialogRef.current?.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), input:not([disabled]), select:not([disabled]), a[href]',
+      );
+      if (!controls?.length) return;
+      const first = controls[0];
+      const last = controls[controls.length - 1];
+      if (!dialogRef.current?.contains(document.activeElement) ||
+          (e.shiftKey ? document.activeElement === first : document.activeElement === last)) {
+        e.preventDefault();
+        (e.shiftKey ? last : first).focus();
       }
     };
     window.addEventListener('keydown', handleKey);
@@ -53,15 +85,25 @@ export function BacklogCatalogDrawer({
   }, [activeSection, query]);
 
   const activeWidget = useMemo(
-    () => buildBacklogWidgetData(selectedId, context),
+    () => resolveBacklogWidgetData(selectedId, context),
     [selectedId, context],
   );
 
   if (!open) return null;
 
+  const scope = COMPARISON_WIDGET_IDS.has(activeWidget.id)
+    ? `Current comparison · ${activeWidget.patientLabel}`
+    : SESSION_WIDGET_IDS.has(activeWidget.id) ? 'Current session' : 'Illustrative widget example';
+  const observations = activeWidget.series ?? [];
+  const comparableObservations = observations.filter((point) => point.comparable && point.value >= 0);
+  const canChart = comparableObservations.length > 1 &&
+    comparableObservations.every((point) => point.unit === comparableObservations[0].unit);
+  const seriesMaximum = canChart ? Math.max(...comparableObservations.map((point) => point.value), 1) : 1;
+
   return (
     <div
       className="backlog-overlay"
+      ref={dialogRef}
       role="dialog"
       aria-modal="true"
       aria-labelledby="backlog-drawer-title"
@@ -70,10 +112,10 @@ export function BacklogCatalogDrawer({
         <header className="backlog-drawer-head">
           <div>
             <h2 id="backlog-drawer-title" className="backlog-drawer-title">
-              EHR Widget Catalog (100 Backlog Surfaces)
+              EHR widget catalog
             </h2>
             <p className="backlog-drawer-sub">
-              {activeWidget.patientLabel} · {activeWidget.safetyNotice}
+              Fictional data · Read-only
             </p>
           </div>
           <button
@@ -87,17 +129,34 @@ export function BacklogCatalogDrawer({
         </header>
 
         <div className="backlog-toolbar">
-          <label className="sr-only" htmlFor="backlog-search-input">
-            Filter widget catalog
-          </label>
-          <input
-            id="backlog-search-input"
-            type="search"
-            className="backlog-search-input"
-            placeholder="Filter by ID (14–100) or widget name..."
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-          />
+          <div className="backlog-search-row">
+            <label className="sr-only" htmlFor="backlog-search-input">
+              Filter widget catalog
+            </label>
+            <input
+              id="backlog-search-input"
+              type="search"
+              className="backlog-search-input"
+              placeholder="Filter by ID (01–100) or widget name..."
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+            <span className="backlog-filter-count">
+              {filteredItems.length} of {BACKLOG_WIDGET_CATALOG.length}
+            </span>
+            {(query.trim() !== '' || activeSection !== 'all') && (
+              <button
+                type="button"
+                className="btn-ghost backlog-reset-btn"
+                onClick={() => {
+                  setQuery('');
+                  setActiveSection('all');
+                }}
+              >
+                Reset
+              </button>
+            )}
+          </div>
           <div className="backlog-section-pills" role="tablist" aria-label="Widget categories">
             <button
               type="button"
@@ -136,9 +195,6 @@ export function BacklogCatalogDrawer({
               >
                 <span className="backlog-item-code">{item.code}</span>
                 <span className="backlog-item-title">{item.title}</span>
-                <span className="backlog-item-owner">
-                  {item.owner === 'codex' ? 'Codex' : 'Verified'}
-                </span>
               </button>
             ))}
             {filteredItems.length === 0 && (
@@ -149,7 +205,7 @@ export function BacklogCatalogDrawer({
           <section className="backlog-detail" aria-label={`Widget ${activeWidget.code} preview`}>
             <div className="backlog-detail-head">
               <div>
-                <span className="backlog-detail-code">Widget {activeWidget.code}</span>
+                <span className="backlog-detail-code">{scope}</span>
                 <h3 className="backlog-detail-title">{activeWidget.title}</h3>
                 <p className="backlog-detail-summary">{activeWidget.summaryLine}</p>
               </div>
@@ -168,21 +224,17 @@ export function BacklogCatalogDrawer({
               </div>
             </div>
 
-            {activeWidget.series && activeWidget.series.length > 0 && (
+            {observations.length > 0 && (
               <div className="backlog-series-box">
-                <div className="backlog-series-bars" aria-hidden="true">
-                  {activeWidget.series.map((pt) => {
-                    const max = Math.max(...activeWidget.series!.map((s) => s.value), 1);
-                    const pct = Math.max(12, Math.round((pt.value / max) * 100));
-                    return (
-                      <div key={pt.label} className="backlog-series-col">
-                        <div className="backlog-series-bar" style={{ height: `${pct}%` }} />
+                {canChart && <div className="backlog-series-bars" aria-hidden="true">
+                  {comparableObservations.map((pt, index) => (
+                      <div key={`${pt.recordedAt}-${index}`} className="backlog-series-col">
+                        <div className="backlog-series-bar" style={{ height: `${(pt.value / seriesMaximum) * 100}%` }} />
                         <span className="backlog-series-val">{pt.value}</span>
                         <span className="backlog-series-lbl">{pt.label}</span>
                       </div>
-                    );
-                  })}
-                </div>
+                  ))}
+                </div>}
                 <table className="backlog-series-table">
                   <caption className="sr-only">Numeric observations for {activeWidget.title}</caption>
                   <thead>
@@ -194,12 +246,12 @@ export function BacklogCatalogDrawer({
                     </tr>
                   </thead>
                   <tbody>
-                    {activeWidget.series.map((pt) => (
-                      <tr key={pt.recordedAt}>
+                    {observations.map((pt, index) => (
+                      <tr key={`${pt.recordedAt}-${index}`} className={pt.comparable ? '' : 'non-comparable'}>
                         <td>{pt.recordedAt}</td>
                         <td>{pt.value}</td>
                         <td>{pt.unit}</td>
-                        <td>{pt.comparable ? 'Yes' : 'No'}</td>
+                        <td>{pt.comparable ? 'Yes' : 'No (unit/scale change)'}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -212,9 +264,10 @@ export function BacklogCatalogDrawer({
                 <li key={r.id} className={`backlog-row status-${r.status}`}>
                   <div className="backlog-row-top">
                     <strong>{r.label}</strong>
-                    <span className="backlog-row-badge">{r.status}</span>
+                    <span className={`backlog-row-badge status-${r.status}`}>{r.status}</span>
                   </div>
                   <p className="backlog-row-val">{r.value}</p>
+                  {r.detail && <p className="backlog-row-detail">{r.detail}</p>}
                   <p className="backlog-row-meta">
                     Source: {r.sourceLabel} · {r.recordedAt ?? 'Date unknown'}
                   </p>
@@ -224,7 +277,7 @@ export function BacklogCatalogDrawer({
 
             {activeWidget.checklist && activeWidget.checklist.length > 0 && (
               <div className="backlog-checklist">
-                <h4>Interactive Local Checklist (Simulation Only)</h4>
+                <h4>Practice checklist</h4>
                 <ul>
                   {activeWidget.checklist.map((chk) => {
                     const checked = localChecks[chk.id] ?? chk.done;

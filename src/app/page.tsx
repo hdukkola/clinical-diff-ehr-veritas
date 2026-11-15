@@ -30,7 +30,7 @@ import {
 } from '@/lib/diff';
 import { BRAND_NAME } from '@/lib/branding';
 import { WorkspaceWidgets, type WorkspaceWidget } from '@/components/WorkspaceWidgets';
-import { EncounterTranscript } from '@/components/EncounterTranscript';
+import { ASPIRIN_TRANSCRIPT_LINK_ID, EncounterTranscript } from '@/components/EncounterTranscript';
 import { AssistantPanel } from '@/components/AssistantPanel';
 import { SYNTHETIC_ASSISTANT_NOTES } from '@/lib/assistant-evidence';
 import {
@@ -951,6 +951,10 @@ export default function Home() {
   const [pinnedOpen, setPinnedOpen] = useState(false);
   const [backlogOpen, setBacklogOpen] = useState(false);
   const backlogTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const closeBacklog = useCallback(() => {
+    setBacklogOpen(false);
+    requestAnimationFrame(() => backlogTriggerRef.current?.focus());
+  }, []);
 
   /* ---- Compare notes state ---- */
   const [selectedPresetId, setSelectedPresetId] = useState<string>('default');
@@ -972,7 +976,10 @@ export default function Home() {
   const [diffTab, setDiffTab] = useState<DiffTab>('diff');
   const [diffFilter, setDiffFilter] = useState<DiffFilter>('all');
   const [selectedMedId, setSelectedMedId] = useState<string | null>(null);
-  const [evidenceReturnMedId, setEvidenceReturnMedId] = useState<string | null>(null);
+  const [evidenceReturn, setEvidenceReturn] = useState<{
+    medicationId: string;
+    view: 'home' | 'patient';
+  } | null>(null);
   const [activeCitationByMed, setActiveCitationByMed] = useState<Record<string, number>>({});
   const [activeExternalRecordId, setActiveExternalRecordId] = useState<string | null>(null);
   const [chartSearchQuery, setChartSearchQuery] = useState('');
@@ -1257,7 +1264,7 @@ export default function Home() {
   const navigateTo = useCallback((nextView: ViewId, focusHeading = true) => {
     setView(nextView);
     setSelectedMedId(null);
-    setEvidenceReturnMedId(null);
+    setEvidenceReturn(null);
     setMobileNavOpen(false);
     setPaletteMenuOpen(false);
     setAnnouncement(`Navigated to ${VIEW_NAMES[nextView]}`);
@@ -1268,7 +1275,7 @@ export default function Home() {
 
   const handleCockpitNavigate = useCallback(
     (nextView: CockpitViewId, filter?: CockpitNavigateFilter) => {
-      setEvidenceReturnMedId(null);
+      setEvidenceReturn(null);
       if (nextView === 'diff') {
         setDiffTab('diff');
         if (
@@ -1287,13 +1294,13 @@ export default function Home() {
   );
 
   const handleSelectEvidenceChange = useCallback(
-    (medId: string, fromCockpit = false) => {
+    (medId: string, returnView?: 'home' | 'patient') => {
       const targetEntry = snapshotEntries.find((entry) => entry.id === medId);
       setView('diff');
       setDiffTab('diff');
       setDiffFilter('all');
       setSelectedMedId(medId);
-      setEvidenceReturnMedId(fromCockpit ? medId : null);
+      setEvidenceReturn(returnView ? { medicationId: medId, view: returnView } : null);
       setMobileNavOpen(false);
       setAnnouncement(
         targetEntry
@@ -1317,14 +1324,20 @@ export default function Home() {
 
   const closeEvidenceDrilldown = useCallback(
     (medId: string, restoreRowFocus = false) => {
-      const returnTriggerMedId = evidenceReturnMedId === medId ? medId : null;
+      const returnView = evidenceReturn?.medicationId === medId ? evidenceReturn.view : null;
       setSelectedMedId(null);
-      setEvidenceReturnMedId(null);
-      if (returnTriggerMedId) setView('home');
+      setEvidenceReturn(null);
+      if (returnView) setView(returnView);
       requestAnimationFrame(() => {
-        if (returnTriggerMedId) {
+        if (returnView === 'patient') {
+          const trigger = document.getElementById(ASPIRIN_TRANSCRIPT_LINK_ID) ?? headingRef.current;
+          trigger?.focus({ preventScroll: true });
+          trigger?.scrollIntoView?.({ block: 'nearest' });
+          return;
+        }
+        if (returnView === 'home') {
           const trigger = document.querySelector<HTMLElement>(
-            `[data-widget-id="provenance-health"] [data-evidence-trigger="${CSS.escape(returnTriggerMedId)}"]`,
+            `[data-widget-id="provenance-health"] [data-evidence-trigger="${CSS.escape(medId)}"]`,
           );
           const target = trigger?.closest('details[open]') ? trigger : headingRef.current;
           target?.focus({ preventScroll: true });
@@ -1339,7 +1352,7 @@ export default function Home() {
         }
       });
     },
-    [evidenceReturnMedId],
+    [evidenceReturn],
   );
 
   const jumpToCitation = useCallback(
@@ -1386,7 +1399,7 @@ export default function Home() {
       setDiffFilter('all');
       if (match.medicationId) {
         setSelectedMedId(match.medicationId);
-        setEvidenceReturnMedId(null);
+        setEvidenceReturn(null);
         if (match.citationIdx !== undefined) {
           const citKey = `${activeScenario.id}:${match.medicationId}`;
           setActiveCitationByMed((curr) => ({ ...curr, [citKey]: match.citationIdx! }));
@@ -1435,7 +1448,7 @@ export default function Home() {
       setSelectedScenarioId(targetScenario.id);
       setDiffFilter('all');
       setSelectedMedId(null);
-      setEvidenceReturnMedId(null);
+      setEvidenceReturn(null);
       setActiveExternalRecordId(null);
       setMobileNavOpen(false);
       setView('patient');
@@ -1514,7 +1527,7 @@ export default function Home() {
         closeEvidenceDrilldown(medId, restoreRowFocus);
         return;
       }
-      setEvidenceReturnMedId(null);
+      setEvidenceReturn(null);
       setSelectedMedId(medId);
       if (restoreRowFocus) {
         const previousFocus = document.activeElement;
@@ -2458,14 +2471,14 @@ export default function Home() {
     });
   }
 
-  function openEncounterNotes() {
+  function openEncounterNotes(targetId: 'earlier-note' | 'later-note' = 'earlier-note') {
     if (earlierNoteText !== DEFAULT_EARLIER_NOTE || laterNoteText !== DEFAULT_LATER_NOTE) {
       const replaceNotes = window.confirm('Replace the notes in Compare and clear their results?');
       if (!replaceNotes) return;
       handleSelectPreset('default');
     }
     navigateTo('extract', false);
-    focusSection('earlier-note');
+    focusSection(targetId);
   }
 
   function openSnapshot(tab: DiffTab, filter: DiffFilter = 'all', focusId?: string) {
@@ -2974,7 +2987,11 @@ export default function Home() {
                 {pageWidgets}
                 {view === 'patient' && (
                   <>
-                    <EncounterTranscript onCompare={openEncounterNotes} />
+                    <EncounterTranscript
+                      onCompare={() => openEncounterNotes('earlier-note')}
+                      onTraceNote={(targetId) => openEncounterNotes(targetId)}
+                      onTraceMedication={(medId) => handleSelectEvidenceChange(medId, 'patient')}
+                    />
                     <AssistantPanel
                       patientLabel={cleanPatientName(activeScenario.patientLabel)}
                       patientId={activeScenario.patientId}
@@ -3006,7 +3023,7 @@ export default function Home() {
                 }}
                 audit={audit}
                 onNavigate={handleCockpitNavigate}
-                onSelectEvidenceChange={(medId) => handleSelectEvidenceChange(medId, true)}
+                onSelectEvidenceChange={(medId) => handleSelectEvidenceChange(medId, 'home')}
                 order={widgetOrder}
                 onOrderChange={setWidgetOrder}
               />
@@ -4033,13 +4050,15 @@ export default function Home() {
                                               {EVIDENCE_STATE_LABELS[classifyChangeEvidenceState(entry.change)]}
                                             </span>
                                           )}
-                                          {evidenceReturnMedId === entry.id && (
+                                          {evidenceReturn?.medicationId === entry.id && (
                                             <button
                                               type="button"
                                               className="evidence-back-btn"
                                               onClick={() => closeEvidenceDrilldown(entry.id, true)}
                                             >
-                                              Back to evidence widget
+                                              {evidenceReturn.view === 'patient'
+                                                ? 'Back to encounter transcript'
+                                                : 'Back to evidence widget'}
                                             </button>
                                           )}
                                         </div>
@@ -5850,14 +5869,12 @@ export interface DataAdapter {
 
       <BacklogCatalogDrawer
         open={backlogOpen}
-        onClose={() => {
-          setBacklogOpen(false);
-          requestAnimationFrame(() => backlogTriggerRef.current?.focus());
-        }}
+        onClose={closeBacklog}
         context={{
           patientLabel: activeScenario.patientLabel,
           scenarioId: activeScenario.id,
           report: activeReport,
+          laterSnapshot: activeScenario.later,
           reviews,
           socketState: socketStatus.state,
           evalTested: evalSummary?.totals.tested ?? 0,
