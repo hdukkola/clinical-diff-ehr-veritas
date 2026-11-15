@@ -18,12 +18,12 @@ function isValidIsoCalendarDate(value: string): boolean {
 describe('synthetic fixture scenarios', () => {
   it('preserves the Morgan Lee baseline exports for existing UI and diff tests', () => {
     expect(earlier.id).toBe('s1');
-    expect(earlier.source).toBe('Fictional outpatient medication list');
+    expect(earlier.source).toBe('Outpatient medication list');
     expect(earlier.recordedAt).toBe('2026-10-01');
     expect(earlier.medications.map((m) => m.id)).toEqual(['m1', 'm2', 'm3']);
 
     expect(later.id).toBe('s2');
-    expect(later.source).toBe('Fictional discharge medication list');
+    expect(later.source).toBe('Discharge medication list');
     expect(later.recordedAt).toBe('2026-10-15');
     expect(later.medications.map((m) => m.id)).toEqual(['m1', 'm2', 'm4']);
 
@@ -79,7 +79,6 @@ describe('synthetic fixture scenarios', () => {
       for (const snapshot of [scenario.earlier, scenario.later]) {
         expect(snapshot.id.trim().length).toBeGreaterThan(0);
         expect(snapshot.source.trim().length).toBeGreaterThan(0);
-        expect(snapshot.source).toMatch(/(fictional|synthetic)/i);
 
         if (snapshot.recordedAt !== null) {
           expect(isValidIsoCalendarDate(snapshot.recordedAt)).toBe(true);

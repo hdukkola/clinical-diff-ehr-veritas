@@ -14,7 +14,7 @@ export interface AssistantPanelProps {
 }
 
 export function AssistantPanel({
-  patientLabel = 'Morgan Lee (Synthetic)',
+  patientLabel = 'Morgan Lee',
   patientId = 'DEMO-001',
   encounterTitle,
 }: AssistantPanelProps) {
@@ -52,12 +52,12 @@ export function AssistantPanel({
   }
 
   return (
-    <section className="assistant-panel" aria-label="Synthetic note assistant">
+    <section className="assistant-panel" aria-label="Note assistant">
       <button type="button" className="assistant-toggle" aria-expanded={open} aria-controls="assistant-content" onClick={() => setOpen(!open)}>
         <span>
           <strong>Note assistant</strong>
           <small>
-            {patientLabel} · {patientId} · Experimental · synthetic demo only
+            {patientLabel} · {patientId} · Example records only
           </small>
         </span>
         <span aria-hidden="true">{open ? '−' : '+'}</span>
@@ -78,7 +78,7 @@ export function AssistantPanel({
               : message || 'Hosted model connection unavailable.'}
         </p>
         {answer?.status === 'answered' && (
-          <ul className="assistant-evidence" aria-label="Synthetic medication evidence">
+          <ul className="assistant-evidence" aria-label="Medication evidence">
             {answer.evidence.map(({ medication, excerpt }) => (
               <li key={medication}>
                 <strong>{medication}</strong> <span>{answer.source}</span>

@@ -4066,3 +4066,253 @@ pre.code .c {
   font-size: 13px;
   color: var(--muted);
 }
+
+/* Workspace and patient dashboards */
+.workspace-frame {
+  grid-template-columns: 224px minmax(0, 1fr);
+}
+
+.workspace-canvas.has-workspace-tools {
+  display: grid;
+  align-content: start;
+  grid-template-columns: minmax(0, 1fr) minmax(248px, 23%);
+}
+
+.workspace-canvas > .col {
+  width: 100%;
+  min-width: 0;
+  padding: 34px clamp(20px, 3vw, 46px) 64px;
+}
+
+.workspace-canvas > .overview-col {
+  max-width: 1240px;
+}
+
+.workspace-overview-heading,
+.encounter-transcript > header {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.workspace-overview-heading {
+  margin-bottom: 25px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--line);
+}
+
+.workspace-overview-heading p,
+.encounter-transcript header p,
+.transcript-source {
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.page-widgets {
+  scroll-margin-top: 24px;
+}
+
+.page-widgets-title {
+  margin: 0 0 12px;
+  color: var(--strong);
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.page-widget-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+}
+
+.overview-widgets .page-widget-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.page-widget {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: start;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--widget-radius-sm);
+  background: var(--raised);
+  overflow-wrap: anywhere;
+}
+
+.overview-widgets .page-widget {
+  padding: 16px 18px;
+}
+
+.page-widget-wide {
+  grid-column: span 2;
+}
+
+.page-widget h3 {
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 12px;
+}
+
+.page-widget-value {
+  color: var(--strong);
+  margin-top: 4px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.25;
+  font-size: 17px;
+}
+
+.overview-widgets .page-widget-value {
+  font-size: clamp(19px, 2vw, 26px);
+}
+
+.page-widget-detail {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.55;
+  margin: 4px 0 6px;
+  width: 100%;
+}
+
+.page-widget-action {
+  display: inline-flex;
+  min-height: 36px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  margin-top: auto;
+  padding: 6px 0 0;
+  color: var(--strong);
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+  border-bottom: 1px solid transparent;
+  transition: border-color 140ms ease, color 140ms ease;
+}
+
+.page-widget-action:hover {
+  border-color: var(--line-2);
+}
+
+.page-widget-action span {
+  color: var(--muted);
+  flex-shrink: 0;
+}
+
+.widget-medications {
+  color: var(--text);
+  margin: 4px 0;
+}
+
+.widget-medications li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding-block: 4px;
+  border-bottom: 1px solid var(--line);
+}
+
+.workspace-extra,
+.encounter-transcript {
+  margin-top: 24px;
+  border-top: 1px solid var(--line);
+  padding-top: 16px;
+}
+
+.workspace-extra summary {
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.workspace-extra[open] summary {
+  margin-bottom: 14px;
+}
+
+.encounter-transcript h2 {
+  font-size: 18px;
+  color: var(--strong);
+  font-weight: 650;
+}
+
+.encounter-transcript ol {
+  margin-top: 12px;
+}
+
+.encounter-transcript li {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr);
+  gap: 14px;
+  border-top: 1px solid var(--line);
+  padding: 10px 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.encounter-transcript li strong {
+  color: var(--strong);
+  font-weight: 650;
+}
+
+.workspace-tools {
+  display: block;
+  min-width: 0;
+  padding: 34px 20px;
+  overflow: visible;
+}
+
+.workspace-tools .rr-h {
+  margin-top: 22px;
+}
+
+.page-tools-jump {
+  display: none;
+}
+
+@media (max-width: 1050px) {
+  .workspace-canvas.has-workspace-tools {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .workspace-canvas.has-workspace-tools > .col {
+    padding-bottom: 30px;
+  }
+
+  .workspace-tools {
+    padding: 0 clamp(20px, 3vw, 46px) 56px;
+    border: 0;
+  }
+
+  .page-tools-jump {
+    display: inline-flex;
+    margin: 0 0 12px;
+  }
+
+  .page-widget-grid,
+  .overview-widgets .page-widget-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 780px) {
+  .workspace-frame {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 440px) {
+  .overview-widgets .page-widget {
+    padding: 12px 13px;
+  }
+
+  .encounter-transcript > header {
+    flex-wrap: wrap;
+  }
+}

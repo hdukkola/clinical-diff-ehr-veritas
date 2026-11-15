@@ -1224,7 +1224,9 @@ export function extractMedicationRegimensFromNote(
         frequency: normalizeFrequencyText(medSegment) ?? existing?.frequency ?? null,
         duration: normalizeDurationText(medSegment) ?? existing?.duration ?? null,
         discontinued:
-          DISCONTINUED_CUE_RE.test(clause) || (existing?.discontinued ?? false),
+          (existing?.discontinued ?? false) ||
+          DISCONTINUED_CUE_RE.test(clause) ||
+          /^discontinue\s+(?:the\s+)?$/i.test(clause.slice(0, match.index)),
         excerpt: existing ? `${existing.excerpt} | ${clause}` : clause,
       };
       byMed.set(key, extracted);

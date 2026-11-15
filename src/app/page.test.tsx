@@ -19,7 +19,22 @@ function getWorkspaceNav() {
 }
 
 function getPatientsGroup() {
-  return within(getLeftNav()).getByRole('group', { name: 'Patients · synthetic' });
+  return within(getLeftNav()).getByRole('group', { name: 'Patients' });
+}
+
+async function openSnapshot(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(within(getWorkspaceNav()).getByRole('button', { name: /^Snapshot review/ }));
+}
+
+async function openCompare(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(within(getWorkspaceNav()).getByRole('button', { name: 'Compare notes' }));
+}
+
+async function openCockpit(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(within(getWorkspaceNav()).getByRole('button', { name: 'Home' }));
+  const details = document.querySelector<HTMLDetailsElement>('details.workspace-extra')!;
+  if (!details.open) await user.click(within(details).getByText('Customize workspace'));
+  return screen.getByRole('region', { name: 'Clinical cockpit widgets' });
 }
 
 describe('Clinical Diff Veritas Editorial UI', () => {
@@ -41,7 +56,7 @@ describe('Clinical Diff Veritas Editorial UI', () => {
       expect(screen.queryByRole('table', { name: 'Evaluation case breakdown' })).not.toBeInTheDocument();
       await user.click(screen.getByRole('button', { name: 'Run held-out set' }));
       const table = within(screen.getByRole('table', { name: 'Evaluation case breakdown' }));
-      const family = table.getByRole('row', { name: /^Held-out synthetic labels/ });
+      const family = table.getByRole('row', { name: /^Held-out labels/ });
       expect(within(family).getAllByRole('cell').map(cell => cell.textContent)).toEqual(['3', '2', '1', '0']);
       const total = table.getByRole('row', { name: /^Total/ });
       const [tested, passed, failed, timedOut] = within(total).getAllByRole('cell');
@@ -70,10 +85,11 @@ describe('Clinical Diff Veritas Editorial UI', () => {
     );
     try {
       render(<Home />);
-      const panel = within(screen.getByRole('region', { name: 'Synthetic note assistant' }));
+      await user.click(within(getPatientsGroup()).getByRole('button', { name: /Morgan Lee/ }));
+      const panel = within(screen.getByRole('region', { name: 'Note assistant' }));
       await user.click(panel.getByRole('button', { name: /Note assistant/ }));
       await user.click(panel.getByRole('button', { name: 'Check demo earlier note' }));
-      const evidence = await panel.findByRole('list', { name: 'Synthetic medication evidence' });
+      const evidence = await panel.findByRole('list', { name: 'Medication evidence' });
       expect(evidence).toHaveTextContent('Demo earlier note');
       expect(within(evidence).getByText('Lisinopril 10 mg daily', { selector: 'blockquote' })).toBeInTheDocument();
       expect(panel.getByRole('status')).toHaveTextContent('Synthetic test response');
@@ -90,46 +106,59 @@ describe('Clinical Diff Veritas Editorial UI', () => {
     }
   });
 
-  it('renders the default Compare notes view with accessibility landmarks and collapsed right rail', async () => {
+  it('opens Home by default and gives all eight screens their own ten widgets', async () => {
     const user = userEvent.setup();
     render(<Home />);
 
-    // Skip link is first tab stop and points to focusable <main id="main-content" tabIndex={-1}>
     await user.tab();
     const skipLink = screen.getByRole('link', { name: 'Skip to main content' });
     expect(skipLink).toHaveFocus();
     expect(skipLink).toHaveAttribute('href', '#main-content');
+    expect(screen.getByRole('main')).toHaveAttribute('tabindex', '-1');
+    expect(screen.getByRole('heading', { level: 1, name: 'Home' })).toBeVisible();
+    expect(screen.queryByText('Fictional workspace')).not.toBeInTheDocument();
+    expect(screen.queryByText('Synthetic evaluation')).not.toBeInTheDocument();
+    const signatures = new Set<string>();
+    const recordWidgets = (name: string) => {
+      const grid = screen.getByRole('region', { name });
+      const titles = within(grid).getAllByRole('heading', { level: 3 });
+      expect(titles).toHaveLength(10);
+      signatures.add(titles.map((title) => title.textContent).join('|'));
+    };
+    recordWidgets('Workspace overview');
 
-    const main = screen.getByRole('main');
-    expect(main).toHaveAttribute('id', 'main-content');
-    expect(main).toHaveAttribute('tabindex', '-1');
-
-    // Default heading & workspace state
-    expect(
-      screen.getByRole('heading', { level: 1, name: 'Discharge medication review' }),
-    ).toBeInTheDocument();
-    expect(document.getElementById('extraction-status')).toHaveTextContent(
-      'Standby · local extractor',
-    );
+    await user.click(screen.getByRole('button', { name: 'Open patient' }));
+    recordWidgets('Patient summary');
+    expect(within(getPatientsGroup()).getAllByRole('button')).toHaveLength(1);
+    const transcript = screen.getByRole('region', { name: 'Encounter transcript' });
+    expect(transcript).toHaveTextContent('Yes, you can record it.');
+    await user.click(within(transcript).getByRole('button', { name: 'Load notes in Compare' }));
+    expect((screen.getByLabelText(/Earlier note/i) as HTMLTextAreaElement).value).toContain('Lisinopril 10 mg daily');
+    expect((screen.getByLabelText(/Discharge note/i) as HTMLTextAreaElement).value).toContain('Lisinopril 20 mg daily');
+    recordWidgets('Comparison tools');
+    expect(document.getElementById('extraction-status')).toHaveTextContent('Standby · local extractor');
     expect(screen.getByRole('button', { name: 'Palette · Graphite' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Open command menu' })).toBeInTheDocument();
-
-    // Right rail is collapsed in Compare notes view
-    expect(screen.queryByRole('complementary', { name: 'Page outline and context' })).not.toBeInTheDocument();
-
-    // Workspace nav marks Compare notes as current page
-    const compareNavBtn = within(getWorkspaceNav()).getByRole('button', { name: 'Compare notes' });
-    expect(compareNavBtn).toHaveAttribute('aria-current', 'page');
-
-    // Check service button announces status
     await user.click(screen.getByRole('button', { name: 'Check service' }));
     expect(getLiveNavAnnouncement()).toHaveTextContent('Local rule-based extractor ready');
-    expect(document.getElementById('toast')).toHaveTextContent('Local rule-based extractor ready');
+
+    for (const [page, widgets] of [
+      ['Snapshot review', 'Snapshot tools'],
+      ['Review suggestions', 'Suggestion tools'],
+      ['Evaluations', 'Evaluation results'],
+      ['Session activity', 'Activity tools'],
+      ['Models & data', 'Connection tools'],
+    ]) {
+      await user.click(within(getLeftNav()).getByRole('button', { name: new RegExp('^' + page) }));
+      recordWidgets(widgets);
+      expect(screen.queryByRole('region', { name: 'Clinical cockpit widgets' })).not.toBeInTheDocument();
+    }
+    expect(signatures.size).toBe(8);
   });
 
   it('supports Compare notes presets (default + HF synthetic pairs), validation, quote highlights, review decisions, and Session activity logging', async () => {
     const user = userEvent.setup();
     render(<Home />);
+    await openCompare(user);
 
     const main = screen.getByRole('main');
     const earlierBox = screen.getByLabelText(/Earlier note/i);
@@ -250,6 +279,7 @@ describe('Clinical Diff Veritas Editorial UI', () => {
 
     try {
       render(<Home />);
+      await openCompare(user);
       const main = screen.getByRole('main');
       await user.click(within(main).getByRole('button', { name: 'Compare notes' }));
 
@@ -331,6 +361,7 @@ describe('Clinical Diff Veritas Editorial UI', () => {
     const patientButtons = within(getPatientsGroup()).getAllByRole('button');
     expect(patientButtons).toHaveLength(1);
     await user.click(patientButtons[0]);
+    await openSnapshot(user);
 
     const morganHeading = screen.getByRole('heading', { level: 1, name: 'Morgan Lee' });
     await waitFor(() => expect(morganHeading).toHaveFocus());
@@ -516,7 +547,7 @@ describe('Clinical Diff Veritas Editorial UI', () => {
       expect(within(screen.getByRole('main')).getByText('Local SQLite Sandbox')).toBeInTheDocument();
 
       await user.click(screen.getByRole('tab', { name: 'Contracts' }));
-      expect(screen.getByRole('heading', { level: 2, name: /Synthetic FHIR R4 preview/ })).toBeInTheDocument();
+      expect(screen.getByRole('heading', { level: 2, name: /FHIR R4 preview/ })).toBeInTheDocument();
     } finally {
       clickSpy.mockRestore();
       URL.createObjectURL = origCreateObjectURL;
@@ -569,7 +600,7 @@ describe('Clinical Diff Veritas Editorial UI', () => {
     const navButtons = Array.from(
       document.querySelectorAll<HTMLButtonElement>('#app-navigation button.item'),
     );
-    expect(navButtons.length).toBe(7);
+    expect(navButtons.length).toBe(8);
 
     navButtons[0].focus();
     expect(navButtons[0]).toHaveFocus();
@@ -652,6 +683,7 @@ describe('Clinical Diff Veritas Editorial UI', () => {
       }) as unknown as typeof fetch;
 
       const { unmount } = render(<Home />);
+      await openCompare(user);
       expect(instances).toHaveLength(1);
       expect(instances[0].url).toBe('/api/model-socket');
       expect(screen.getByTestId('extract-socket-readiness')).toHaveTextContent('standby');
@@ -802,11 +834,12 @@ describe('Clinical Diff Veritas Editorial UI', () => {
   it('collapses technical diagnostics by default and surfaces amoxicillin frequency/duration changes', async () => {
     const user = userEvent.setup();
     render(<Home />);
+    await openCompare(user);
 
     const diagnostics = document.querySelector('details.extract-diagnostics');
     expect(diagnostics).not.toBeNull();
     expect(diagnostics).not.toHaveAttribute('open');
-    expect(screen.getByText(/Synthetic data only/i)).toBeInTheDocument();
+    expect(screen.getByText(/Use example records only/i)).toBeInTheDocument();
 
     const earlierInput = screen.getByLabelText(/Earlier note/i);
     const laterInput = screen.getByLabelText(/Discharge note/i);
@@ -830,7 +863,7 @@ describe('Clinical Diff Veritas Editorial UI', () => {
     const user = userEvent.setup();
     render(<Home />);
 
-    const cockpit = screen.getByRole('region', { name: 'Clinical cockpit widgets' });
+    const cockpit = await openCockpit(user);
     const getWidgetOrder = () =>
       Array.from(cockpit.querySelectorAll<HTMLElement>('[data-widget-id]')).map(
         (el) => el.dataset.widgetId,
@@ -915,13 +948,15 @@ describe('Clinical Diff Veritas Editorial UI', () => {
     expect(screen.queryByText('Aspirin')).not.toBeInTheDocument();
 
     // Drill-down: Provenance & Evidence Health navigates to Snapshot review with All filter
+    await openCockpit(user);
     await user.click(within(cockpit).getByRole('button', { name: 'Provenance & Evidence Health' }));
-    expect(within(filterGroup).getByRole('button', { name: /^All/ })).toHaveAttribute(
+    expect(within(screen.getByRole('group', { name: 'Filter medication differences' })).getByRole('button', { name: /^All/ })).toHaveAttribute(
       'aria-pressed',
       'true',
     );
 
     // Drill-down: AI Triage Queue navigates to Review suggestions and updates live count after Run triage
+    await openCockpit(user);
     await user.click(within(cockpit).getByRole('button', { name: 'AI Triage Queue' }));
     const triageH1 = screen.getByRole('heading', {
       level: 1,
@@ -929,6 +964,7 @@ describe('Clinical Diff Veritas Editorial UI', () => {
     });
     await waitFor(() => expect(triageH1).toHaveFocus());
     await user.click(screen.getByRole('button', { name: 'Run triage' }));
+    await openCockpit(user);
     const triageCard = cockpit.querySelector<HTMLElement>('[data-widget-id="triage-queue"]')!;
     expect(within(triageCard).getByRole('img')).toHaveAttribute(
       'aria-label',
@@ -936,18 +972,21 @@ describe('Clinical Diff Veritas Editorial UI', () => {
     );
 
     // Drill-down: Evaluation Metrics -> Evaluations
+    await openCockpit(user);
     await user.click(within(cockpit).getByRole('button', { name: 'Evaluation Metrics' }));
     await waitFor(() =>
       expect(screen.getByRole('heading', { level: 1, name: 'Evaluation results' })).toHaveFocus(),
     );
 
     // Drill-down: Session Activity -> Session activity
+    await openCockpit(user);
     await user.click(within(cockpit).getByRole('button', { name: 'Session Activity' }));
     await waitFor(() =>
       expect(screen.getByRole('heading', { level: 1, name: 'Session activity' })).toHaveFocus(),
     );
 
     // Drill-down: Note Extraction & Model Socket -> Models and data
+    await openCockpit(user);
     await user.click(within(cockpit).getByRole('button', { name: 'Note Extraction & Model Socket' }));
     await waitFor(() =>
       expect(screen.getByRole('heading', { level: 1, name: 'Models and data' })).toHaveFocus(),
@@ -1026,7 +1065,7 @@ describe('Clinical Diff Veritas Editorial UI', () => {
       const { unmount } = render(<Home />);
 
       // Verify hydrated review appears in Snapshot review and CockpitWidgets
-      const cockpit = screen.getByRole('region', { name: 'Clinical cockpit widgets' });
+      const cockpit = await openCockpit(user);
       const reviewCard = cockpit.querySelector<HTMLElement>('[data-widget-id="review-progress"]')!;
       await waitFor(() => {
         expect(within(reviewCard).getByRole('img')).toHaveAttribute(
@@ -1035,7 +1074,7 @@ describe('Clinical Diff Veritas Editorial UI', () => {
         );
       });
 
-      await user.click(within(getPatientsGroup()).getAllByRole('button')[0]);
+      await openSnapshot(user);
       const lisinoprilGroup = screen.getByRole('group', { name: 'Review Lisinopril' });
       expect(within(lisinoprilGroup).getByRole('button', { name: 'Verify' })).toHaveAttribute(
         'aria-pressed',
@@ -1086,7 +1125,7 @@ describe('Clinical Diff Veritas Editorial UI', () => {
       }) as unknown as typeof fetch;
 
       render(<Home />);
-      await user.click(within(getPatientsGroup()).getAllByRole('button')[0]);
+      await openSnapshot(user);
       const offlineLisinopril = screen.getByRole('group', { name: 'Review Lisinopril' });
       const offlineVerify = within(offlineLisinopril).getByRole('button', { name: 'Verify' });
       await user.click(offlineVerify);
@@ -1100,7 +1139,7 @@ describe('Clinical Diff Veritas Editorial UI', () => {
     const user = userEvent.setup();
     render(<Home />);
 
-    const cockpit = screen.getByRole('region', { name: 'Clinical cockpit widgets' });
+    const cockpit = await openCockpit(user);
     const provenanceCard = cockpit.querySelector<HTMLElement>('[data-widget-id="provenance-health"]')!;
 
     // 1. Morgan Lee (DEMO-001): select Lisinopril directly from provenance-health
@@ -1109,9 +1148,9 @@ describe('Clinical Diff Veritas Editorial UI', () => {
 
     const evidenceRegion = screen.getByLabelText('Evidence and provenance for Lisinopril');
     await waitFor(() => expect(evidenceRegion).toHaveFocus());
-    expect(evidenceRegion).toHaveTextContent('Fictional outpatient medication list');
+    expect(evidenceRegion).toHaveTextContent('Outpatient medication list');
     expect(evidenceRegion).toHaveTextContent('2026-10-01');
-    expect(evidenceRegion).toHaveTextContent('Fictional discharge medication list');
+    expect(evidenceRegion).toHaveTextContent('Discharge medication list');
     expect(evidenceRegion).toHaveTextContent('2026-10-15');
     // Structured fields alone must not fabricate an exact quote
     expect(evidenceRegion).toHaveTextContent(/Snapshot entry only; no supporting clinical note, excerpt, or span provided/i);
@@ -1183,7 +1222,7 @@ describe('Clinical Diff Veritas Editorial UI', () => {
 
     try {
       render(<Home />);
-      const cockpit = screen.getByRole('region', { name: 'Clinical cockpit widgets' });
+      const cockpit = await openCockpit(user);
       const card = within(cockpit.querySelector('[data-widget-id="provenance-health"]')!);
       const states = [
         ['Metformin', 'Missing reference', [], 'Unresolved Metformin sample text.'],
@@ -1230,14 +1269,14 @@ describe('Clinical Diff Veritas Editorial UI', () => {
     const user = userEvent.setup();
     render(<Home />);
 
-    const cockpit = screen.getByRole('region', { name: 'Clinical cockpit widgets' });
+    const cockpit = await openCockpit(user);
     const provenanceCard = cockpit.querySelector<HTMLElement>('[data-widget-id="provenance-health"]')!;
     const lisinoprilTrigger = within(provenanceCard).getByRole('button', { name: /Lisinopril/i });
     await user.click(lisinoprilTrigger);
 
     const noteNav = screen.getByRole('region', { name: 'Note navigator for Lisinopril' });
     expect(noteNav).toHaveTextContent('Citation 1 of 2');
-    expect(noteNav).toHaveTextContent('Fictional outpatient medication list');
+    expect(noteNav).toHaveTextContent('Outpatient medication list');
     expect(noteNav).toHaveTextContent('2026-10-01');
     expect(noteNav).toHaveTextContent('earlier snapshot');
 
@@ -1248,7 +1287,7 @@ describe('Clinical Diff Veritas Editorial UI', () => {
 
     await user.click(nextBtn);
     expect(noteNav).toHaveTextContent('Citation 2 of 2');
-    expect(noteNav).toHaveTextContent('Fictional discharge medication list');
+    expect(noteNav).toHaveTextContent('Discharge medication list');
     expect(noteNav).toHaveTextContent('2026-10-15');
     expect(noteNav).toHaveTextContent('later snapshot');
     expect(nextBtn).toBeDisabled();
@@ -1261,7 +1300,7 @@ describe('Clinical Diff Veritas Editorial UI', () => {
 
     await user.click(prevBtn);
     expect(noteNav).toHaveTextContent('Citation 1 of 2');
-    expect(noteNav).toHaveTextContent('Fictional outpatient medication list');
+    expect(noteNav).toHaveTextContent('Outpatient medication list');
     expect(items[0]).toHaveAttribute('aria-current', 'true');
   });
 
@@ -1269,7 +1308,7 @@ describe('Clinical Diff Veritas Editorial UI', () => {
     const user = userEvent.setup();
     render(<Home />);
 
-    await user.click(within(getPatientsGroup()).getAllByRole('button')[0]);
+    await openSnapshot(user);
     const tablist = screen.getByRole('tablist', { name: 'Snapshot review tabs' });
     const timelineTab = within(tablist).getByRole('tab', { name: 'Encounter timeline' });
     await user.click(timelineTab);
@@ -1278,9 +1317,9 @@ describe('Clinical Diff Veritas Editorial UI', () => {
     const datedSec = screen.getByRole('region', { name: 'Chronological encounter timeline' });
     const datedItems = within(datedSec).getAllByRole('listitem');
     expect(datedItems[0]).toHaveTextContent('2026-10-01');
-    expect(datedItems[0]).toHaveTextContent('Fictional outpatient medication list');
+    expect(datedItems[0]).toHaveTextContent('Outpatient medication list');
     expect(datedItems[1]).toHaveTextContent('2026-10-15');
-    expect(datedItems[1]).toHaveTextContent('Fictional discharge medication list');
+    expect(datedItems[1]).toHaveTextContent('Discharge medication list');
 
     const undatedSec = screen.getByRole('region', { name: 'Undated records' });
     expect(undatedSec).toHaveTextContent('No undated records in this comparison.');
@@ -1292,55 +1331,43 @@ describe('Clinical Diff Veritas Editorial UI', () => {
     await waitFor(() => expect(evidenceRegion).toHaveFocus());
   });
 
-  it('reconciles patient identity and active encounter display across chart views', async () => {
+  it('keeps the same patient and date window across chart workflows', async () => {
     const user = userEvent.setup();
     render(<Home />);
-
-    const contextBar = screen.getByRole('region', { name: 'Active patient and encounter context' });
-    expect(contextBar).toHaveTextContent('Morgan Lee (Synthetic)');
-    expect(contextBar).toHaveTextContent('DEMO-001');
-    expect(contextBar).toHaveTextContent('Synthetic · Read-only');
-    expect(contextBar).toHaveTextContent('Outpatient intake to hospital discharge baseline');
-    expect(contextBar).toHaveTextContent('2026-10-01');
-    expect(contextBar).toHaveTextContent('2026-10-15');
-    expect(contextBar).toHaveTextContent('Compare notes');
-
-    // Note assistant also carries reconciled Morgan Lee (Synthetic) · DEMO-001 context
-    const assistantSection = screen.getByRole('region', { name: 'Synthetic note assistant' });
-    expect(assistantSection).toHaveTextContent('Morgan Lee (Synthetic) · DEMO-001');
-
-    // Switch to Snapshot review -> Encounter timeline -> Review suggestions: identity & encounter stay reconciled
-    await user.click(within(getPatientsGroup()).getAllByRole('button')[0]);
-    expect(contextBar).toHaveTextContent('Snapshot review');
-    expect(contextBar).toHaveTextContent('Morgan Lee (Synthetic)');
-    expect(contextBar).toHaveTextContent('DEMO-001');
-
-    const tablist = screen.getByRole('tablist', { name: 'Snapshot review tabs' });
-    await user.click(within(tablist).getByRole('tab', { name: 'Encounter timeline' }));
-    expect(contextBar).toHaveTextContent('Encounter timeline');
-    expect(contextBar).toHaveTextContent('2026-10-01');
-    expect(contextBar).toHaveTextContent('2026-10-15');
-
-    await user.click(within(getWorkspaceNav()).getByRole('button', { name: /^Review suggestions/i }));
-    expect(contextBar).toHaveTextContent('Review suggestions');
-    expect(contextBar).toHaveTextContent('Morgan Lee (Synthetic)');
-    expect(contextBar).toHaveTextContent('DEMO-001');
+    await user.click(within(getPatientsGroup()).getByRole('button', { name: /Morgan Lee/ }));
+    const chartContext = () => screen.getByRole('region', { name: 'Active patient and encounter context' });
+    const expectMorganContext = () => {
+      expect(chartContext()).toHaveTextContent('Morgan Lee');
+      expect(chartContext()).toHaveTextContent('DEMO-001');
+      expect(chartContext()).toHaveTextContent('2026-10-01');
+      expect(chartContext()).toHaveTextContent('2026-10-15');
+    };
+    expectMorganContext();
+    expect(screen.getByRole('region', { name: 'Note assistant' })).toHaveTextContent('Morgan Lee · DEMO-001');
+    await openSnapshot(user);
+    const tabs = screen.getByRole('tablist', { name: 'Snapshot review tabs' });
+    await user.click(within(tabs).getByRole('tab', { name: 'Encounter timeline' }));
+    expectMorganContext();
+    await user.click(within(getWorkspaceNav()).getByRole('button', { name: /^Review suggestions/ }));
+    expectMorganContext();
   });
 
   it('searches synthetic notes and results, labels sources, and opens the exact match', async () => {
     const user = userEvent.setup();
     render(<Home />);
+    await openCompare(user);
 
+    await waitFor(() => expect(screen.getByRole('heading', { level: 1 })).toHaveFocus());
     const searchRegion = screen.getByRole('search', { name: 'Chart search' });
     const searchInput = within(searchRegion).getByRole('searchbox', {
-      name: 'Search synthetic notes and results',
+      name: 'Search notes and results',
     });
 
     await user.type(searchInput, 'Atorvastatin');
 
     const matchList = within(searchRegion).getByRole('list', { name: 'Chart search matches' });
     expect(matchList).toHaveTextContent('Later note · Discharge note');
-    expect(matchList).toHaveTextContent('Medication diff · Fictional discharge medication list');
+    expect(matchList).toHaveTextContent('Medication diff · Discharge medication list');
 
     // Open the exact Snapshot diff match for Atorvastatin
     const diffMatchBtn = within(matchList).getByRole('button', {
@@ -1362,7 +1389,7 @@ describe('Clinical Diff Veritas Editorial UI', () => {
     const user = userEvent.setup();
     render(<Home />);
 
-    await user.click(within(getPatientsGroup()).getAllByRole('button')[0]);
+    await openSnapshot(user);
     const tablist = screen.getByRole('tablist', { name: 'Snapshot review tabs' });
     const docsTab = within(tablist).getByRole('tab', { name: 'Document index' });
     await user.click(docsTab);
@@ -1377,38 +1404,38 @@ describe('Clinical Diff Veritas Editorial UI', () => {
     const datedDocs = screen.getByRole('region', { name: 'Document index by source and date' });
     const items = within(datedDocs).getAllByRole('listitem');
     expect(items[0]).toHaveTextContent('2026-10-01');
-    expect(items[0]).toHaveTextContent('Fictional outpatient medication list');
+    expect(items[0]).toHaveTextContent('Outpatient medication list');
     expect(items[1]).toHaveTextContent('2026-10-15');
-    expect(items[1]).toHaveTextContent('Fictional discharge medication list');
+    expect(items[1]).toHaveTextContent('Discharge medication list');
   });
 
   it('opens a synthetic outside report with origin and import date prominently visible and returns focus on close', async () => {
     const user = userEvent.setup();
     render(<Home />);
 
-    await user.click(within(getPatientsGroup()).getAllByRole('button')[0]);
+    await openSnapshot(user);
     const tablist = screen.getByRole('tablist', { name: 'Snapshot review tabs' });
     await user.click(within(tablist).getByRole('tab', { name: 'Document index' }));
 
-    const outsideSec = screen.getByRole('region', { name: 'Synthetic outside reports' });
+    const outsideSec = screen.getByRole('region', { name: 'Outside reports' });
     const openBtn = within(outsideSec).getByRole('button', { name: 'Open outside report' });
     await user.click(openBtn);
 
     const viewer = screen.getByRole('region', {
-      name: 'External record viewer: Synthetic external pharmacy & clinic summary',
+      name: 'External record viewer: Outside pharmacy and clinic summary',
     });
     await waitFor(() => expect(viewer).toHaveFocus());
     expect(viewer).toHaveTextContent('Origin');
-    expect(viewer).toHaveTextContent('Fictional Regional HIE · Westside Pharmacy Exchange (Synthetic)');
+    expect(viewer).toHaveTextContent('Westside Pharmacy Exchange');
     expect(viewer).toHaveTextContent('Import date');
     expect(viewer).toHaveTextContent('2026-10-16T09:30:00Z');
-    expect(viewer).toHaveTextContent('Synthetic · Read-only');
+    expect(viewer).toHaveTextContent('Read-only');
 
     await user.click(within(viewer).getByRole('button', { name: 'Close outside report' }));
     await waitFor(() => expect(openBtn).toHaveFocus());
     expect(
       screen.queryByRole('region', {
-        name: 'External record viewer: Synthetic external pharmacy & clinic summary',
+        name: 'External record viewer: Outside pharmacy and clinic summary',
       }),
     ).not.toBeInTheDocument();
   });
@@ -1417,7 +1444,7 @@ describe('Clinical Diff Veritas Editorial UI', () => {
     const user = userEvent.setup();
     render(<Home />);
 
-    const cockpit = screen.getByRole('region', { name: 'Clinical cockpit widgets' });
+    const cockpit = await openCockpit(user);
     const getWidgetOrder = () =>
       Array.from(cockpit.querySelectorAll<HTMLElement>('[data-widget-id]')).map(
         (el) => el.dataset.widgetId,
@@ -1457,12 +1484,12 @@ describe('Clinical Diff Veritas Editorial UI', () => {
     render(<Home />);
 
     // Make a simulated review decision on Lisinopril
-    await user.click(within(getPatientsGroup()).getAllByRole('button')[0]);
+    await openSnapshot(user);
     const lisinoprilGroup = screen.getByRole('group', { name: 'Review Lisinopril' });
     await user.click(within(lisinoprilGroup).getByRole('button', { name: 'Verify' }));
 
     // Cockpit Session Activity widget shows the linked decision with timestamp
-    const cockpit = screen.getByRole('region', { name: 'Clinical cockpit widgets' });
+    const cockpit = await openCockpit(user);
     const sessionCard = cockpit.querySelector<HTMLElement>('[data-widget-id="session-activity"]')!;
     const widgetDecisionBtn = within(sessionCard).getByRole('button', {
       name: /Marked verified · Morgan Lee · Lisinopril/i,
@@ -1487,7 +1514,7 @@ describe('Clinical Diff Veritas Editorial UI', () => {
     const user = userEvent.setup();
     render(<Home />);
 
-    await user.click(within(getPatientsGroup()).getAllByRole('button')[0]);
+    await openSnapshot(user);
     const tablist = screen.getByRole('tablist', { name: 'Snapshot review tabs' });
     const worklistTab = within(tablist).getByRole('tab', { name: 'Worklist' });
     await user.click(worklistTab);
@@ -1515,7 +1542,7 @@ describe('Clinical Diff Veritas Editorial UI', () => {
     const user = userEvent.setup();
     render(<Home />);
 
-    await user.click(within(getPatientsGroup()).getAllByRole('button')[0]);
+    await openSnapshot(user);
     const lisBtn = screen
       .getAllByRole('button', { name: /Lisinopril/i })
       .find((btn) => btn.closest('.entry'));
@@ -1547,7 +1574,7 @@ describe('Clinical Diff Veritas Editorial UI', () => {
     const user = userEvent.setup();
     render(<Home />);
 
-    await user.click(within(getPatientsGroup()).getAllByRole('button')[0]);
+    await openSnapshot(user);
     const lisBtn = screen
       .getAllByRole('button', { name: /Lisinopril/i })
       .find((btn) => btn.closest('.entry'));

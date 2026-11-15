@@ -29,6 +29,8 @@ import {
   type NoteRegimenChangeCategory,
 } from '@/lib/diff';
 import { BRAND_NAME } from '@/lib/branding';
+import { WorkspaceWidgets, type WorkspaceWidget } from '@/components/WorkspaceWidgets';
+import { EncounterTranscript } from '@/components/EncounterTranscript';
 import { AssistantPanel } from '@/components/AssistantPanel';
 import { SYNTHETIC_ASSISTANT_NOTES } from '@/lib/assistant-evidence';
 import {
@@ -58,7 +60,7 @@ import type {
 /* ------------------------------------------------------------------
    Constants & Palettes
    ------------------------------------------------------------------ */
-type ViewId = 'extract' | 'diff' | 'triage' | 'eval' | 'audit' | 'models';
+type ViewId = 'home' | 'patient' | 'extract' | 'diff' | 'triage' | 'eval' | 'audit' | 'models';
 type PaletteId = 'void' | 'dimmed' | 'obsidian' | 'forest';
 type DiffFilter = 'all' | 'changed' | 'onlyA' | 'onlyB' | 'same';
 type ReviewDecision = 'verified' | 'flagged' | 'deferred';
@@ -67,6 +69,8 @@ type DiffTab = 'diff' | 'worklist' | 'timeline' | 'documents' | 'snapshots' | 'm
 type ModelsTab = 'connections' | 'add' | 'contracts';
 
 const VIEW_NAMES: Record<ViewId, string> = {
+  home: 'Home',
+  patient: 'Patient overview',
   extract: 'Compare notes',
   diff: 'Snapshot review',
   triage: 'Review suggestions',
@@ -76,6 +80,7 @@ const VIEW_NAMES: Record<ViewId, string> = {
 };
 
 const WORKSPACE_VIEWS: { id: ViewId; label: string }[] = [
+  { id: 'home', label: 'Home' },
   { id: 'extract', label: 'Compare notes' },
   { id: 'diff', label: 'Snapshot review' },
   { id: 'triage', label: 'Review suggestions' },
@@ -782,7 +787,7 @@ type AuditEntry = {
   actor: string;
   action: string;
   target: string;
-  targetView?: ViewId;
+  targetView?: CockpitViewId;
   medicationId?: string;
 };
 
@@ -791,9 +796,9 @@ type EvaluationOutcome = 'passed' | 'failed' | 'timedOut';
 type EvaluationCounts = Record<EvaluationOutcome, number> & { tested: number };
 
 const EVALUATION_FAMILIES = [
-  ['heldOut', 'Held-out synthetic labels'],
+  ['heldOut', 'Held-out labels'],
   ['workspace', 'Curated workspace fixtures'],
-  ['hf', 'Hugging Face synthetic fixtures'],
+  ['hf', 'Hugging Face cases'],
 ] as const;
 
 type EvaluationFamily = (typeof EVALUATION_FAMILIES)[number][0];
@@ -927,7 +932,7 @@ export default function Home() {
   }, [allScenarios]);
 
   /* ---- Navigation & Theme ---- */
-  const [view, setView] = useState<ViewId>('extract');
+  const [view, setView] = useState<ViewId>('home');
   const palette = useSyncExternalStore(
     subscribePalette,
     getPaletteSnapshot,
@@ -943,6 +948,7 @@ export default function Home() {
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const [focusHeadingNonce, setFocusHeadingNonce] = useState(0);
   const [widgetOrder, setWidgetOrder] = useState<CockpitWidgetId[]>(DEFAULT_COCKPIT_WIDGET_ORDER);
+  const [pinnedOpen, setPinnedOpen] = useState(false);
   const [backlogOpen, setBacklogOpen] = useState(false);
   const backlogTriggerRef = useRef<HTMLButtonElement | null>(null);
 
@@ -1131,9 +1137,17 @@ export default function Home() {
   }, [paletteMenuOpen]);
 
   /* ---- Persistence (/api/reviews) ---- */
+  const [reviewSession] = useState(() => {
+    let finish: () => void = () => {};
+    const ready = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    return { ready, finish };
+  });
   const persistSessionUpdate = useCallback(async (payload: Record<string, unknown>) => {
     if (typeof fetch !== 'function') return;
     try {
+      await reviewSession.ready;
       await fetch('/api/reviews', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1142,7 +1156,7 @@ export default function Home() {
     } catch {
       // Graceful fallback when offline or /api/reviews is unavailable.
     }
-  }, []);
+  }, [reviewSession]);
 
   useEffect(() => {
     if (typeof fetch !== 'function') return;
@@ -1199,13 +1213,11 @@ export default function Home() {
       }
     }
 
-    void hydrateFromReviewsApi();
+    void hydrateFromReviewsApi().finally(reviewSession.finish);
     return () => {
       active = false;
     };
-  }, []);
-
-  /* ---- Helpers ---- */
+  }, [reviewSession]);
   const showToast = useCallback((msg: string) => {
     setToastMsg(msg);
   }, []);
@@ -1215,7 +1227,7 @@ export default function Home() {
       actor: string,
       action: string,
       target: string,
-      meta?: { targetView?: ViewId; medicationId?: string },
+      meta?: { targetView?: CockpitViewId; medicationId?: string },
     ): AuditEntry => ({
       id: `aud-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       ts: new Date().toISOString(),
@@ -1233,7 +1245,7 @@ export default function Home() {
       actor: string,
       action: string,
       target: string,
-      meta?: { targetView?: ViewId; medicationId?: string },
+      meta?: { targetView?: CockpitViewId; medicationId?: string },
     ) => {
       const entry = createAuditEntry(actor, action, target, meta);
       setAudit((prev) => [entry, ...prev]);
@@ -1245,6 +1257,7 @@ export default function Home() {
   const navigateTo = useCallback((nextView: ViewId, focusHeading = true) => {
     setView(nextView);
     setSelectedMedId(null);
+    setEvidenceReturnMedId(null);
     setMobileNavOpen(false);
     setPaletteMenuOpen(false);
     setAnnouncement(`Navigated to ${VIEW_NAMES[nextView]}`);
@@ -1274,13 +1287,13 @@ export default function Home() {
   );
 
   const handleSelectEvidenceChange = useCallback(
-    (medId: string) => {
+    (medId: string, fromCockpit = false) => {
       const targetEntry = snapshotEntries.find((entry) => entry.id === medId);
       setView('diff');
       setDiffTab('diff');
       setDiffFilter('all');
       setSelectedMedId(medId);
-      setEvidenceReturnMedId(medId);
+      setEvidenceReturnMedId(fromCockpit ? medId : null);
       setMobileNavOpen(false);
       setAnnouncement(
         targetEntry
@@ -1307,13 +1320,15 @@ export default function Home() {
       const returnTriggerMedId = evidenceReturnMedId === medId ? medId : null;
       setSelectedMedId(null);
       setEvidenceReturnMedId(null);
+      if (returnTriggerMedId) setView('home');
       requestAnimationFrame(() => {
         if (returnTriggerMedId) {
           const trigger = document.querySelector<HTMLElement>(
             `[data-widget-id="provenance-health"] [data-evidence-trigger="${CSS.escape(returnTriggerMedId)}"]`,
           );
-          trigger?.focus({ preventScroll: true });
-          trigger?.scrollIntoView?.({ block: 'nearest' });
+          const target = trigger?.closest('details[open]') ? trigger : headingRef.current;
+          target?.focus({ preventScroll: true });
+          target?.scrollIntoView?.({ block: 'nearest' });
           return;
         }
         if (restoreRowFocus) {
@@ -1421,13 +1436,12 @@ export default function Home() {
       setEvidenceReturnMedId(null);
       setActiveExternalRecordId(null);
       setMobileNavOpen(false);
-      const targetView: ViewId = view === 'triage' ? 'triage' : 'diff';
-      setView(targetView);
+      setView('patient');
       const targetScenario = allScenarios.find((s) => s.id === scenarioId);
-      setAnnouncement(`Selected ${targetScenario?.patientLabel ?? scenarioId}`);
+      setAnnouncement(`Selected ${cleanPatientName(targetScenario?.patientLabel ?? scenarioId)}`);
       setFocusHeadingNonce((n) => n + 1);
     },
-    [allScenarios, view],
+    [allScenarios],
   );
 
   const changePalette = useCallback(
@@ -2368,7 +2382,7 @@ export default function Home() {
     if (view === 'models') {
       if (modelsTab === 'connections') {
         return [
-          ['o-hf', 'HF synthetic datasets'],
+          ['o-hf', 'Hugging Face datasets'],
           ['o-db', 'Databases'],
           ['o-ml', 'Models'],
           ['o-log', 'Connection events'],
@@ -2417,6 +2431,194 @@ export default function Home() {
       : socketStatus.model
     : 'Deterministic local fallback';
 
+  const isOverview = view === 'home' || view === 'patient';
+  const isPatientWorkflow = view === 'patient' || view === 'diff' || view === 'triage' || view === 'extract';
+  const pendingReviews = reviewableCount - reviewedCount;
+  const patientName = cleanPatientName(activeScenario.patientLabel);
+  const suggestions = triageByScenario[activeScenario.id] ?? [];
+  const socketReady = deriveSocketReadiness(socketStatus);
+  const evaluationDone = evalSummary?.totals.tested ?? null;
+  const compareStatus = extractResult ? (extractResult.simulated ? 'Rules' : 'Hosted model') : 'Not run';
+  const serviceStatus = socketReady === 'live' ? 'Connected' : socketStatus.configured && !socketStatus.reachable ? 'Unavailable' : 'Standby';
+  const outsideCount = activeScenario.externalRecords?.length ?? 0;
+
+  function focusSection(id: string) {
+    requestAnimationFrame(() => {
+      const element = document.getElementById(id);
+      if (!element) return;
+      const focusTarget = element.matches('input, textarea, select, button, [tabindex]')
+        ? element
+        : element.querySelector<HTMLElement>('h2, h3') ?? element;
+      if (!focusTarget.hasAttribute('tabindex') && !focusTarget.matches('input, textarea, select, button')) {
+        focusTarget.tabIndex = -1;
+      }
+      focusTarget.focus({ preventScroll: true });
+      element.scrollIntoView?.({ block: 'start' });
+    });
+  }
+
+  function openEncounterNotes() {
+    if (earlierNoteText !== DEFAULT_EARLIER_NOTE || laterNoteText !== DEFAULT_LATER_NOTE) {
+      handleSelectPreset('default');
+    }
+    navigateTo('extract', false);
+    focusSection('earlier-note');
+  }
+
+  function openSnapshot(tab: DiffTab, filter: DiffFilter = 'all', focusId?: string) {
+    setDiffTab(tab);
+    setDiffFilter(filter);
+    navigateTo('diff', !focusId);
+    if (focusId) focusSection(focusId);
+  }
+
+  const metric = (
+    title: string,
+    value: WorkspaceWidget['value'],
+    detail?: WorkspaceWidget['detail'],
+    label?: string,
+    run?: () => void,
+  ): WorkspaceWidget => ({ title, value, detail, action: label && run ? { label, run } : undefined });
+  const jump = (title: string, value: string | number, next: ViewId, text: string, detail?: string) =>
+    metric(title, value, detail, text, () => navigateTo(next));
+
+  let widgetTitle: string;
+  let widgets: WorkspaceWidget[];
+
+  switch (view) {
+    case 'home':
+      widgetTitle = 'Workspace overview';
+      widgets = [
+        { ...metric('Patient workspace', patientName, `${activeScenario.patientId} · Outpatient to discharge`, 'Open patient', () => selectPatient(activeScenario.id)), wide: true },
+        jump('Medication review', pendingReviews, 'diff', 'Open snapshot review', 'Changes awaiting a decision'),
+        jump('Note comparison', compareStatus, 'extract', 'Open Compare notes', 'Compare the earlier and discharge notes'),
+        jump('Suggestion queue', openTriageCount, 'triage', 'Open suggestions', 'Decisions pending'),
+        jump('Comparison checks', evaluationDone ?? 'Ready', 'eval', 'Open evaluations', 'Cases in the latest run'),
+        jump('Activity log', audit.length, 'audit', 'Open session activity', audit[0]?.action),
+        jump('Model connection', serviceStatus, 'models', 'Open connections'),
+        metric('Encounter record', 'October 15', 'Discharge conversation and recording consent', 'Read encounter', () => {
+          navigateTo('patient', false);
+          focusSection('transcript-title');
+        }),
+        metric('Source documents', documentIndex.counts.total, 'Indexed records for Morgan Lee', 'Open documents', () => openSnapshot('documents')),
+        metric('Review worklist', reviewedCount, 'Changes with a recorded decision', 'Open worklist', () => openSnapshot('worklist')),
+      ];
+      break;
+    case 'patient':
+      widgetTitle = 'Patient summary';
+      widgets = [
+        { ...metric('Latest medication list', activeScenario.later.medications.length,
+          <ul className="widget-medications">{activeScenario.later.medications.map((med) => (
+            <li key={med.id}><span>{med.name}</span><span>{med.dose ?? 'Dose unavailable'}</span></li>
+          ))}</ul>, 'View both lists', () => openSnapshot('snapshots')), wide: true },
+        metric('Review due', pendingReviews, 'Medication changes awaiting a decision', 'Review changes', () => openSnapshot('diff')),
+        metric('Medication timeline', encounterTimeline.dated.length + encounterTimeline.undated.length, 'Encounters and medication changes', 'Open timeline', () => openSnapshot('timeline')),
+        metric('Earlier snapshot', activeScenario.earlier.recordedAt ?? 'Undated', `${activeScenario.earlier.medications.length} recorded medications`),
+        metric('Discharge snapshot', activeScenario.later.recordedAt ?? 'Undated', `${activeScenario.later.medications.length} recorded medications`),
+        metric('Source record index', documentIndex.counts.total, 'Documents tied to this chart', 'Browse records', () => openSnapshot('documents')),
+        metric('Outside records', outsideCount, 'Imported chart records', 'View outside records', () => openSnapshot('documents', 'all', 'outside-reports')),
+        metric('Medication plan in notes', 'Earlier / discharge', 'Read the two notes mentioned in the conversation', 'Load encounter notes', openEncounterNotes),
+        metric('Recorded decisions', `${reviewedCount} / ${reviewableCount}`, 'Verified, flagged or deferred', 'View worklist', () => openSnapshot('worklist')),
+        metric('Discharge conversation', '01:02', 'Recording consent included', 'Read transcript', () => focusSection('transcript-title')),
+      ];
+      break;
+    case 'extract':
+      widgetTitle = 'Comparison tools';
+      widgets = [
+        metric('Source A', earlierNoteLabel, `${earlierNoteText.length} characters`, 'Edit earlier note', () => focusSection('earlier-note')),
+        metric('Source B', laterNoteLabel, `${laterNoteText.length} characters`, 'Edit later note', () => focusSection('later-note')),
+        metric('Note set', activePreset?.title ?? 'Outpatient and discharge', undefined, 'Choose note set', () => focusSection('note-preset-select')),
+        metric('Comparison method', compareStatus, extractResult?.modeLabel),
+        metric('Differences found', extractResult ? noteDiffCount : '—', undefined, extractResult ? 'View results' : undefined, () => focusSection('extraction-result-title')),
+        metric('Earlier excerpts', extractResult?.earlier.quotes.length ?? '—', 'Medication mentions linked to the earlier note'),
+        metric('Discharge excerpts', extractResult?.later.quotes.length ?? '—', 'Medication mentions linked to the discharge note'),
+        metric('Decisions recorded', extractResult ? noteDecidedCount : '—'),
+        metric('Clarifications', extractResult ? noteFlaggedCount : '—', undefined, noteFlaggedCount ? 'Download follow-ups' : undefined, handleExportFollowUps),
+        metric('Inference service', serviceStatus, undefined, 'Refresh service status', handleCheckService),
+      ];
+      break;
+    case 'diff':
+      widgetTitle = 'Snapshot tools';
+      widgets = [
+        metric('Dose or field changes', diffEntriesCount, undefined, 'Filter changed fields', () => openSnapshot('diff', 'changed')),
+        metric('Only in earlier list', onlyACount, undefined, 'Filter earlier only', () => openSnapshot('diff', 'onlyA')),
+        metric('Only in later list', onlyBCount, undefined, 'Filter later only', () => openSnapshot('diff', 'onlyB')),
+        metric('Matching entries', sameCount, undefined, 'Filter unchanged', () => openSnapshot('diff', 'same')),
+        metric('Review completion', `${reviewedCount} / ${reviewableCount}`, undefined, 'Open decision worklist', () => openSnapshot('worklist')),
+        metric('Evidence links', activeReport.changes.reduce((sum, change) => sum + (change.evidenceLinks?.length ?? 0), 0), 'Links attached to medication differences', 'Browse evidence documents', () => openSnapshot('documents')),
+        metric('Document revisions', documentIndex.counts.revisions, 'Indexed revisions across both snapshots'),
+        metric('Undated entries', encounterTimeline.undated.length, undefined, 'Check timeline', () => openSnapshot('timeline')),
+        metric('Compared snapshots', 2, undefined, 'Open medication lists', () => openSnapshot('snapshots')),
+        metric('Comparison rules', undefined, 'How missing fields and differences are interpreted', 'Read method', () => openSnapshot('method')),
+      ];
+      break;
+    case 'triage':
+      widgetTitle = 'Suggestion tools';
+      widgets = [
+        metric('Suggestions generated', suggestions.length, undefined, 'Open queue', () => focusSection('o-queue')),
+        metric('Awaiting decision', openTriageCount),
+        metric('Accepted for review', suggestions.filter((suggestion) => suggestion.decision === 'accepted').length),
+        metric('Skipped', suggestions.filter((suggestion) => suggestion.decision === 'skipped').length),
+        metric('Overridden', suggestions.filter((suggestion) => suggestion.decision === 'overridden').length),
+        metric('Override without reason', suggestions.filter((suggestion) => suggestion.decision === 'override-pending').length),
+        metric('Cited suggestions', suggestions.filter((suggestion) => suggestion.evidence.length > 0).length, 'Suggestions containing supporting text'),
+        metric('Comparison input', activeReport.changes.length, 'Medication differences for this patient', 'Review differences', () => openSnapshot('diff')),
+        metric('Suggestion provider', activeModelConn?.name ?? 'Unavailable', undefined, 'Check provider', () => focusSection('o-model')),
+        metric('Suggestion generation', undefined, 'Every proposed change requires a review decision', 'Open generation controls', () => focusSection('o-model')),
+      ];
+      break;
+    case 'eval':
+      widgetTitle = 'Evaluation results';
+      widgets = [
+        metric('Held-out cases available', HELDOUT_CASES.length, undefined, 'Run comparison checks', runEval),
+        metric('Record pairs available', allScenarios.length, 'Includes licensed datasets'),
+        metric('Tested', evaluationDone ?? '—', undefined, 'Open result tables', () => focusSection('o-results')),
+        metric('Passed', evalSummary?.totals.passed ?? '—'),
+        metric('Failed', evalSummary?.totals.failed ?? '—'),
+        metric('Timed out', evalSummary?.totals.timedOut ?? '—'),
+        metric('Medication precision', evalSummary ? `${(evalSummary.precision * 100).toFixed(1)}%` : '—'),
+        metric('Medication recall', evalSummary ? `${(evalSummary.recall * 100).toFixed(1)}%` : '—'),
+        metric('Exact match', evalSummary ? `${(evalSummary.exactMatch * 100).toFixed(1)}%` : '—'),
+        metric('Last check', evalSummary ? `${evalSummary.ts.slice(11, 19)} UTC` : 'Not run', 'Rule-based checks', 'View case coverage', () => focusSection('o-about')),
+      ];
+      break;
+    case 'audit':
+      widgetTitle = 'Activity tools';
+      widgets = [
+        metric('Recorded events', audit.length, undefined, 'Review log', () => {
+          setAuditFilter('all');
+          focusSection('o-trail');
+        }),
+        metric('Latest event', audit[0]?.action ?? 'None'),
+        metric('Last event time', audit[0] ? `${audit[0].ts.slice(11, 19)} UTC` : '—'),
+        metric('Contributors', new Set(audit.map((item) => item.actor)).size, 'Distinct roles in the event log'),
+        metric('Reviewer events', audit.filter((item) => item.actor === 'Clinician' || item.actor === 'Reviewer').length),
+        metric('System events', audit.filter((item) => item.actor === 'System').length, undefined, 'Filter system events', () => setAuditFilter('System')),
+        metric('Linked medication events', audit.filter((item) => item.medicationId).length),
+        metric('Linked workflow events', audit.filter((item) => item.targetView).length),
+        metric('Spreadsheet export', 'CSV', undefined, 'Download CSV', () => exportAudit('csv')),
+        metric('Structured export', 'JSON', undefined, 'Download JSON', () => exportAudit('json')),
+      ];
+      break;
+    case 'models':
+      widgetTitle = 'Connection tools';
+      widgets = [
+        metric('Live note comparison', serviceStatus, undefined, 'Refresh inference status', handleCheckService),
+        metric('Model reported by service', socketStatus.model ?? 'No hosted model reported', socketStatus.adapter ? `Adapter: ${socketStatus.adapter}` : undefined),
+        metric('Record source', activeDbConn?.name ?? 'None', undefined, 'View data connections', () => { setModelsTab('connections'); focusSection('o-db'); }),
+        metric('Suggestion model', activeModelConn?.name ?? 'None', undefined, 'View model connections', () => { setModelsTab('connections'); focusSection('o-ml'); }),
+        metric('Hugging Face sources', hfDatasetSources.length, undefined, 'Browse datasets', () => { setModelsTab('connections'); focusSection('o-hf'); }),
+        metric('Ready connections', connections.filter((connection) => connection.state === 'ok').length),
+        metric('Connection events', connLog.length, undefined, 'Open event log', () => { setModelsTab('connections'); focusSection('o-log'); }),
+        metric('Register connector', undefined, 'Configure a data or inference endpoint', 'Open connection form', () => { setModelsTab('add'); focusSection('o-new'); }),
+        metric('Adapter contracts', undefined, 'Data and model interfaces', 'View contracts', () => { setModelsTab('contracts'); focusSection('o-ts'); }),
+        metric('FHIR records', activeScenario.earlier.medications.length + activeScenario.later.medications.length, 'MedicationStatement preview', 'View FHIR bundle', () => { setModelsTab('contracts'); focusSection('o-fhir'); }),
+      ];
+      break;
+  }
+
+  const pageWidgets = <WorkspaceWidgets title={widgetTitle} widgets={widgets} overview={isOverview} />;
+
   /* ---- FHIR Preview Bundle ---- */
   const fhirBundleJson = useMemo(() => {
     const mapMeds = (snap: Snapshot, letter: 'A' | 'B') =>
@@ -2462,10 +2664,10 @@ export default function Home() {
         <div className="top-l">
           <a
             className="wordmark"
-            href="#extract"
+            href="#home"
             onClick={(e) => {
               e.preventDefault();
-              navigateTo('extract');
+              navigateTo('home');
             }}
           >
             <span className="brand-symbol" aria-hidden="true">
@@ -2474,8 +2676,8 @@ export default function Home() {
             {BRAND_NAME}
           </a>
           <div className="crumbs" id="crumbs">
-            {activeScenario.patientLabel} · {activeScenario.patientId} &nbsp;/&nbsp;{' '}
-            <b>{VIEW_NAMES[view]}</b>
+            {view === 'patient' ? cleanPatientName(activeScenario.patientLabel) : 'Workspace'}
+            &nbsp;/&nbsp; <b>{VIEW_NAMES[view]}</b>
           </div>
         </div>
 
@@ -2568,7 +2770,7 @@ export default function Home() {
       </header>
 
       {/* 3-Column Frame */}
-      <div className={`frame${view === 'extract' ? ' view-extract' : ''}`}>
+      <div className={"frame workspace-frame"}>
         {/* Left Navigation Rail */}
         <aside
           className={`rail-l${mobileNavOpen ? ' nav-open' : ''}`}
@@ -2589,13 +2791,13 @@ export default function Home() {
 
           <div className="grp">
             <div className="grp-h" id="patients-nav-label">
-              Patients · synthetic
+              Patients
             </div>
             <div className="grp-list" role="group" aria-labelledby="patients-nav-label">
               {visibleScenarios.map((scenario) => {
                 const openCount = pendingCountFor(scenario);
                 const isActive =
-                  selectedScenarioId === scenario.id && (view === 'diff' || view === 'triage');
+                  selectedScenarioId === scenario.id && view === 'patient';
                 return (
                   <button
                     key={scenario.id}
@@ -2623,9 +2825,7 @@ export default function Home() {
                     ? pendingCountFor(activeScenario) || ''
                     : v.id === 'triage'
                       ? openTriageCount || ''
-                      : v.id === 'eval'
-                        ? 'held-out'
-                        : v.id === 'audit'
+                      : v.id === 'audit'
                           ? String(audit.length)
                           : '';
                 return (
@@ -2663,46 +2863,32 @@ export default function Home() {
             </div>
           )}
 
-          <div className="rail-foot">Synthetic workspace · session only</div>
+          <div className="rail-foot">Example records only</div>
         </aside>
 
         {/* Main Canvas */}
-        <main className="canvas" id="main-content" tabIndex={-1} ref={canvasRef}>
+        <main className={isOverview ? "canvas workspace-canvas" : "canvas workspace-canvas has-workspace-tools"} id="main-content" tabIndex={-1} ref={canvasRef}>
           <div className="sr-only" aria-live="polite" aria-atomic="true">
             {announcement}
           </div>
 
-          <div className="col">
-            <section
+          <div className={isOverview ? "col overview-col" : "col"}>
+            {isPatientWorkflow && <section
               className="patient-context-bar"
               aria-label="Active patient and encounter context"
             >
               <div className="patient-context-id">
-                <strong className="patient-context-name">{activeScenario.patientLabel}</strong>
+                <strong className="patient-context-name">{cleanPatientName(activeScenario.patientLabel)}</strong>
                 <span className="e-tag mono">{activeScenario.patientId}</span>
-                <span className="e-tag">Synthetic · Read-only</span>
-                <span className="e-tag">
-                  {view === 'diff' && diffTab === 'timeline'
-                    ? 'Encounter timeline'
-                    : VIEW_NAMES[view]}
-                </span>
                 {selectedMedId && (
                   <span className="e-tag evidence-state-documented_negative">
                     Inspecting:{' '}
                     {snapshotEntries.find((e) => e.id === selectedMedId)?.name ?? selectedMedId}
                   </span>
                 )}
-                <button
-                  ref={backlogTriggerRef}
-                  type="button"
-                  className="btn-ghost backlog-trigger-btn"
-                  onClick={() => setBacklogOpen(true)}
-                >
-                  Widget catalog (100)
-                </button>
               </div>
               <div className="patient-context-enc">
-                <span className="patient-context-title">{activeScenario.title}</span>
+                <span className="patient-context-title">Outpatient to discharge</span>
                 <span className="patient-context-window">
                   Earlier: {activeScenario.earlier.source} (
                   {activeScenario.earlier.recordedAt ?? 'Undated'}) → Later:{' '}
@@ -2715,7 +2901,7 @@ export default function Home() {
                     ref={chartSearchInputRef}
                     type="search"
                     className="chart-search-input"
-                    aria-label="Search synthetic notes and results"
+                    aria-label="Search notes and results"
                     placeholder="Search notes & results (e.g. Lisinopril, 20 mg, Aspirin)…"
                     value={chartSearchQuery}
                     onChange={(e) => setChartSearchQuery(e.target.value)}
@@ -2737,7 +2923,7 @@ export default function Home() {
                   <div className="chart-search-results" aria-live="polite">
                     {chartSearchMatches.length === 0 ? (
                       <p className="nd">
-                        No matches found in synthetic notes or results for &ldquo;
+                        No matches found in notes or results for &ldquo;
                         {chartSearchQuery.trim()}&rdquo;.
                       </p>
                     ) : (
@@ -2768,31 +2954,67 @@ export default function Home() {
                   </div>
                 )}
               </div>
-            </section>
-            <AssistantPanel
-              patientLabel={activeScenario.patientLabel}
-              patientId={activeScenario.patientId}
-              encounterTitle={activeScenario.title}
-            />
-            <CockpitWidgets
-              snapshotEntries={snapshotEntries}
-              reviews={reviews}
-              activeScenarioId={activeScenario.id}
-              activeReport={activeReport}
-              triageByScenario={triageByScenario}
-              socketStatus={socketStatus}
-              evalSummary={evalSummary && {
-                ...evalSummary,
-                totalCases: evalSummary.totals.tested,
-                heldOutCases: evalSummary.families.heldOut.tested,
-                scenarioCases: evalSummary.families.workspace.tested + evalSummary.families.hf.tested,
-              }}
-              audit={audit}
-              onNavigate={handleCockpitNavigate}
-              onSelectEvidenceChange={handleSelectEvidenceChange}
-              order={widgetOrder}
-              onOrderChange={setWidgetOrder}
-            />
+            </section>}
+            {isOverview && (
+              <section className="workspace-overview" aria-label={VIEW_NAMES[view]}>
+                <header className="workspace-overview-heading">
+                  <div>
+                    <h1 className="h1" ref={headingRef} tabIndex={-1}>
+                      {view === 'patient' ? cleanPatientName(activeScenario.patientLabel) : 'Home'}
+                    </h1>
+                    {view === 'patient' && <p>{activeScenario.patientId} · Outpatient to discharge</p>}
+                  </div>
+                  {view === 'home' && (
+                    <button type="button" className="btn" onClick={() => navigateTo('extract')}>Start comparison</button>
+                  )}
+                </header>
+                {pageWidgets}
+                {view === 'patient' && (
+                  <>
+                    <EncounterTranscript onCompare={openEncounterNotes} />
+                    <AssistantPanel
+                      patientLabel={cleanPatientName(activeScenario.patientLabel)}
+                      patientId={activeScenario.patientId}
+                      encounterTitle={activeScenario.title}
+                    />
+                  </>
+                )}
+              </section>
+            )}
+            <details
+              className="workspace-extra"
+              hidden={view !== 'home'}
+              open={pinnedOpen}
+              onToggle={(event) => setPinnedOpen(event.currentTarget.open)}
+            >
+              <summary>Customize workspace</summary>
+              <CockpitWidgets
+                snapshotEntries={snapshotEntries}
+                reviews={reviews}
+                activeScenarioId={activeScenario.id}
+                activeReport={activeReport}
+                triageByScenario={triageByScenario}
+                socketStatus={socketStatus}
+                evalSummary={evalSummary && {
+                  ...evalSummary,
+                  totalCases: evalSummary.totals.tested,
+                  heldOutCases: evalSummary.families.heldOut.tested,
+                  scenarioCases: evalSummary.families.workspace.tested + evalSummary.families.hf.tested,
+                }}
+                audit={audit}
+                onNavigate={handleCockpitNavigate}
+                onSelectEvidenceChange={(medId) => handleSelectEvidenceChange(medId, true)}
+                order={widgetOrder}
+                onOrderChange={setWidgetOrder}
+              />
+              <button ref={backlogTriggerRef} type="button" className="btn quiet"
+                onClick={() => setBacklogOpen(true)}>Widget library</button>
+            </details>
+            {!isOverview && (
+              <button className="btn quiet page-tools-jump" type="button" onClick={() => focusSection('page-widgets')}>
+                {widgetTitle}
+              </button>
+            )}
 
             {/* ==================== COMPARE NOTES (DEFAULT) ==================== */}
             {view === 'extract' && (
@@ -2829,7 +3051,7 @@ export default function Home() {
                   </div>
 
                   <p className="extract-scope" style={{ marginTop: 8 }}>
-                    Synthetic data only — simulated or rule-based results are never presented as live AI.
+                    Use example records only. The status above identifies the comparison method.
                   </p>
 
                   <details className="extract-diagnostics" style={{ marginTop: 8 }}>
@@ -2871,7 +3093,7 @@ export default function Home() {
                       <div className="extract-preset-meta" style={{ marginTop: 8 }}>
                         <span className="e-tag">{activePreset.dataset}</span>
                         <span className="e-tag verified">{activePreset.license}</span>
-                        <span className="e-tag">Synthetic only</span>
+
                         <a
                           href={activePreset.sourceUrl}
                           target="_blank"
@@ -2893,7 +3115,7 @@ export default function Home() {
                       onChange={(e) => handleSelectPreset(e.target.value)}
                     >
                       <option value="default">
-                        Fictional outpatient &amp; discharge example
+                        Outpatient and discharge notes
                       </option>
                       {hfNoteComparisonPairs.map((pair) => (
                         <option key={pair.id} value={pair.id}>
@@ -2912,7 +3134,7 @@ export default function Home() {
                         <textarea
                           id="earlier-note"
                           rows={5}
-                          placeholder="Enter fictional note text"
+                          placeholder="Enter example note text"
                           value={earlierNoteText}
                           onChange={(e) => {
                             setEarlierNoteText(e.target.value);
@@ -2934,7 +3156,7 @@ export default function Home() {
                         <textarea
                           id="later-note"
                           rows={5}
-                          placeholder="Enter fictional note text"
+                          placeholder="Enter example note text"
                           value={laterNoteText}
                           onChange={(e) => {
                             setLaterNoteText(e.target.value);
@@ -3139,7 +3361,7 @@ export default function Home() {
                   </section>
                 ) : (
                   <p className="extract-scope">
-                    Fictional notes only. Review both sources before interpreting a difference.
+                    Review both source notes before interpreting a difference.
                   </p>
                 )}
               </section>
@@ -3149,7 +3371,7 @@ export default function Home() {
             {view === 'diff' && (
               <section aria-label="Snapshot review">
                 <div className="eyebrow">
-                  Synthetic snapshots · {activeScenario.patientId} · {activeScenario.category}
+                  Medication reconciliation
                 </div>
                 <h1 className="h1" ref={headingRef} tabIndex={-1}>
                   {cleanPatientName(activeScenario.patientLabel)}
@@ -3172,7 +3394,7 @@ export default function Home() {
                       <span className="e-tag">
                         {activeScenario.provenance.split} · row {activeScenario.provenance.rowIndex}
                       </span>
-                      <span className="e-tag">Synthetic only</span>
+
                       <a
                         href={activeScenario.provenance.sourceUrl}
                         target="_blank"
@@ -4236,7 +4458,7 @@ export default function Home() {
                                   {item.kind === 'encounter'
                                     ? 'Encounter'
                                     : item.kind === 'note'
-                                      ? 'Synthetic note'
+                                      ? 'Example note'
                                       : 'Documented change'}
                                 </span>
                                 <strong className="timeline-title">{item.title}</strong>
@@ -4275,7 +4497,7 @@ export default function Home() {
                                   {item.kind === 'encounter'
                                     ? 'Encounter'
                                     : item.kind === 'note'
-                                      ? 'Synthetic note'
+                                      ? 'Example note'
                                       : 'Documented change'}
                                 </span>
                                 <strong className="timeline-title">{item.title}</strong>
@@ -4406,9 +4628,9 @@ export default function Home() {
                       )}
                     </section>
 
-                    <section className="sec" aria-label="Synthetic outside reports">
+                    <section id="outside-reports" className="sec" aria-label="Outside reports">
                       <h2 className="sec-h">
-                        Synthetic outside reports · {(activeScenario.externalRecords ?? []).length}
+                        Outside reports · {(activeScenario.externalRecords ?? []).length}
                       </h2>
                       {(activeScenario.externalRecords ?? []).length === 0 ? (
                         <p className="nd">No imported outside reports for this scenario.</p>
@@ -4419,7 +4641,7 @@ export default function Home() {
                             return (
                               <li key={record.id} className="timeline-item">
                                 <div className="timeline-head">
-                                  <span className="e-tag">External · Synthetic</span>
+                                  <span className="e-tag">External</span>
                                   <span className="e-tag mono">Imported {record.importedAt}</span>
                                   <strong className="timeline-title">{record.title}</strong>
                                   <button
@@ -4473,7 +4695,7 @@ export default function Home() {
                                         {record.recordedAt ?? 'Undated'}
                                       </span>
                                     </span>
-                                    <span className="e-tag">Synthetic · Read-only</span>
+                                    <span className="e-tag">Read-only</span>
                                   </div>
                                 </div>
                                 <button
@@ -4588,9 +4810,6 @@ export default function Home() {
             {/* ==================== REVIEW SUGGESTIONS ==================== */}
             {view === 'triage' && (
               <section aria-label="Review suggestions">
-                <div className="eyebrow">
-                  AI triage · {cleanPatientName(activeScenario.patientLabel)}
-                </div>
                 <h1 className="h1" ref={headingRef} tabIndex={-1}>
                   Suggestions waiting for a clinician
                 </h1>
@@ -4783,13 +5002,11 @@ export default function Home() {
             {/* ==================== EVALUATIONS ==================== */}
             {view === 'eval' && (
               <section aria-label="Evaluations">
-                <div className="eyebrow">Synthetic evaluation</div>
                 <h1 className="h1" ref={headingRef} tabIndex={-1}>
                   Evaluation results
                 </h1>
                 <p className="lede">
-                  Deterministic comparison across held-out synthetic cases and audited synthetic
-                  fixtures. Results here are a smoke test, not clinical validation.
+                  Run the comparison checks and review the results by case set.
                 </p>
 
                 <section className="sec" id="o-about" style={{ marginTop: 28 }}>
@@ -4918,7 +5135,6 @@ export default function Home() {
             {/* ==================== SESSION ACTIVITY ==================== */}
             {view === 'audit' && (
               <section aria-label="Session activity">
-                <div className="eyebrow">Fictional workspace</div>
                 <h1 className="h1" ref={headingRef} tabIndex={-1}>
                   Session activity
                 </h1>
@@ -5021,13 +5237,11 @@ export default function Home() {
             {/* ==================== MODELS & DATA ==================== */}
             {view === 'models' && (
               <section aria-label="Models and data">
-                <div className="eyebrow">System · integrations</div>
                 <h1 className="h1" ref={headingRef} tabIndex={-1}>
                   Models and data
                 </h1>
                 <p className="lede">
-                  Check the note comparison service, audited Hugging Face synthetic datasets, and
-                  snapshot drivers.
+                  Check service availability, data sources and connection settings.
                 </p>
 
                 <div className="tabs" role="tablist" aria-label="Models and data tabs">
@@ -5128,11 +5342,11 @@ export default function Home() {
 
                     <section className="sec" id="o-hf">
                       <h2 className="h2">
-                        Audited Hugging Face synthetic datasets{' '}
+                        Hugging Face datasets{' '}
                         <span>{hfDatasetSources.length} open-licensed sources</span>
                       </h2>
                       {hfDatasetSources.length === 0 ? (
-                        <p className="empty">No external synthetic datasets loaded.</p>
+                        <p className="empty">No external datasets loaded.</p>
                       ) : (
                         <ul className="rows widget-cards">
                           {hfDatasetSources.map((ds) => (
@@ -5145,7 +5359,7 @@ export default function Home() {
                                 </div>
                                 <div className="r-sub">
                                   Split: <span className="mono">{ds.split}</span> ·{' '}
-                                  {ds.rowCount} curated rows · Synthetic only
+                                  {ds.rowCount} curated rows
                                 </div>
                                 <div className="r-sub">{ds.description}</div>
                               </div>
@@ -5520,7 +5734,7 @@ export interface DataAdapter {
                     </section>
                     <section className="sec" id="o-fhir">
                       <h2 className="h2">
-                        Synthetic FHIR R4 preview{' '}
+                        FHIR R4 preview{' '}
                         <span>{cleanPatientName(activeScenario.patientLabel)}</span>
                       </h2>
                       <pre className="code">{fhirBundleJson}</pre>
@@ -5530,11 +5744,10 @@ export interface DataAdapter {
               </section>
             )}
           </div>
-        </main>
 
-        {/* Right Outline & Context Rail (collapsed in Compare notes view) */}
-        {view !== 'extract' && (
-          <aside className="rail-r" id="rail-r" aria-label="Page outline and context">
+        {!isOverview && (
+          <aside className="rail-r workspace-tools" id="rail-r" aria-label="Page outline and context">
+            {pageWidgets}
             {outlineSections.length > 0 && (
               <>
                 <div className="rr-h">On this page</div>
@@ -5556,59 +5769,9 @@ export interface DataAdapter {
               </>
             )}
 
-            {(view === 'diff' || view === 'triage') && (
-              <>
-                <div className="rr-h">Patient</div>
-                <dl className="kv">
-                  <dt>Name</dt>
-                  <dd>{cleanPatientName(activeScenario.patientLabel)}</dd>
-                  <dt>A</dt>
-                  <dd title={activeScenario.earlier.source}>
-                    {activeScenario.earlier.recordedAt ?? 'Undated'}
-                  </dd>
-                  <dt>B</dt>
-                  <dd title={activeScenario.later.source}>
-                    {activeScenario.later.recordedAt ?? 'Undated'}
-                  </dd>
-                  <dt>Reviewed</dt>
-                  <dd>
-                    {reviewedCount} / {reviewableCount}
-                  </dd>
-                </dl>
-              </>
-            )}
-
-            <div className="rr-h">Connections</div>
-            <div className="cx">
-              {connections.map((c) => (
-                <button
-                  key={c.id}
-                  type="button"
-                  title={c.detail}
-                  onClick={() => navigateTo('models')}
-                >
-                  <span className={`dot ${c.state}`} aria-hidden="true" />
-                  <span className="cx-n">{c.name}</span>
-                  <small>
-                    {c.active ? 'active' : c.latency != null ? `${c.latency}ms` : c.state}
-                  </small>
-                </button>
-              ))}
-            </div>
-
-            <dl className="kv">
-              <dt>Data</dt>
-              <dd>{activeDbConn?.name ?? 'none'}</dd>
-              <dt>Model</dt>
-              <dd>{activeModelConn?.name ?? 'none'}</dd>
-            </dl>
-
-            <p className="disclaimer">
-              Synthetic records only. A difference is not a finding of error, harm, or
-              discontinuation.
-            </p>
           </aside>
         )}
+        </main>
       </div>
 
       {/* Command Menu Dialog */}

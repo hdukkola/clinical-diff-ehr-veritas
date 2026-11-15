@@ -28,7 +28,7 @@ export {
 
 export const earlier: Snapshot = {
   id: 's1',
-  source: 'Fictional outpatient medication list',
+  source: 'Outpatient medication list',
   recordedAt: '2026-10-01',
   medications: [
     { id: 'm1', name: 'Lisinopril', dose: '10 mg', route: 'oral', frequency: 'daily' },
@@ -39,7 +39,7 @@ export const earlier: Snapshot = {
 
 export const later: Snapshot = {
   id: 's2',
-  source: 'Fictional discharge medication list',
+  source: 'Discharge medication list',
   recordedAt: '2026-10-15',
   medications: [
     { id: 'm1', name: 'Lisinopril', dose: '20 mg', route: 'oral', frequency: 'daily' },
@@ -76,7 +76,7 @@ const baseSyntheticScenarios: SyntheticScenario[] = [
     id: 'scenario-morgan-lee-baseline',
     patientId: 'DEMO-001',
     patientLabel: 'Morgan Lee (Synthetic)',
-    title: 'Outpatient intake to hospital discharge baseline',
+    title: 'Outpatient to discharge',
     summary:
       'Baseline fictional reconciliation scenario with dose increase, undocumented discharge frequency, removal, and addition.',
     category: 'baseline-reconciliation',
@@ -86,12 +86,12 @@ const baseSyntheticScenarios: SyntheticScenario[] = [
     externalRecords: [
       {
         id: 'ext-morgan-01',
-        title: 'Synthetic external pharmacy & clinic summary',
-        origin: 'Fictional Regional HIE · Westside Pharmacy Exchange (Synthetic)',
+        title: 'Outside pharmacy and clinic summary',
+        origin: 'Westside Pharmacy Exchange',
         importedAt: '2026-10-16T09:30:00Z',
         recordedAt: '2026-10-14',
-        summary: 'Outside synthetic dispense and medication summary imported for reconciliation review.',
-        body: 'Synthetic outside report: Outpatient pharmacy dispense history lists Lisinopril 10 mg oral daily (last filled 2026-09-28) and Metformin 500 mg oral twice daily. Read-only imported record; no live EHR write.',
+        summary: 'Dispense and medication summary imported for reconciliation review.',
+        body: 'Outpatient pharmacy dispense history lists Lisinopril 10 mg oral daily (last filled 2026-09-28) and Metformin 500 mg oral twice daily. Read-only imported record; no live EHR write.',
       },
     ],
   },
