@@ -966,6 +966,11 @@ export default function Home() {
   const [socketStatus, setSocketStatus] = useState<SocketStatus>(INITIAL_SOCKET_STATUS);
   const [extractResult, setExtractResult] = useState<NoteComparisonResult | null>(null);
   const [noteReviewDecisions, setNoteReviewDecisions] = useState<Record<string, NoteReviewDecision>>({});
+  const [savedNoteDraft, setSavedNoteDraft] = useState<{
+    earlier: string;
+    later: string;
+    presetId: string;
+  } | null>(null);
 
   /* ---- Snapshot review state ---- */
   const [selectedScenarioId, setSelectedScenarioId] = useState<string>('scenario-morgan-lee-baseline');
@@ -2457,12 +2462,33 @@ export default function Home() {
     });
   }
 
+  const isMorganScenario = activeScenario.id === 'scenario-morgan-lee-baseline';
+
   function openEncounterNotes(targetId: 'earlier-note' | 'later-note' = 'earlier-note') {
+    if (!isMorganScenario) {
+      setSelectedScenarioId('scenario-morgan-lee-baseline');
+    }
     if (earlierNoteText !== DEFAULT_EARLIER_NOTE || laterNoteText !== DEFAULT_LATER_NOTE) {
+      if (earlierNoteText.trim().length > 0 || laterNoteText.trim().length > 0) {
+        setSavedNoteDraft({
+          earlier: earlierNoteText,
+          later: laterNoteText,
+          presetId: selectedPresetId,
+        });
+      }
       handleSelectPreset('default');
     }
     navigateTo('extract', false);
     focusSection(targetId);
+  }
+
+  function restoreSavedNoteDraft() {
+    if (!savedNoteDraft) return;
+    setSelectedPresetId(savedNoteDraft.presetId);
+    setEarlierNoteText(savedNoteDraft.earlier);
+    setLaterNoteText(savedNoteDraft.later);
+    setSavedNoteDraft(null);
+    setAnnouncement('Restored previous note draft');
   }
 
   function openSnapshot(tab: DiffTab, filter: DiffFilter = 'all', focusId?: string) {
@@ -2489,18 +2515,18 @@ export default function Home() {
     case 'home':
       widgetTitle = 'Workspace overview';
       widgets = [
-        { ...metric('Patient workspace', patientName, `${activeScenario.patientId} · Outpatient to discharge`, 'Open patient', () => selectPatient(activeScenario.id)), wide: true },
+        { ...metric('Patient workspace', patientName, `${activeScenario.patientId} · ${activeScenario.title}`, 'Open patient', () => selectPatient(activeScenario.id)), wide: true },
         jump('Medication review', pendingReviews, 'diff', 'Open snapshot review', 'Changes awaiting a decision'),
         jump('Note comparison', compareStatus, 'extract', 'Open Compare notes', 'Compare the earlier and discharge notes'),
         jump('Suggestion queue', openTriageCount, 'triage', 'Open suggestions', 'Decisions pending'),
         jump('Comparison checks', evaluationDone ?? 'Ready', 'eval', 'Open evaluations', 'Cases in the latest run'),
         jump('Activity log', audit.length, 'audit', 'Open session activity', audit[0]?.action),
         jump('Model connection', serviceStatus, 'models', 'Open connections'),
-        metric('Encounter record', 'October 15', 'Discharge conversation and recording consent', 'Read encounter', () => {
-          navigateTo('patient', false);
+        metric('Encounter record', isMorganScenario ? 'October 15' : 'Morgan Lee · Oct 15', 'Morgan Lee (DEMO-001) · Discharge conversation and recording consent', 'Read encounter', () => {
+          selectPatient('scenario-morgan-lee-baseline');
           focusSection('transcript-title');
         }),
-        metric('Source documents', documentIndex.counts.total, 'Indexed records for Morgan Lee', 'Open documents', () => openSnapshot('documents')),
+        metric('Source documents', documentIndex.counts.total, `Indexed records for ${patientName}`, 'Open documents', () => openSnapshot('documents')),
         metric('Review worklist', reviewedCount, 'Changes with a recorded decision', 'Open worklist', () => openSnapshot('worklist')),
       ];
       break;
@@ -2517,9 +2543,9 @@ export default function Home() {
         metric('Discharge snapshot', activeScenario.later.recordedAt ?? 'Undated', `${activeScenario.later.medications.length} recorded medications`),
         metric('Source record index', documentIndex.counts.total, 'Documents tied to this chart', 'Browse records', () => openSnapshot('documents')),
         metric('Outside records', outsideCount, 'Imported chart records', 'View outside records', () => openSnapshot('documents', 'all', 'outside-reports')),
-        metric('Medication plan in notes', 'Earlier / discharge', 'Read the two notes mentioned in the conversation', 'Load encounter notes', openEncounterNotes),
+        metric('Medication plan in notes', isMorganScenario ? 'Earlier / discharge' : 'Morgan Lee (DEMO-001)', 'Read the two notes mentioned in the Morgan Lee conversation', 'Load encounter notes', () => openEncounterNotes('earlier-note')),
         metric('Recorded decisions', `${reviewedCount} / ${reviewableCount}`, 'Verified, flagged or deferred', 'View worklist', () => openSnapshot('worklist')),
-        metric('Discharge conversation', '01:02', 'Recording consent included', 'Read transcript', () => focusSection('transcript-title')),
+        metric('Discharge conversation', isMorganScenario ? '01:02' : 'None recorded', isMorganScenario ? 'Recording consent included' : `No transcript for ${patientName}`, 'Read transcript', () => focusSection('transcript-title')),
       ];
       break;
     case 'extract':
@@ -2888,7 +2914,7 @@ export default function Home() {
                 )}
               </div>
               <div className="patient-context-enc">
-                <span className="patient-context-title">Outpatient to discharge</span>
+                <span className="patient-context-title">{activeScenario.title}</span>
                 <span className="patient-context-window">
                   Earlier: {activeScenario.earlier.source} (
                   {activeScenario.earlier.recordedAt ?? 'Undated'}) → Later:{' '}
@@ -2962,7 +2988,7 @@ export default function Home() {
                     <h1 className="h1" ref={headingRef} tabIndex={-1}>
                       {view === 'patient' ? cleanPatientName(activeScenario.patientLabel) : 'Home'}
                     </h1>
-                    {view === 'patient' && <p>{activeScenario.patientId} · Outpatient to discharge</p>}
+                    {view === 'patient' && <p>{activeScenario.patientId} · {activeScenario.title}</p>}
                   </div>
                   {view === 'home' && (
                     <button type="button" className="btn" onClick={() => navigateTo('extract')}>Start comparison</button>
@@ -2975,6 +3001,9 @@ export default function Home() {
                       onCompare={() => openEncounterNotes('earlier-note')}
                       onTraceNote={(targetId) => openEncounterNotes(targetId)}
                       onTraceMedication={(medId) => handleSelectEvidenceChange(medId, true)}
+                      isMorganLee={isMorganScenario}
+                      patientLabel={patientName}
+                      onSelectMorganLee={() => selectPatient('scenario-morgan-lee-baseline')}
                     />
                     <AssistantPanel
                       patientLabel={cleanPatientName(activeScenario.patientLabel)}
@@ -3128,6 +3157,37 @@ export default function Home() {
                       ))}
                     </select>
                   </div>
+
+                  {savedNoteDraft && (
+                    <div
+                      className="extract-draft-banner"
+                      role="region"
+                      aria-label="Previous note draft backup"
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: 8,
+                        marginTop: 10,
+                        padding: '8px 10px',
+                        border: '1px solid var(--border)',
+                        borderRadius: 6,
+                        background: 'var(--bg-elev)',
+                        fontSize: 12,
+                      }}
+                    >
+                      <span>
+                        Loaded Morgan Lee encounter notes. Your previous note draft was preserved.
+                      </span>
+                      <button
+                        type="button"
+                        className="btn quiet"
+                        onClick={restoreSavedNoteDraft}
+                      >
+                        Restore previous note draft
+                      </button>
+                    </div>
+                  )}
 
                   <form id="extraction-form" onSubmit={handleCompareNotes}>
                     <div className="extract-note-grid">

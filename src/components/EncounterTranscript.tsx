@@ -57,11 +57,44 @@ export function EncounterTranscript({
   onCompare,
   onTraceNote,
   onTraceMedication,
+  isMorganLee = true,
+  patientLabel = 'Morgan Lee',
+  onSelectMorganLee,
 }: {
   onCompare: () => void;
   onTraceNote?: (targetId: 'earlier-note' | 'later-note') => void;
   onTraceMedication?: (medicationId: string) => void;
+  isMorganLee?: boolean;
+  patientLabel?: string;
+  onSelectMorganLee?: () => void;
 }) {
+  if (!isMorganLee) {
+    return (
+      <section
+        id="encounter-transcript"
+        className="encounter-transcript"
+        aria-labelledby="transcript-title"
+      >
+        <header>
+          <div>
+            <h2 id="transcript-title" tabIndex={-1}>
+              Encounter transcript
+            </h2>
+            <p>{patientLabel} · No recorded encounter transcript for this scenario</p>
+          </div>
+          {onSelectMorganLee && (
+            <button type="button" className="btn" onClick={onSelectMorganLee}>
+              Open Morgan Lee encounter
+            </button>
+          )}
+        </header>
+        <p className="transcript-source">
+          The scripted October 15, 2026 discharge conversation belongs to Morgan Lee (DEMO-001) and is hidden while viewing {patientLabel}.
+        </p>
+      </section>
+    );
+  }
+
   return (
     <section
       id="encounter-transcript"
@@ -73,14 +106,14 @@ export function EncounterTranscript({
           <h2 id="transcript-title" tabIndex={-1}>
             Encounter transcript
           </h2>
-          <p>October 15, 2026 · Discharge review · Recording consent at 00:08</p>
+          <p>Morgan Lee (DEMO-001) · October 15, 2026 · Discharge review · Recording consent at 00:08</p>
         </div>
         <button type="button" className="btn" onClick={onCompare}>
           Load notes in Compare
         </button>
       </header>
       <p className="transcript-source">
-        Scripted encounter. The outpatient and discharge notes in Compare reflect this conversation.
+        Scripted encounter for Morgan Lee. The outpatient and discharge notes in Compare reflect this conversation.
       </p>
       <ol>
         {conversation.map(({ time, speaker, quote, trace }) => (

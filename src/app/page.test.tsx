@@ -1626,4 +1626,28 @@ describe('Clinical Diff Veritas Editorial UI', () => {
     const aspirinEvidence = screen.getByLabelText('Evidence and provenance for Aspirin');
     await waitFor(() => expect(aspirinEvidence).toHaveFocus());
   });
+
+  it('preserves and restores modified note drafts when loading Morgan Lee encounter notes (DESIGN-REVIEW-003)', async () => {
+    const user = userEvent.setup();
+    render(<Home />);
+
+    await openCompare(user);
+    const earlierInput = screen.getByLabelText(/Earlier note/i);
+    await user.clear(earlierInput);
+    await user.type(earlierInput, 'Custom draft: Warfarin 5 mg daily.');
+    expect(earlierInput).toHaveValue('Custom draft: Warfarin 5 mg daily.');
+
+    await user.click(within(getPatientsGroup()).getByRole('button', { name: /Morgan Lee/ }));
+    const transcript = screen.getByRole('region', { name: 'Encounter transcript' });
+    expect(transcript).toHaveTextContent('Morgan Lee (DEMO-001)');
+    await user.click(within(transcript).getByRole('button', { name: 'Load notes in Compare' }));
+
+    expect(screen.getByLabelText(/Earlier note/i)).toHaveValue(
+      'Sample outpatient medication list. The note explicitly lists Lisinopril 10 mg daily, Metformin 500 mg twice daily, and Aspirin 81 mg daily.',
+    );
+    const backupBanner = screen.getByRole('region', { name: 'Previous note draft backup' });
+    await user.click(within(backupBanner).getByRole('button', { name: 'Restore previous note draft' }));
+    expect(screen.getByLabelText(/Earlier note/i)).toHaveValue('Custom draft: Warfarin 5 mg daily.');
+    expect(screen.queryByRole('region', { name: 'Previous note draft backup' })).not.toBeInTheDocument();
+  });
 });
