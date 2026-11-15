@@ -786,11 +786,22 @@ type AuditEntry = {
   medicationId?: string;
 };
 
+type EvaluationOutcome = 'passed' | 'failed' | 'timedOut';
+
+type EvaluationCounts = Record<EvaluationOutcome, number> & { tested: number };
+
+const EVALUATION_FAMILIES = [
+  ['heldOut', 'Held-out synthetic labels'],
+  ['workspace', 'Curated workspace fixtures'],
+  ['hf', 'Hugging Face synthetic fixtures'],
+] as const;
+
+type EvaluationFamily = (typeof EVALUATION_FAMILIES)[number][0];
+
 type EvalSummary = {
   ts: string;
-  heldOutCases: number;
-  scenarioCases: number;
-  totalCases: number;
+  families: Record<EvaluationFamily, EvaluationCounts>;
+  totals: EvaluationCounts;
   precision: number;
   recall: number;
   exactMatch: number;
@@ -1993,15 +2004,37 @@ export default function Home() {
     let exact = 0;
     let totalChecks = 0;
 
+    const totals: EvaluationCounts = { tested: 0, passed: 0, failed: 0, timedOut: 0 };
+    const families: EvalSummary['families'] = {
+      heldOut: { ...totals },
+      workspace: { ...totals },
+      hf: { ...totals },
+    };
+
+    function record(family: EvaluationFamily, outcome: EvaluationOutcome) {
+      families[family].tested++;
+      families[family][outcome]++;
+      totals.tested++;
+      totals[outcome]++;
+    }
+
     for (const c of HELDOUT_CASES) {
-      const res = compareSnapshots(c.a, c.b);
-      const resMap = new Map(res.map((r) => [r.medicationId, r.kind]));
-      for (const [medId, goldKind] of Object.entries(c.gold)) {
+      let resMap: Map<string, MedicationChange['kind']> | undefined;
+      try {
+        resMap = new Map(compareSnapshots(c.a, c.b).map(row => [row.medicationId, row.kind]));
+      } catch {
+        // Every expected statement remains in the denominator on a comparison error.
+      }
+      let passed = true;
+      const medicationIds = new Set([...Object.keys(c.gold), ...(resMap?.keys() ?? [])]);
+      for (const medId of medicationIds) {
         totalChecks++;
-        const predKind = resMap.get(medId) ?? 'same';
+        const goldKind = c.gold[medId];
+        const predKind = resMap ? resMap.get(medId) ?? 'same' : undefined;
         if (predKind === goldKind) exact++;
-        const predDiff = predKind !== 'same';
-        const goldDiff = goldKind !== 'same';
+        else passed = false;
+        const predDiff = predKind !== undefined && predKind !== 'same';
+        const goldDiff = goldKind !== undefined && goldKind !== 'same';
         if (predDiff && goldDiff && predKind === goldKind) {
           tp++;
         } else {
@@ -2009,30 +2042,34 @@ export default function Home() {
           if (goldDiff) fn++;
         }
       }
+      record('heldOut', passed ? 'passed' : 'failed');
     }
 
-    // Also run deterministic consistency verification across all synthetic + HF scenarios
+    const hfScenarioIds = new Set(hfScenarios.map(scenario => scenario.id));
     for (const scenario of allScenarios) {
-      const report = analyzeSnapshots(scenario.earlier, scenario.later);
-      const rerun = analyzeSnapshots(scenario.earlier, scenario.later);
-      if (report.changes.length === rerun.changes.length) {
-        totalChecks++;
-        exact++;
+      const family = hfScenarioIds.has(scenario.id) ? 'hf' : 'workspace';
+      let passed = false;
+      try {
+        const report = analyzeSnapshots(scenario.earlier, scenario.later);
+        const rerun = analyzeSnapshots(scenario.earlier, scenario.later);
+        passed = JSON.stringify(report) === JSON.stringify(rerun);
+      } catch {
+        // A fixture that cannot be compared is a failed case in the denominator.
       }
+      record(family, passed ? 'passed' : 'failed');
     }
 
     const summary: EvalSummary = {
       ts: new Date().toISOString(),
-      heldOutCases: HELDOUT_CASES.length,
-      scenarioCases: allScenarios.length,
-      totalCases: HELDOUT_CASES.length + allScenarios.length,
+      families,
+      totals,
       precision: tp / Math.max(1, tp + fp),
       recall: tp / Math.max(1, tp + fn),
       exactMatch: exact / Math.max(1, totalChecks),
     };
     setEvalSummary(summary);
-    addAudit('Eval', 'Ran held-out & fixture suite', `${summary.totalCases} cases`);
-    setAnnouncement(`Evaluation complete across ${summary.totalCases} synthetic cases.`);
+    addAudit('Eval', 'Ran held-out & fixture suite', `${summary.totals.tested} cases`);
+    setAnnouncement(`Evaluation complete across ${summary.totals.tested} synthetic cases.`);
   }, [addAudit, allScenarios]);
 
   /* ---- Audit Export ---- */
@@ -4748,8 +4785,9 @@ export default function Home() {
                         {HELDOUT_CASES.length} held-out cases + {allScenarios.length} workspace
                         scenarios
                       </b>
-                      . Labels mark each statement as changed, added, removed, or unchanged,
-                      including undocumented fields and HF synthetic provenance records.
+                      . Precision, recall, and exact match use the held-out medication labels.
+                      Workspace fixtures check whether rerunning the comparison produces the same report.
+                      This run uses a synchronous comparison with no model calls or request timeouts.
                     </p>
                   </div>
                 </section>
@@ -4771,7 +4809,7 @@ export default function Home() {
                       <span style={{ color: 'var(--strong)' }}>
                         Deterministic diff <span style={{ color: 'var(--faint)' }}>baseline</span>
                       </span>
-                      <span className="mono">{evalSummary ? evalSummary.totalCases : '—'}</span>
+                      <span className="mono">{evalSummary ? evalSummary.totals.tested : '—'}</span>
                       <span className="mono">
                         {evalSummary ? evalSummary.precision.toFixed(2) : '—'}
                       </span>
@@ -4783,6 +4821,44 @@ export default function Home() {
                       </span>
                     </li>
                   </ul>
+                  {evalSummary && (
+                    <div className="evaluation-breakdown" role="region" aria-label="Evaluation counts" tabIndex={0}>
+                      <table aria-label="Evaluation case breakdown">
+                        <thead>
+                          <tr>
+                            <th scope="col">Case family</th>
+                            <th scope="col">Tested</th>
+                            <th scope="col">Passed</th>
+                            <th scope="col">Failed</th>
+                            <th scope="col">Timed out</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {EVALUATION_FAMILIES.map(([id, label]) => {
+                            const counts = evalSummary.families[id];
+                            return (
+                              <tr key={id}>
+                                <th scope="row">{label}</th>
+                                <td>{counts.tested}</td>
+                                <td>{counts.passed}</td>
+                                <td>{counts.failed}</td>
+                                <td>{counts.timedOut}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                        <tfoot>
+                          <tr>
+                            <th scope="row">Total</th>
+                            <td>{evalSummary.totals.tested}</td>
+                            <td>{evalSummary.totals.passed}</td>
+                            <td>{evalSummary.totals.failed}</td>
+                            <td>{evalSummary.totals.timedOut}</td>
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
+                  )}
                   <div style={{ marginTop: 14 }}>
                     <button type="button" className="btn primary" onClick={runEval}>
                       {evalSummary ? 'Run again' : 'Run held-out set'}

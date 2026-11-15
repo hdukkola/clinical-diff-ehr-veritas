@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import Home from '@/app/page';
+import * as diff from '@/lib/diff';
 import { earlier, later, syntheticScenarios } from '@/lib/fixtures';
 import { hfDatasetSources, hfNoteComparisonPairs } from '@/lib/hf-fixtures';
 
@@ -25,6 +26,31 @@ describe('Clinical Diff Veritas Editorial UI', () => {
   beforeEach(() => {
     localStorage.clear();
     document.documentElement.dataset.palette = 'void';
+  });
+
+  it('counts a failed held-out comparison within its family and overall denominator', async () => {
+    const user = userEvent.setup();
+    const compare = diff.compareSnapshots;
+    const spy = vi.spyOn(diff, 'compareSnapshots').mockImplementation((first, second) =>
+      first.id === 'ho-1a' ? [] : compare(first, second),
+    );
+
+    try {
+      render(<Home />);
+      await user.click(within(getWorkspaceNav()).getByRole('button', { name: /^Evaluations/i }));
+      expect(screen.queryByRole('table', { name: 'Evaluation case breakdown' })).not.toBeInTheDocument();
+      await user.click(screen.getByRole('button', { name: 'Run held-out set' }));
+      const table = within(screen.getByRole('table', { name: 'Evaluation case breakdown' }));
+      const family = table.getByRole('row', { name: /^Held-out synthetic labels/ });
+      expect(within(family).getAllByRole('cell').map(cell => cell.textContent)).toEqual(['3', '2', '1', '0']);
+      const total = table.getByRole('row', { name: /^Total/ });
+      const [tested, passed, failed, timedOut] = within(total).getAllByRole('cell');
+      expect(Number(tested.textContent)).toBe(Number(passed.textContent) + 1);
+      expect(failed).toHaveTextContent('1');
+      expect(timedOut).toHaveTextContent('0');
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it('renders the default Compare notes view with accessibility landmarks and collapsed right rail', async () => {
@@ -407,7 +433,10 @@ describe('Clinical Diff Veritas Editorial UI', () => {
       ).toBeInTheDocument();
 
       await user.click(screen.getByRole('button', { name: 'Run held-out set' }));
-      expect(screen.getByText(String(3 + syntheticScenarios.length))).toBeInTheDocument();
+      const total = within(screen.getByRole('table', { name: 'Evaluation case breakdown' })).getByRole('row', { name: /^Total/ });
+      expect(within(total).getAllByRole('cell').map(cell => cell.textContent)).toEqual([
+        String(3 + syntheticScenarios.length), String(3 + syntheticScenarios.length), '0', '0',
+      ]);
       expect(screen.getAllByText('1.00').length).toBeGreaterThanOrEqual(3);
       expect(screen.getByText(/Triage suggestions accepted:/)).toBeInTheDocument();
 
