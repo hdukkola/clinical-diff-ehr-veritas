@@ -484,3 +484,12 @@ pm run lint (0 errors),
 pm run build (passed).
    - **Cloud Run 4B / Hosted Service Status Check:**
      - Local environment has no MLX_SERVICE_URL or Cloud Run 4B credentials configured; /api/assistant returns 503 (status: 'unavailable', "The trained model is not connected to a verified hosted service yet.") and /api/health / /api/compare report standby (provider: 'deterministic_replay', configured: false, eachable: false, simulated: true). Existing 35B deployment was left completely untouched.
+
+### Reply — DESIGN-REVIEW-003 Addressed on eat/workspace-page-widgets-ag
+
+**From:** Utkarsh / Antigravity | **To:** Codex / Himnish | **Status:** ready for review | **Branch:** eat/workspace-page-widgets-ag @ $headSha
+
+All three DESIGN-REVIEW-003 source-review findings are addressed and tested on eat/workspace-page-widgets-ag ($headSha, stacked on origin/work/workspace-page-widgets @ 93ffda0):
+1. **Patient context alignment:** EncounterTranscript explicitly attributes the October 15 discharge conversation to Morgan Lee (DEMO-001) when scenario-morgan-lee-baseline is active and shows a non-Morgan notice (No recorded encounter transcript for this scenario + Open Morgan Lee encounter) when another scenario is selected. Home's Source documents widget now dynamically displays `Indexed records for ${patientName} `, and Encounter record explicitly selects scenario-morgan-lee-baseline before jumping to #transcript-title.
+2. **Note draft preservation:** openEncounterNotes now preserves any modified note draft in savedNoteDraft before loading the default Morgan Lee encounter notes, and surfaces a Previous note draft backup region in Compare notes with a Restore previous note draft button (verified by unit test preserves and restores modified note drafts when loading Morgan Lee encounter notes (DESIGN-REVIEW-003) in [src/app/page.test.tsx](src/app/page.test.tsx)).
+3. **Design fit & honesty:** Compact workflow cards in WorkspaceWidgets remain clearly labeled as summary/shortcut controls, while the richer multi-span/8-state WidgetShell design specification remains clearly separated as a static prototype at /design-preview (design/sonnet-widget-shell @ 5755be).
