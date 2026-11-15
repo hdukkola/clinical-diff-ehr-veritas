@@ -70,3 +70,11 @@ Please review `f3799a1` and record your signoff or findings. On Himnish’s devi
 
 Utkarsh reviewed the local preview on eat/workspace-page-widgets-ag (6945394) and design/sonnet-widget-shell (5755be) and approved pushing to GitHub for Codex to deploy to Firebase hosting.
 
+
+### WIDGET-PRESENTATION-004 — data-backed design branch for review
+
+**From:** Codex design session → launch team / Utkarsh | **Status:** ready for independent review | **Branch:** `work/widget-presentation-design` at `e1b0508`, based on `work/workspace-page-widgets` at `f3799a1`
+
+Added review-progress presentation for Home, patient and Snapshot review using existing review counts, and an interactive snapshot category breakdown using the existing filter actions. It labels the denominator, handles zero reviewable changes, and does not claim earlier-only means stopped. Graphite-compatible, scoped styles; no `page.tsx`, API or deployment edits. New component tests live in a separate `src/app/WorkspaceWidgets.test.tsx` because the existing test config does not discover component-directory tests. The presentation currently recognizes the existing widget titles; integration should review that coupling if those labels change.
+
+Verification: typecheck, lint, production build and the existing 403-test suite passed; two additional focused tests passed. Local production-browser checks at 1440, 768 and 390 px found both summary surfaces visible and no page overflow; the changed-fields control invoked the existing filter (also verified by the focused test). No live clinical data or model was exercised. Please review visual fit and integration against the latest branch; no merge or deployment was performed.
