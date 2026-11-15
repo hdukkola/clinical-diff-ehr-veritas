@@ -308,8 +308,9 @@ function joinEndpoint(base: URL, suffix: string): string {
   return `${baseStr}${cleanSuffix}`;
 }
 
-function joinOpenAiV1Endpoint(base: URL, suffix: string): string {
-  const baseStr = base.toString().replace(/\/+$/, '');
+export function joinOpenAiV1Endpoint(base: URL, suffix: string): string {
+  let baseStr = base.toString().replace(/\/+$/, '');
+  baseStr = baseStr.replace(/\/(chat\/completions|models)$/i, '');
   const cleanSuffix = suffix.startsWith('/') ? suffix : `/${suffix}`;
   if (baseStr.endsWith('/v1')) {
     return `${baseStr}${cleanSuffix}`;
@@ -340,6 +341,7 @@ export interface ResolvedSocketConfig {
   baseUrl: URL | null;
   target: string | null;
   model: string | null;
+  explicitModel: boolean;
   adapter: string | null;
   apiKey: string | null;
   configError?: string;
@@ -366,6 +368,7 @@ export function resolveSocketConfig(
       baseUrl: null,
       target: null,
       model: null,
+      explicitModel: false,
       adapter,
       apiKey: null,
     };
@@ -379,6 +382,11 @@ export function resolveSocketConfig(
   const ollamaUrlRaw = env.OLLAMA_BASE_URL?.trim();
   const loopbackPort = parseLoopbackPort(env);
   const loopbackEnabled = isTruthyEnv(env.CLINICAL_DIFF_LOCAL_LOOPBACK_ENABLED);
+  const sharedApiKey =
+    env.CLINICAL_DIFF_API_KEY?.trim() ||
+    env.OPENAI_API_KEY?.trim() ||
+    env.HF_TOKEN?.trim() ||
+    null;
 
   if (hint === null && hintRaw?.trim()) {
     return {
@@ -387,6 +395,7 @@ export function resolveSocketConfig(
       baseUrl: null,
       target: null,
       model: null,
+      explicitModel: false,
       adapter,
       apiKey: null,
       configError: `Unsupported CLINICAL_DIFF_MODEL_PROVIDER: ${redactSensitiveText(hintRaw.trim())}`,
@@ -413,13 +422,15 @@ export function resolveSocketConfig(
       baseUrl: null,
       target: null,
       model: null,
+      explicitModel: false,
       adapter,
       apiKey: null,
     };
   }
 
   if (selected === 'mlx_service') {
-    const model = env.MLX_MODEL_ID?.trim() || env.CLINICAL_DIFF_MODEL_ID?.trim() || DEFAULT_MLX_MODEL_ID;
+    const rawExplicit = env.MLX_MODEL_ID?.trim() || env.CLINICAL_DIFF_MODEL_ID?.trim();
+    const model = rawExplicit || DEFAULT_MLX_MODEL_ID;
     const rawUrl = backendUrlRaw || `http://127.0.0.1:${loopbackPort}`;
     try {
       const baseUrl = validateEndpointUrl(rawUrl, { allowInsecureHttp: allowInsecure });
@@ -429,8 +440,9 @@ export function resolveSocketConfig(
         baseUrl,
         target: redactUrl(baseUrl.toString()),
         model,
+        explicitModel: Boolean(rawExplicit),
         adapter,
-        apiKey: null,
+        apiKey: sharedApiKey,
       };
     } catch (err) {
       return {
@@ -439,16 +451,17 @@ export function resolveSocketConfig(
         baseUrl: null,
         target: redactUrl(rawUrl),
         model,
+        explicitModel: Boolean(rawExplicit),
         adapter,
-        apiKey: null,
+        apiKey: sharedApiKey,
         configError: err instanceof Error ? redactSensitiveText(err.message) : 'Invalid MLX backend URL.',
       };
     }
   }
 
   if (selected === 'openai_compatible') {
-    const model = env.CLINICAL_DIFF_MODEL_ID?.trim() || env.MLX_MODEL_ID?.trim() || 'gpt-4o-mini';
-    const apiKey = env.CLINICAL_DIFF_API_KEY?.trim() || null;
+    const rawExplicit = env.CLINICAL_DIFF_MODEL_ID?.trim() || env.MLX_MODEL_ID?.trim();
+    const model = rawExplicit || 'Qwen/Qwen3.5-4B';
     if (!openaiUrlRaw) {
       return {
         provider: 'openai_compatible',
@@ -456,8 +469,9 @@ export function resolveSocketConfig(
         baseUrl: null,
         target: null,
         model,
+        explicitModel: Boolean(rawExplicit),
         adapter: null,
-        apiKey,
+        apiKey: sharedApiKey,
         configError: 'OPENAI_COMPATIBLE_BASE_URL is not configured.',
       };
     }
@@ -469,8 +483,9 @@ export function resolveSocketConfig(
         baseUrl,
         target: redactUrl(baseUrl.toString()),
         model,
+        explicitModel: Boolean(rawExplicit),
         adapter: null,
-        apiKey,
+        apiKey: sharedApiKey,
       };
     } catch (err) {
       return {
@@ -479,15 +494,17 @@ export function resolveSocketConfig(
         baseUrl: null,
         target: redactUrl(openaiUrlRaw),
         model,
+        explicitModel: Boolean(rawExplicit),
         adapter: null,
-        apiKey,
+        apiKey: sharedApiKey,
         configError: err instanceof Error ? redactSensitiveText(err.message) : 'Invalid OpenAI-compatible URL.',
       };
     }
   }
 
   // selected === 'ollama'
-  const model = env.CLINICAL_DIFF_MODEL_ID?.trim() || env.MLX_MODEL_ID?.trim() || 'qwen3:4b';
+  const rawExplicit = env.CLINICAL_DIFF_MODEL_ID?.trim() || env.MLX_MODEL_ID?.trim();
+  const model = rawExplicit || 'qwen3:4b';
   const rawOllama = ollamaUrlRaw || 'http://127.0.0.1:11434';
   try {
     const baseUrl = validateEndpointUrl(rawOllama, { allowInsecureHttp: allowInsecure });
@@ -497,6 +514,7 @@ export function resolveSocketConfig(
       baseUrl,
       target: redactUrl(baseUrl.toString()),
       model,
+      explicitModel: Boolean(rawExplicit),
       adapter: null,
       apiKey: null,
     };
@@ -507,6 +525,7 @@ export function resolveSocketConfig(
       baseUrl: null,
       target: redactUrl(rawOllama),
       model,
+      explicitModel: Boolean(rawExplicit),
       adapter: null,
       apiKey: null,
       configError: err instanceof Error ? redactSensitiveText(err.message) : 'Invalid Ollama base URL.',
@@ -572,12 +591,11 @@ function isWordBoundary(text: string, start: number, end: number): boolean {
 }
 
 export function parseMedicationArrayFromModelOutput(rawText: string): string[] {
-  const cleaned = rawText
-    .replace(/<think>[\s\S]*?<\/think>/gi, '')
-    .trim()
-    .replace(/^```(?:json)?\s*/i, '')
-    .replace(/\s*```$/, '')
-    .trim();
+  let cleaned = rawText.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+  const fencedMatch = /```(?:json)?\s*([\s\S]*?)\s*```/i.exec(cleaned);
+  if (fencedMatch?.[1]) {
+    cleaned = fencedMatch[1].trim();
+  }
 
   let parsed: unknown;
   try {
@@ -608,10 +626,18 @@ export function parseMedicationArrayFromModelOutput(rawText: string): string[] {
 
   const out: string[] = [];
   for (const item of items) {
-    if (typeof item !== 'string') {
+    let rawName: string | null = null;
+    if (typeof item === 'string') {
+      rawName = item;
+    } else if (item && typeof item === 'object' && !Array.isArray(item)) {
+      const rec = item as Record<string, unknown>;
+      if (typeof rec.name === 'string') rawName = rec.name;
+      else if (typeof rec.medication === 'string') rawName = rec.medication;
+    }
+    if (rawName === null) {
       throw new SocketUpstreamError('Model returned invalid medication entries.', 502);
     }
-    const trimmed = stripInvisibleEdges(item);
+    const trimmed = stripInvisibleEdges(rawName);
     if (!trimmed || trimmed.length > 150) {
       throw new SocketUpstreamError('Model returned invalid medication entries.', 502);
     }
@@ -981,6 +1007,17 @@ class MlxSocketAIService implements AIService {
     this.config = config;
   }
 
+  private buildHeaders(includeJsonContentType = false): Record<string, string> {
+    const headers: Record<string, string> = {};
+    if (includeJsonContentType) {
+      headers['Content-Type'] = 'application/json';
+    }
+    if (this.config.apiKey) {
+      headers.Authorization = `Bearer ${this.config.apiKey}`;
+    }
+    return headers;
+  }
+
   async probeHealth(signal?: AbortSignal): Promise<SocketStatus> {
     const checkedAt = new Date().toISOString();
     if (!this.config.baseUrl || this.config.configError) {
@@ -1007,6 +1044,7 @@ class MlxSocketAIService implements AIService {
     try {
       const res = await fetch(joinEndpoint(this.config.baseUrl, '/health'), {
         method: 'GET',
+        headers: this.buildHeaders(false),
         cache: 'no-store',
         redirect: 'error',
         signal: combineSignals(5000, signal),
@@ -1097,7 +1135,7 @@ class MlxSocketAIService implements AIService {
 
     const res = await fetch(joinEndpoint(this.config.baseUrl, '/compare'), {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: this.buildHeaders(true),
       body: JSON.stringify({
         synthetic_only: true,
         earlier,
@@ -1126,6 +1164,7 @@ class OpenAiCompatibleAIService implements AIService {
   readonly provider: ModelProvider = 'openai_compatible';
   readonly label = 'OpenAI-compatible endpoint';
   private readonly config: ResolvedSocketConfig;
+  private discoveredModel: string | null = null;
 
   constructor(config: ResolvedSocketConfig) {
     this.config = config;
@@ -1137,6 +1176,57 @@ class OpenAiCompatibleAIService implements AIService {
       headers.Authorization = `Bearer ${this.config.apiKey}`;
     }
     return headers;
+  }
+
+  private getEffectiveModel(): string | null {
+    if (this.config.explicitModel) {
+      return this.config.model;
+    }
+    return this.discoveredModel || this.config.model;
+  }
+
+  private extractFirstModelId(data: unknown): string | null {
+    if (!data || typeof data !== 'object') return null;
+    const rec = data as Record<string, unknown>;
+    const list = Array.isArray(rec.data)
+      ? rec.data
+      : Array.isArray(rec.models)
+        ? rec.models
+        : [];
+    for (const entry of list) {
+      if (typeof entry === 'string' && entry.trim()) return entry.trim();
+      if (entry && typeof entry === 'object') {
+        const obj = entry as Record<string, unknown>;
+        if (typeof obj.id === 'string' && obj.id.trim()) return obj.id.trim();
+        if (typeof obj.name === 'string' && obj.name.trim()) return obj.name.trim();
+      }
+    }
+    return null;
+  }
+
+  private async resolveActiveModel(signal?: AbortSignal): Promise<string | null> {
+    if (this.config.explicitModel || this.discoveredModel || !this.config.baseUrl) {
+      return this.getEffectiveModel();
+    }
+    try {
+      const res = await fetch(joinOpenAiV1Endpoint(this.config.baseUrl, '/models'), {
+        method: 'GET',
+        headers: this.buildHeaders(),
+        cache: 'no-store',
+        redirect: 'error',
+        signal: combineSignals(5000, signal),
+      });
+      if (res.ok) {
+        const payload = (await res.json().catch(() => null)) as unknown;
+        const detected = this.extractFirstModelId(payload);
+        if (detected) {
+          this.discoveredModel = detected;
+        }
+      }
+    } catch {
+      // Fall back to configured/default model name if /models discovery is unsupported.
+    }
+    return this.getEffectiveModel();
   }
 
   async probeHealth(signal?: AbortSignal): Promise<SocketStatus> {
@@ -1181,7 +1271,7 @@ class OpenAiCompatibleAIService implements AIService {
           mode: 'unavailable',
           simulated: true,
           live_ai: false,
-          model: this.config.model,
+          model: this.getEffectiveModel(),
           adapter: null,
           model_loaded: false,
           endpoints: SOCKET_ENDPOINTS,
@@ -1190,6 +1280,13 @@ class OpenAiCompatibleAIService implements AIService {
           error: `OpenAI-compatible /models returned HTTP ${res.status}`,
         };
       }
+
+      const payload = (await res.json().catch(() => null)) as unknown;
+      const detected = this.extractFirstModelId(payload);
+      if (!this.config.explicitModel && detected) {
+        this.discoveredModel = detected;
+      }
+      const activeModel = this.getEffectiveModel();
 
       return {
         socket_open: true,
@@ -1201,13 +1298,13 @@ class OpenAiCompatibleAIService implements AIService {
         mode: 'openai_compatible',
         simulated: false,
         live_ai: true,
-        model: this.config.model,
+        model: activeModel,
         adapter: null,
         model_loaded: true,
         endpoints: SOCKET_ENDPOINTS,
         target: this.config.target,
         checked_at: checkedAt,
-        detail: `OpenAI-compatible socket ready (${this.config.model ?? 'configured model'}).`,
+        detail: `OpenAI-compatible socket ready (${activeModel ?? 'configured model'}).`,
       };
     } catch (err) {
       return {
@@ -1220,7 +1317,7 @@ class OpenAiCompatibleAIService implements AIService {
         mode: 'unavailable',
         simulated: true,
         live_ai: false,
-        model: this.config.model,
+        model: this.getEffectiveModel(),
         adapter: null,
         model_loaded: false,
         endpoints: SOCKET_ENDPOINTS,
@@ -1234,7 +1331,11 @@ class OpenAiCompatibleAIService implements AIService {
     }
   }
 
-  private async extractForNote(note: CompareNoteInput, signal?: AbortSignal): Promise<string[]> {
+  private async extractForNote(
+    note: CompareNoteInput,
+    activeModel: string | null,
+    signal?: AbortSignal,
+  ): Promise<string[]> {
     if (!this.config.baseUrl) {
       throw new SocketUpstreamError('OPENAI_COMPATIBLE_BASE_URL is not configured.', 503);
     }
@@ -1242,9 +1343,9 @@ class OpenAiCompatibleAIService implements AIService {
       method: 'POST',
       headers: this.buildHeaders(),
       body: JSON.stringify({
-        model: this.config.model,
+        model: activeModel || this.config.model,
         temperature: 0,
-        max_tokens: 1024,
+        max_tokens: 1536,
         messages: [
           { role: 'system', content: EXTRACTION_SYSTEM_PROMPT },
           { role: 'user', content: note.text },
@@ -1268,7 +1369,19 @@ class OpenAiCompatibleAIService implements AIService {
     const choices = Array.isArray(data.choices) ? data.choices : [];
     const first = choices[0] as Record<string, unknown> | undefined;
     const message = first?.message as Record<string, unknown> | undefined;
-    const content = typeof message?.content === 'string' ? message.content : '';
+    const rawContent = message?.content;
+    const content =
+      typeof rawContent === 'string'
+        ? rawContent
+        : Array.isArray(rawContent)
+          ? rawContent
+              .map((part) =>
+                part && typeof part === 'object' && typeof (part as Record<string, unknown>).text === 'string'
+                  ? ((part as Record<string, unknown>).text as string)
+                  : '',
+              )
+              .join('\n')
+          : '';
     return parseMedicationArrayFromModelOutput(content);
   }
 
@@ -1277,9 +1390,10 @@ class OpenAiCompatibleAIService implements AIService {
     later: CompareNoteInput,
     signal?: AbortSignal,
   ): Promise<NormalizedCompareResponse> {
+    const activeModel = await this.resolveActiveModel(signal);
     const [oldCandidates, newCandidates] = await Promise.all([
-      this.extractForNote(earlier, signal),
-      this.extractForNote(later, signal),
+      this.extractForNote(earlier, activeModel, signal),
+      this.extractForNote(later, activeModel, signal),
     ]);
 
     const oldGrounded = groundMedicationMentions(oldCandidates, earlier.source_id, earlier.text);
@@ -1296,7 +1410,7 @@ class OpenAiCompatibleAIService implements AIService {
       provider: 'openai_compatible',
       simulated: false,
       liveAi: true,
-      model: this.config.model,
+      model: activeModel,
       adapter: null,
     });
   }
