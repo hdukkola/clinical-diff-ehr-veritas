@@ -208,7 +208,10 @@ describe('synthetic fixture scenarios', () => {
   });
 
   it('surfaces CD-02 provenance, gap, and evidence link metadata across synthetic scenarios', () => {
-    for (const scenario of syntheticScenarios) {
+    const baselineScenarios = syntheticScenarios.filter((s) => !s.provenance);
+    expect(baselineScenarios).toHaveLength(10);
+
+    for (const scenario of baselineScenarios) {
       const report = analyzeSnapshots(scenario.earlier, scenario.later);
       expect(report.earlierProvenance.status).toBe('unverified');
       expect(report.laterProvenance.status).toBe('unverified');
@@ -222,6 +225,22 @@ describe('synthetic fixture scenarios', () => {
           expect.arrayContaining(['unverified_provenance', 'missing_supporting_evidence']),
         );
         expect(change.provenanceGaps?.length).toBeGreaterThanOrEqual(1);
+      }
+    }
+
+    const hfOnlyScenarios = syntheticScenarios.filter((s) => Boolean(s.provenance));
+    expect(hfOnlyScenarios.length).toBeGreaterThanOrEqual(6);
+    for (const scenario of hfOnlyScenarios) {
+      const report = analyzeSnapshots(scenario.earlier, scenario.later);
+      expect(['documented', 'patient_reported', 'unverified', 'unknown']).toContain(
+        report.earlierProvenance.status,
+      );
+      expect(['documented', 'patient_reported', 'unverified', 'unknown']).toContain(
+        report.laterProvenance.status,
+      );
+      for (const change of report.changes) {
+        expect(change.provenance).toBeDefined();
+        expect(change.evidenceLinks?.length).toBeGreaterThanOrEqual(1);
       }
     }
 

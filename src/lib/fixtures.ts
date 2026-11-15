@@ -1,4 +1,25 @@
 import type { Snapshot } from './types';
+import {
+  hfDatasetSources,
+  hfNoteComparisonPairs,
+  hfScenarios,
+  type HfDatasetSource,
+  type HfFixtureProvenance,
+  type HfLicense,
+  type HfNotePair,
+  type HfSyntheticScenario,
+} from './hf-fixtures';
+
+export {
+  hfDatasetSources,
+  hfNoteComparisonPairs,
+  hfScenarios,
+  type HfDatasetSource,
+  type HfFixtureProvenance,
+  type HfLicense,
+  type HfNotePair,
+  type HfSyntheticScenario,
+};
 
 /**
  * All records, patient identifiers, dates, and clinical sources in this module
@@ -46,9 +67,10 @@ export type SyntheticScenario = {
   tags: string[];
   earlier: Snapshot;
   later: Snapshot;
+  provenance?: HfFixtureProvenance;
 };
 
-export const syntheticScenarios: SyntheticScenario[] = [
+const baseSyntheticScenarios: SyntheticScenario[] = [
   {
     id: 'scenario-morgan-lee-baseline',
     patientId: 'DEMO-001',
@@ -472,6 +494,11 @@ export const syntheticScenarios: SyntheticScenario[] = [
       ],
     },
   },
+];
+
+export const syntheticScenarios: SyntheticScenario[] = [
+  ...baseSyntheticScenarios,
+  ...hfScenarios,
 ];
 
 export function getSyntheticScenario(id: string): SyntheticScenario | undefined {
