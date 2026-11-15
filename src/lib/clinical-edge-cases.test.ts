@@ -13,9 +13,8 @@ import {
   extractMedicationRegimensFromNote,
   normalizeNoteText,
   searchChartRecords,
-  type Medication,
-  type Snapshot,
 } from './diff';
+import type { Medication, Snapshot } from './types';
 import {
   canRender,
   CORE_WIDGET_IDS,
@@ -25,7 +24,6 @@ import {
   LAYOUT_PRESET_IDS,
   validateLayoutPreset,
   type ClinicalContext,
-  type ProposedChange,
 } from './cockpit';
 
 const makeMed = (
@@ -516,19 +514,18 @@ describe('100 Clinical Diff & Cockpit Edge-Case Tests', () => {
   });
 
   describe('Cockpit Safety Gate, Registry, Presets & Encounter Completion (10 tests)', () => {
-    const validProposal: ProposedChange = {
-      id: 'prop-1',
+    const validProposal: Parameters<typeof evaluateProposalSafetyGate>[0] = {
       medication: 'Lisinopril',
       action: 'change',
       current: [
-        { field: 'dose', value: '10 mg', classification: 'documented' },
-        { field: 'route', value: 'oral', classification: 'documented' },
-        { field: 'frequency', value: 'daily', classification: 'documented' },
+        { field: 'dose', value: '10 mg', classification: 'authoritative' },
+        { field: 'route', value: 'oral', classification: 'authoritative' },
+        { field: 'frequency', value: 'daily', classification: 'authoritative' },
       ],
       proposed: [
-        { field: 'dose', value: '20 mg', classification: 'documented' },
-        { field: 'route', value: 'oral', classification: 'documented' },
-        { field: 'frequency', value: 'daily', classification: 'documented' },
+        { field: 'dose', value: '20 mg', classification: 'authoritative' },
+        { field: 'route', value: 'oral', classification: 'authoritative' },
+        { field: 'frequency', value: 'daily', classification: 'authoritative' },
       ],
       diff: [{ field: 'dose', before: '10 mg', after: '20 mg' }],
       evidence: [
@@ -541,8 +538,7 @@ describe('100 Clinical Diff & Cockpit Edge-Case Tests', () => {
           quote: 'Increase Lisinopril to 20 mg daily.',
         },
       ],
-      authority: 'documented',
-      uncertainty: 'low',
+      authority: 'chart_fact',
     };
 
     it('evaluateProposalSafetyGate blocks proposal with empty evidence', () => {
@@ -575,9 +571,9 @@ describe('100 Clinical Diff & Cockpit Edge-Case Tests', () => {
         action: 'start',
         current: [],
         proposed: [
-          { field: 'dose', value: '', classification: 'missing' },
-          { field: 'route', value: 'oral', classification: 'documented' },
-          { field: 'frequency', value: 'daily', classification: 'documented' },
+          { field: 'dose', value: '', classification: 'derived' },
+          { field: 'route', value: 'oral', classification: 'authoritative' },
+          { field: 'frequency', value: 'daily', classification: 'authoritative' },
         ],
       });
       expect(res.status).not.toBe('passed');
@@ -615,9 +611,8 @@ describe('100 Clinical Diff & Cockpit Edge-Case Tests', () => {
     it('evaluateEncounterCompletion blocks when encounter is null', () => {
       const res = evaluateEncounterCompletion({
         encounter: null,
-        proposals: [],
-        dispositions: {},
-        gateResults: {},
+        proposedChanges: [],
+        dispositions: [],
         documentationCommitted: false,
       });
       expect(res.canComplete).toBe(false);
