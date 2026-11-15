@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import Home from '@/app/page';
+import { CockpitWidgets } from '@/components/CockpitWidgets';
 import { syntheticScenarios } from '@/lib/fixtures';
 import { hfDatasetSources, hfNoteComparisonPairs } from '@/lib/hf-fixtures';
 
@@ -1028,5 +1029,141 @@ describe('Clinical Diff Veritas Editorial UI', () => {
     } finally {
       globalThis.fetch = origFetch;
     }
+  });
+
+  it('drills down from provenance-health to expanded medication evidence with focus return and Source unavailable distinction', async () => {
+    const user = userEvent.setup();
+    render(<Home />);
+
+    const cockpit = screen.getByRole('region', { name: 'Clinical cockpit widgets' });
+    const provenanceCard = cockpit.querySelector<HTMLElement>('[data-widget-id="provenance-health"]')!;
+
+    // 1. Morgan Lee (DEMO-001): select Lisinopril directly from provenance-health
+    const lisinoprilTrigger = within(provenanceCard).getByRole('button', { name: /Lisinopril/i });
+    await user.click(lisinoprilTrigger);
+
+    const evidenceRegion = screen.getByLabelText('Evidence and provenance for Lisinopril');
+    await waitFor(() => expect(evidenceRegion).toHaveFocus());
+    expect(evidenceRegion).toHaveTextContent('Fictional outpatient medication list');
+    expect(evidenceRegion).toHaveTextContent('2026-10-01');
+    expect(evidenceRegion).toHaveTextContent('Fictional discharge medication list');
+    expect(evidenceRegion).toHaveTextContent('2026-10-15');
+    // Structured fields alone must not fabricate an exact quote
+    expect(evidenceRegion).toHaveTextContent(/Snapshot entry only; no supporting clinical note, excerpt, or span provided/i);
+
+    // Return focus to the exact trigger via Back to evidence widget button
+    await user.click(within(evidenceRegion).getByRole('button', { name: 'Back to evidence widget' }));
+    await waitFor(() => expect(lisinoprilTrigger).toHaveFocus());
+    expect(screen.queryByLabelText('Evidence and provenance for Lisinopril')).not.toBeInTheDocument();
+
+    // Re-open via keyboard and close with Escape -> focus returns to trigger
+    lisinoprilTrigger.focus();
+    await user.keyboard('{Enter}');
+    const reopenedEvidence = screen.getByLabelText('Evidence and provenance for Lisinopril');
+    await waitFor(() => expect(reopenedEvidence).toHaveFocus());
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(lisinoprilTrigger).toHaveFocus());
+
+    // 2. Documented negative finding on an absent side (Aspirin removed in Morgan Lee)
+    const aspirinTrigger = within(provenanceCard).getByRole('button', { name: /Aspirin/i });
+    await user.click(aspirinTrigger);
+    const aspirinEvidence = screen.getByLabelText('Evidence and provenance for Aspirin');
+    expect(aspirinEvidence).toHaveTextContent(/Later side: Not listed in Snapshot B/i);
+  });
+
+  it('labels unresolved or unavailable evidence links as Source unavailable in provenance-health', async () => {
+    const user = userEvent.setup();
+    const onSelectEvidenceChange = vi.fn();
+
+    render(
+      <CockpitWidgets
+        snapshotEntries={[{ id: 'm-unavail', kind: 'changed', name: 'Warfarin' }]}
+        reviews={{}}
+        activeReport={{
+          earlierProvenance: {
+            present: true,
+            status: 'documented',
+            sourceKind: 'clinical_note',
+            sourceLabel: 'Clinic note',
+            attributedBy: null,
+            recordedAt: '2026-10-01',
+            ambiguous: false,
+            flags: [],
+            gaps: [],
+          },
+          laterProvenance: {
+            present: true,
+            status: 'unknown',
+            sourceKind: 'unknown',
+            sourceLabel: null,
+            attributedBy: null,
+            recordedAt: null,
+            ambiguous: false,
+            flags: [],
+            gaps: [],
+          },
+          provenanceGaps: [],
+          evidenceLinks: [
+            {
+              id: 'ev-1',
+              side: 'later',
+              resolutionStatus: 'unavailable',
+              provenanceStatus: 'unknown',
+              excerpt: null,
+              span: null,
+            },
+          ],
+          changes: [
+            {
+              medicationId: 'm-unavail',
+              name: 'Warfarin',
+              kind: 'changed',
+              fields: [{ field: 'dose', before: '5 mg', after: '2.5 mg' }],
+              evidenceLinks: [
+                {
+                  id: 'ev-1',
+                  side: 'later',
+                  resolutionStatus: 'unavailable',
+                  provenanceStatus: 'unknown',
+                  excerpt: null,
+                  span: null,
+                },
+              ],
+            },
+          ],
+        }}
+        triageByScenario={{}}
+        socketStatus={{
+          socket_open: false,
+          state: 'standby',
+          status: 'standby',
+          provider: 'deterministic_replay',
+          configured: false,
+          reachable: false,
+          mode: 'unavailable',
+          simulated: true,
+          live_ai: false,
+          model: null,
+          adapter: null,
+          model_loaded: false,
+          target: null,
+          checked_at: '2026-11-14T00:00:00.000Z',
+          detail: 'Offline',
+          endpoints: {
+            socket: '/api/model-socket',
+            health: '/api/health',
+            compare: '/api/compare',
+          },
+        }}
+        evalSummary={null}
+        audit={[]}
+        onNavigate={vi.fn()}
+        onSelectEvidenceChange={onSelectEvidenceChange}
+      />,
+    );
+
+    const trigger = screen.getByRole('button', { name: /Warfarin.*Source unavailable/i });
+    await user.click(trigger);
+    expect(onSelectEvidenceChange).toHaveBeenCalledWith('m-unavail');
   });
 });

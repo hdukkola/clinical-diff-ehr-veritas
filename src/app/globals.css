@@ -1019,6 +1019,40 @@ kbd {
   align-items: center;
 }
 
+.evidence-back-btn {
+  margin-left: auto;
+  padding: 4px 10px;
+  min-height: 28px;
+  border-radius: 6px;
+  border: 1px solid var(--line-2);
+  background: var(--raised);
+  color: var(--text);
+  font-size: 11.5px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.evidence-back-btn:hover {
+  border-color: var(--accent);
+  color: var(--strong);
+}
+
+.evidence-back-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.evidence-side-note {
+  font-size: 12px;
+  color: var(--muted);
+  margin: 0 0 8px;
+}
+
+.e-tag.unavailable {
+  border-color: color-mix(in srgb, var(--del) 45%, transparent);
+  color: var(--del);
+}
+
 .evidence-list {
   list-style: none;
   display: flex;
@@ -2489,6 +2523,75 @@ pre.code .c {
 .cw-pill small {
   font-size: 11px;
   color: var(--muted);
+}
+
+.cw-evidence-drill {
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+}
+
+.cw-evidence-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cw-evidence-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 7px 10px;
+  min-height: 36px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--sunk);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.cw-evidence-btn:hover {
+  border-color: var(--line-2);
+  background: var(--raised);
+}
+
+.cw-evidence-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.cw-evidence-name {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+
+.cw-evidence-name strong {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--strong);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cw-evidence-name small {
+  font-size: 11px;
+  color: var(--muted);
+  flex-shrink: 0;
+}
+
+@media (hover: none), (max-width: 780px) {
+  .cw-evidence-btn,
+  .evidence-back-btn {
+    min-height: 44px;
+  }
 }
 
 /* ---------- Model socket ---------- */

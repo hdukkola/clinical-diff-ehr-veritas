@@ -59,7 +59,9 @@ export interface CockpitAuditEntry {
 export type CockpitReportSummary = Pick<
   SnapshotComparisonReport,
   'evidenceLinks' | 'provenanceGaps' | 'earlierProvenance' | 'laterProvenance'
->;
+> & {
+  changes?: SnapshotComparisonReport['changes'];
+};
 
 export interface CockpitWidgetsProps {
   snapshotEntries: ReadonlyArray<CockpitSnapshotEntry>;
@@ -71,6 +73,7 @@ export interface CockpitWidgetsProps {
   evalSummary: CockpitEvalSummary | null;
   audit: ReadonlyArray<CockpitAuditEntry>;
   onNavigate: (view: CockpitViewId, filter?: CockpitNavigateFilter) => void;
+  onSelectEvidenceChange?: (medId: string) => void;
   order?: CockpitWidgetId[];
   onOrderChange?: (nextOrder: CockpitWidgetId[]) => void;
 }
@@ -535,6 +538,7 @@ export function CockpitWidgets({
   evalSummary,
   audit,
   onNavigate,
+  onSelectEvidenceChange,
   order: controlledOrder,
   onOrderChange,
 }: CockpitWidgetsProps) {
@@ -872,44 +876,106 @@ export function CockpitWidgets({
           { key: 'partial', label: 'Partial', value: provenanceStats.partial, tone: 'chg', color: 'var(--chg)' },
           { key: 'unresolved', label: 'Unresolved', value: provenanceStats.unresolved, tone: 'del', color: 'var(--del)' },
         ];
+        const changes = activeReport?.changes ?? [];
 
         return (
-          <button type="button" className="cw-drill-btn" onClick={() => onNavigate('diff', 'all')}>
-            <div className="cw-stack-wrap">
-              <div className="cw-hero-row">
-                <div className="cw-hero">
-                  <span className="cw-hero-num">{resolvedPct}</span>
-                  <span className="cw-hero-cap">resolved</span>
+          <div className="cw-stack-wrap">
+            <button type="button" className="cw-drill-btn" onClick={() => onNavigate('diff', 'all')}>
+              <div className="cw-stack-wrap">
+                <div className="cw-hero-row">
+                  <div className="cw-hero">
+                    <span className="cw-hero-num">{resolvedPct}</span>
+                    <span className="cw-hero-cap">resolved</span>
+                  </div>
+                  <div className="cw-hero-side">
+                    <span className="cw-hero-meta">
+                      <b>{total}</b> {total === 1 ? 'link' : 'links'}
+                    </span>
+                    <span className={`cw-gap-pill ${provenanceStats.gapCount > 0 ? 'tone-chg' : 'tone-add'}`}>
+                      <span className="cw-dot" aria-hidden="true" />
+                      {provenanceStats.gapCount} {provenanceStats.gapCount === 1 ? 'gap' : 'gaps'}
+                    </span>
+                  </div>
                 </div>
-                <div className="cw-hero-side">
-                  <span className="cw-hero-meta">
-                    <b>{total}</b> {total === 1 ? 'link' : 'links'}
-                  </span>
-                  <span className={`cw-gap-pill ${provenanceStats.gapCount > 0 ? 'tone-chg' : 'tone-add'}`}>
-                    <span className="cw-dot" aria-hidden="true" />
-                    {provenanceStats.gapCount} {provenanceStats.gapCount === 1 ? 'gap' : 'gaps'}
-                  </span>
+
+                <StackedBar
+                  segments={pills.map((p) => ({ key: p.key, value: p.value, color: p.color }))}
+                  total={total}
+                  height={12}
+                  ariaLabel={`Provenance evidence bar: ${provenanceStats.resolved} resolved, ${provenanceStats.partial} partial, ${provenanceStats.unresolved} unresolved of ${total} evidence links`}
+                />
+
+                <div className="cw-pill-row">
+                  {pills.map((pill) => (
+                    <span key={pill.key} className={`cw-pill tone-${pill.tone}`}>
+                      <span className="cw-dot" aria-hidden="true" />
+                      <b>{pill.value}</b>
+                      <small>{pill.label}</small>
+                    </span>
+                  ))}
                 </div>
               </div>
+            </button>
 
-              <StackedBar
-                segments={pills.map((p) => ({ key: p.key, value: p.value, color: p.color }))}
-                total={total}
-                height={12}
-                ariaLabel={`Provenance evidence bar: ${provenanceStats.resolved} resolved, ${provenanceStats.partial} partial, ${provenanceStats.unresolved} unresolved of ${total} evidence links`}
-              />
+            <div className="cw-evidence-drill">
+              {changes.length === 0 ? (
+                <p className="cw-empty">No medication changes to inspect.</p>
+              ) : (
+                <ul className="cw-evidence-list" aria-label="Source evidence drill-down by medication">
+                  {changes.map((change) => {
+                    const links = change.evidenceLinks ?? [];
+                    const hasUnavailable = links.some(
+                      (l) => l.resolutionStatus === 'unavailable' || l.resolutionStatus === 'unresolved',
+                    );
+                    const allResolved =
+                      links.length > 0 && links.every((l) => l.resolutionStatus === 'resolved');
+                    const hasAmbiguous = links.some((l) => l.resolutionStatus === 'ambiguous');
+                    const statusLabel = hasUnavailable
+                      ? 'Source unavailable'
+                      : allResolved
+                        ? 'Resolved'
+                        : hasAmbiguous
+                          ? 'Ambiguous'
+                          : 'Partial';
+                    const statusTone: Tone = hasUnavailable
+                      ? 'del'
+                      : allResolved
+                        ? 'add'
+                        : 'chg';
+                    const kindLabel =
+                      change.kind === 'changed'
+                        ? 'Changed'
+                        : change.kind === 'removed'
+                          ? 'Removed'
+                          : 'Added';
 
-              <div className="cw-pill-row">
-                {pills.map((pill) => (
-                  <span key={pill.key} className={`cw-pill tone-${pill.tone}`}>
-                    <span className="cw-dot" aria-hidden="true" />
-                    <b>{pill.value}</b>
-                    <small>{pill.label}</small>
-                  </span>
-                ))}
-              </div>
+                    return (
+                      <li key={change.medicationId}>
+                        <button
+                          type="button"
+                          className="cw-evidence-btn"
+                          data-evidence-trigger={change.medicationId}
+                          onClick={() =>
+                            onSelectEvidenceChange
+                              ? onSelectEvidenceChange(change.medicationId)
+                              : onNavigate('diff', 'all')
+                          }
+                        >
+                          <span className="cw-evidence-name">
+                            <strong>{`${change.name} · ${kindLabel}`}</strong>
+                          </span>
+                          <span className={`cw-pill tone-${statusTone}`}>
+                            <span className="cw-dot" aria-hidden="true" />
+                            <span>{statusLabel}</span>
+                          </span>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
             </div>
-          </button>
+          </div>
         );
       }
 

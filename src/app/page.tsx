@@ -131,9 +131,9 @@ const GAP_REASON_LABELS: Record<ProvenanceGapReason, string> = {
 const RESOLUTION_LABELS: Record<ResolvedEvidenceLink['resolutionStatus'], string> = {
   resolved: 'Resolved',
   partial: 'Partial',
-  unresolved: 'Unresolved',
+  unresolved: 'Source unavailable',
   ambiguous: 'Ambiguous',
-  unavailable: 'Unavailable',
+  unavailable: 'Source unavailable',
 };
 
 const DIFF_GLYPHS: Record<'changed' | 'onlyA' | 'onlyB' | 'same', { glyph: string; label: string }> = {
@@ -949,6 +949,7 @@ export default function Home() {
   const [diffTab, setDiffTab] = useState<DiffTab>('diff');
   const [diffFilter, setDiffFilter] = useState<DiffFilter>('all');
   const [selectedMedId, setSelectedMedId] = useState<string | null>(null);
+  const [evidenceReturnMedId, setEvidenceReturnMedId] = useState<string | null>(null);
   const [reviews, setReviews] = useState<Record<string, ReviewDecision>>({});
   const [notes, setNotes] = useState<Record<string, string>>({});
 
@@ -1180,6 +1181,7 @@ export default function Home() {
 
   const handleCockpitNavigate = useCallback(
     (nextView: CockpitViewId, filter?: CockpitNavigateFilter) => {
+      setEvidenceReturnMedId(null);
       if (nextView === 'diff') {
         setDiffTab('diff');
         if (
@@ -1197,11 +1199,66 @@ export default function Home() {
     [navigateTo],
   );
 
+  const handleSelectEvidenceChange = useCallback(
+    (medId: string) => {
+      const targetEntry = snapshotEntries.find((entry) => entry.id === medId);
+      setView('diff');
+      setDiffTab('diff');
+      setDiffFilter('all');
+      setSelectedMedId(medId);
+      setEvidenceReturnMedId(medId);
+      setMobileNavOpen(false);
+      setAnnouncement(
+        targetEntry
+          ? `Opened source evidence for ${targetEntry.name}`
+          : 'Opened source evidence in Snapshot review',
+      );
+      requestAnimationFrame(() => {
+        const evidenceEl = document.querySelector<HTMLElement>(
+          `.entry[data-value="${CSS.escape(medId)}"] .evidence-block`,
+        );
+        const fallbackRow = document.querySelector<HTMLElement>(
+          `.entry-trigger[data-value="${CSS.escape(medId)}"]`,
+        );
+        const target = evidenceEl ?? fallbackRow;
+        target?.focus({ preventScroll: true });
+        target?.scrollIntoView?.({ block: 'nearest' });
+      });
+    },
+    [snapshotEntries],
+  );
+
+  const closeEvidenceDrilldown = useCallback(
+    (medId: string, restoreRowFocus = false) => {
+      const returnTriggerMedId = evidenceReturnMedId === medId ? medId : null;
+      setSelectedMedId(null);
+      setEvidenceReturnMedId(null);
+      requestAnimationFrame(() => {
+        if (returnTriggerMedId) {
+          const trigger = document.querySelector<HTMLElement>(
+            `[data-widget-id="provenance-health"] [data-evidence-trigger="${CSS.escape(returnTriggerMedId)}"]`,
+          );
+          trigger?.focus({ preventScroll: true });
+          trigger?.scrollIntoView?.({ block: 'nearest' });
+          return;
+        }
+        if (restoreRowFocus) {
+          const row = document.querySelector<HTMLElement>(
+            `.entry-trigger[data-value="${CSS.escape(medId)}"]`,
+          );
+          row?.focus({ preventScroll: true });
+        }
+      });
+    },
+    [evidenceReturnMedId],
+  );
+
   const selectPatient = useCallback(
     (scenarioId: string) => {
       setSelectedScenarioId(scenarioId);
       setDiffFilter('all');
       setSelectedMedId(null);
+      setEvidenceReturnMedId(null);
       setMobileNavOpen(false);
       const targetView: ViewId = view === 'triage' ? 'triage' : 'diff';
       setView(targetView);
@@ -1274,20 +1331,28 @@ export default function Home() {
     ],
   );
 
-  const toggleSnapshotRow = useCallback((medId: string, restoreRowFocus = false) => {
-    setSelectedMedId((curr) => (curr === medId ? null : medId));
-    if (restoreRowFocus) {
-      const previousFocus = document.activeElement;
-      requestAnimationFrame(() => {
-        // Do not pull focus away if the user has already moved on.
-        if (document.activeElement !== previousFocus && document.activeElement !== document.body) return;
-        const row = document.querySelector<HTMLElement>(
-          `.entry-trigger[data-value="${CSS.escape(medId)}"]`,
-        );
-        row?.focus({ preventScroll: true });
-      });
-    }
-  }, []);
+  const toggleSnapshotRow = useCallback(
+    (medId: string, restoreRowFocus = false) => {
+      if (selectedMedId === medId) {
+        closeEvidenceDrilldown(medId, restoreRowFocus);
+        return;
+      }
+      setEvidenceReturnMedId(null);
+      setSelectedMedId(medId);
+      if (restoreRowFocus) {
+        const previousFocus = document.activeElement;
+        requestAnimationFrame(() => {
+          // Do not pull focus away if the user has already moved on.
+          if (document.activeElement !== previousFocus && document.activeElement !== document.body) return;
+          const row = document.querySelector<HTMLElement>(
+            `.entry-trigger[data-value="${CSS.escape(medId)}"]`,
+          );
+          row?.focus({ preventScroll: true });
+        });
+      }
+    },
+    [closeEvidenceDrilldown, selectedMedId],
+  );
 
   /* ---- Compare Notes Actions ---- */
   const handleSelectPreset = useCallback(
@@ -1955,7 +2020,7 @@ export default function Home() {
           return;
         }
         if (selectedMedId) {
-          setSelectedMedId(null);
+          closeEvidenceDrilldown(selectedMedId, true);
           return;
         }
       }
@@ -2013,6 +2078,7 @@ export default function Home() {
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [
+    closeEvidenceDrilldown,
     cmdOpen,
     diffFilter,
     diffTab,
@@ -2432,6 +2498,7 @@ export default function Home() {
               evalSummary={evalSummary}
               audit={audit}
               onNavigate={handleCockpitNavigate}
+              onSelectEvidenceChange={handleSelectEvidenceChange}
               order={widgetOrder}
               onOrderChange={setWidgetOrder}
             />
@@ -3180,6 +3247,7 @@ export default function Home() {
                                     {entry.kind !== 'same' && (
                                       <div
                                         className="evidence-block"
+                                        tabIndex={-1}
                                         aria-label={`Evidence and provenance for ${entry.name}`}
                                       >
                                         <div className="evidence-block-h">
@@ -3193,40 +3261,82 @@ export default function Home() {
                                               ? 'evidence link'
                                               : 'evidence links'}
                                           </span>
+                                          {evidenceReturnMedId === entry.id && (
+                                            <button
+                                              type="button"
+                                              className="evidence-back-btn"
+                                              onClick={() => closeEvidenceDrilldown(entry.id, true)}
+                                            >
+                                              Back to evidence widget
+                                            </button>
+                                          )}
                                         </div>
+
+                                        {entry.kind === 'onlyA' && (
+                                          <p className="evidence-side-note">
+                                            {entry.change?.provenance?.later.status === 'documented'
+                                              ? 'Later side: Documented negative (not listed in Snapshot B).'
+                                              : 'Later side: Not listed in Snapshot B (not assumed stopped).'}
+                                          </p>
+                                        )}
+                                        {entry.kind === 'onlyB' && (
+                                          <p className="evidence-side-note">
+                                            {entry.change?.provenance?.earlier.status === 'documented'
+                                              ? 'Earlier side: Documented negative (not listed in Snapshot A).'
+                                              : 'Earlier side: Not listed in Snapshot A.'}
+                                          </p>
+                                        )}
 
                                         {entryLinks.length > 0 ? (
                                           <ul className="evidence-list">
-                                            {entryLinks.map((link, idx) => (
-                                              <li className="evidence-item" key={idx}>
-                                                <div className="evidence-meta">
-                                                  {link.side && (
-                                                    <span className="e-tag">{link.side}</span>
-                                                  )}
-                                                  <span className="e-tag">
-                                                    {RESOLUTION_LABELS[link.resolutionStatus]}
-                                                  </span>
-                                                  <span
-                                                    className={`e-tag prov-${link.provenanceStatus}`}
-                                                  >
-                                                    {PROVENANCE_STATUS_LABELS[link.provenanceStatus]}
-                                                  </span>
-                                                  {link.section && <span>{link.section}</span>}
-                                                  {link.span && (
-                                                    <span className="mono">
-                                                      [{link.span.start}–{link.span.end}]
+                                            {entryLinks.map((link, idx) => {
+                                              const isUnavailable =
+                                                link.resolutionStatus === 'unavailable' ||
+                                                link.resolutionStatus === 'unresolved';
+                                              return (
+                                                <li className="evidence-item" key={idx}>
+                                                  <div className="evidence-meta">
+                                                    {link.side && (
+                                                      <span className="e-tag">{link.side}</span>
+                                                    )}
+                                                    <span
+                                                      className={`e-tag${isUnavailable ? ' unavailable' : ''}`}
+                                                    >
+                                                      {RESOLUTION_LABELS[link.resolutionStatus]}
                                                     </span>
+                                                    <span
+                                                      className={`e-tag prov-${link.provenanceStatus}`}
+                                                    >
+                                                      {PROVENANCE_STATUS_LABELS[link.provenanceStatus]}
+                                                    </span>
+                                                    {link.sourceLabel && (
+                                                      <span>{link.sourceLabel}</span>
+                                                    )}
+                                                    {link.recordedAt && (
+                                                      <span>{link.recordedAt}</span>
+                                                    )}
+                                                    {link.section && <span>{link.section}</span>}
+                                                    {link.span && (
+                                                      <span className="mono">
+                                                        [{link.span.start}–{link.span.end}]
+                                                      </span>
+                                                    )}
+                                                  </div>
+                                                  {link.excerpt ? (
+                                                    <p>&ldquo;{link.excerpt}&rdquo;</p>
+                                                  ) : isUnavailable ? (
+                                                    <p className="nd">
+                                                      Source unavailable
+                                                      {link.note ? ` — ${link.note}` : '.'}
+                                                    </p>
+                                                  ) : (
+                                                    <p className="nd">
+                                                      {link.note ?? 'No supporting excerpt attached.'}
+                                                    </p>
                                                   )}
-                                                </div>
-                                                {link.excerpt ? (
-                                                  <p>&ldquo;{link.excerpt}&rdquo;</p>
-                                                ) : (
-                                                  <p className="nd">
-                                                    No supporting excerpt attached.
-                                                  </p>
-                                                )}
-                                              </li>
-                                            ))}
+                                                </li>
+                                              );
+                                            })}
                                           </ul>
                                         ) : (
                                           <p className="nd" style={{ fontSize: 12 }}>
