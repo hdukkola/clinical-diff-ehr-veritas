@@ -2378,7 +2378,6 @@ export default function Home() {
     if (page !== 'chat') setChatChartId(activeScenario.id);
     navigateTo('chat', false);
     setWidgetEditPage(page);
-    focusSection('chat-proposal-title');
   }
 
   function approveChartCorrection(change: ChartCorrection) {

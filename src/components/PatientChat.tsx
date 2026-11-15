@@ -87,7 +87,6 @@ export function PatientChat({
     setDraft(answer?.draft);
     setStatus('');
     setProposalVersion((version) => version + 1);
-    requestAnimationFrame(() => document.getElementById('chat-proposal-title')?.focus());
   }
 
   async function ask(value: string) {
@@ -254,6 +253,8 @@ function EditProposal({
   const [source, setSource] = useState('');
   const [proposal, setProposal] = useState<Proposal | null>(null);
   const [confirmed, setConfirmed] = useState(false);
+  const proposalTitleRef = useRef<HTMLHeadingElement>(null);
+  useEffect(() => { proposalTitleRef.current?.focus(); }, []);
   const med = snapshot.medications.find((entry) => entry.id === medicationId);
   const chartBefore = med ? applyChartCorrections(med, chartCorrectionsFor(corrections, chart.id, snapshot.id, med.id))[field] ?? '' : '';
   const before = kind === 'chart' ? chartBefore : widgetNotes[pageId] ?? '';
@@ -274,7 +275,7 @@ function EditProposal({
 
   return (
     <section className="patient-chat-review" aria-labelledby="chat-proposal-title">
-      <h2 id="chat-proposal-title" tabIndex={-1}>{kind === 'chart' ? 'Chart correction' : 'Widget note'}</h2>
+      <h2 id="chat-proposal-title" ref={proposalTitleRef} tabIndex={-1}>{kind === 'chart' ? 'Chart correction' : 'Widget note'}</h2>
       {proposal ? (
         <>
           <p className="patient-chat-scope">
