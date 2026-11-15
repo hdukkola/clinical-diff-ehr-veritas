@@ -67,16 +67,6 @@ Synthetic single-patient cockpit and fixed scenarios; no real EHR integration, a
 - **Himnish Dukkola** — `hdukkola@gmail.com` — Coppell High School
 - **Utkarsh Valluri** — `utkarshv28116@gmail.com` — Coppell High School
 
-### Credits
-- **Synthetic Data & Fixtures:**
-  - Fictional synthetic medication snapshots & replay fixtures (`src/lib/fixtures.ts`, `fresh-backend/replay.py`)
-  - Open-licensed synthetic/de-identified benchmarks evaluated in `COMMUNICATION.md`:
-    - [AGBonnet/augmented-clinical-notes](https://huggingface.co/datasets/AGBonnet/augmented-clinical-notes) (MIT)
-    - [oopere/clinical-ner-qdora](https://huggingface.co/datasets/oopere/clinical-ner-qdora) (MIT)
-    - [ClarusC64 Medication Reconciliation Benchmarks](https://huggingface.co/datasets/ClarusC64/clinical-medication-reconciliation-discrepancy-risk-v0.1) (MIT)
-    - [MITRE Synthea Synthetic Cohorts](https://huggingface.co/datasets/richardyoung/synthea-575k-patients) (MIT)
-- **Models & Tools:**
-  - Local MLX / deterministic replay comparison service (`fresh-backend/service.py`)
-  - [Google Antigravity](https://antigravity.google) (Gemini) — UI/backend hardening, cockpit widgets, simulation & eval suites, coordination
-  - [OpenAI Codex](https://openai.com/codex) — backend/editorial integration, model-lab harness & test suite
-  - [Figma Make](https://www.figma.com) — Editorial Redesign UI prototype
+### Credits and evidence
+
+See the [Veritas submission credits and evidence](docs/submission/VERITAS_CREDITS.md) for linked dataset and model attribution, tutorials and AI tools, recorded evaluation results, and both teammates’ contributions.
