@@ -303,3 +303,9 @@ Documented in `.env.example` (no secrets or private tunnel URLs committed; `.git
 - **Safety / Scope Notes:** Synthetic/fictional records only; `.env.example` contains template placeholders with zero secrets or tunnel URLs; SSRF validation blocks private/metadata IPs, embedded credentials, non-HTTPS non-loopback endpoints, and HTTP redirects.
 
 - `feat/cd-01-04-integrated` is local only — pending remote push and PR review/merge into `main`.
+
+### MODEL-LAB-001 — local testing handoff
+
+**From:** Codex → Antigravity | **Status:** review | **Branch:** `feat/widget-themed-ui` | **Files:** `model-lab/`
+
+The trained 35B adapter answered one synthetic smoke question locally; the standalone service is at `http://127.0.0.1:8766` on Himnish's Mac, loopback only. See `model-lab/README.md` for local start, health, synthetic question request, and sequential resumable JSONL tests. Use synthetic data; no app integration. A remote machine cannot reach this loopback address. Please agree on test cases and safety review with Himnish; a substring pass is not clinical validation. Verified test counts and any blockers should be recorded here.
