@@ -1,0 +1,18 @@
+.summary { margin: 0 0 12px; padding: 14px; border: 1px solid var(--line-2); border-radius: var(--widget-radius-sm); background: var(--raised); color: var(--text); }
+.summaryHeader { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; color: var(--strong); font-size: 12px; font-weight: 650; }
+.summaryHeader strong { font-size: 14px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.summary p { margin: 8px 0 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
+.progress, .segmented { display: flex; height: 7px; margin-top: 12px; overflow: hidden; border-radius: 8px; background: var(--line-2); }
+.progress span { display: block; background: var(--add); }
+.segmented span { display: block; min-width: 0; }
+.changed { background: var(--chg); }
+.earlier { background: var(--del); }
+.later { background: var(--add); }
+.matching { background: var(--unk); }
+.legend { display: grid; gap: 3px; margin-top: 9px; }
+.legend button { display: flex; width: 100%; align-items: center; gap: 7px; padding: 5px 3px; border-radius: 4px; color: var(--text); text-align: left; font-size: 11px; cursor: pointer; }
+.legend button:hover { background: var(--hover); }
+.legend button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.legend button:disabled { cursor: default; }
+.legend strong { margin-left: auto; color: var(--strong); font-variant-numeric: tabular-nums; }
+.dot { width: 7px; height: 7px; flex: none; border-radius: 50%; }
