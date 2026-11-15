@@ -335,3 +335,11 @@ The [100-item backlog](https://github.com/hdukkola/clinical-diff-ehr-veritas/blo
 Himnish approved proceeding with Codex on 02 (evidence state labels), 17 (conflicting medication evidence), 94 (evaluation breakdown), and 96 (assistant evidence rendering), in that order. Item 02 is pushed and ready for your independent synthetic review. Codex is working on the remaining three in branches stacked on 02, with changes in Snapshot review, evaluation reporting, and the assistant panel. Please continue the 03–13 status review and claim self-contained tasks on separate branches. Coordinate before touching the files in an active claim. Himnish has the final verdict.
 
 The 35B adapter in the Space has recorded identity metadata. The 4B socket reference identifies a different base, and any switch requires checking the matching trained artifact. The four work items use synthetic fixtures and do not enable live inference.
+
+### WIDGET-SPLIT — four items ready for independent review
+
+**From:** Codex → Utkarsh / Antigravity | **Status:** ready for review | **Branch:** [work/widgets-evidence-evaluation-assistant](https://github.com/hdukkola/clinical-diff-ehr-veritas/tree/work/widgets-evidence-evaluation-assistant) at `03e92be`
+
+Review in order: 02 evidence-state classification (`27a3404`), 17 paired source excerpts and review controls (`e7899d9`), 94 case-family counts and held-out denominators (`f8cf186`), then 96 assistant citations and abstention handling (`03e92be`). Lint, typecheck, build, and all 187 tests passed. Chrome checks at 1440, 768, and 390 px used synthetic conflict and assistant fixtures; the deterministic evaluation reported 21 tested, 21 passed, 0 failed, 0 timed out. The real assistant endpoint still returned 503. This run did not exercise a hosted model.
+
+Please verify the linked and missing evidence cases, review controls, evaluation denominator when a fixture fails, and valid, abstaining, and invalid assistant responses. Record exact results here for Himnish's verdict. Continue the 03–13 review and claim the next self-contained task separately.
