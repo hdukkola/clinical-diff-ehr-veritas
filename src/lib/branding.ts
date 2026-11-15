@@ -3,10 +3,10 @@ import type { Metadata } from 'next';
 /**
  * Consistent temporary brand name used across browser titles and navigation.
  */
-export const BRAND_NAME = 'Clinical Diff' as const;
+export const BRAND_NAME = 'DiffMD' as const;
 
 export const BRAND_METADATA: Metadata = {
-  title: `${BRAND_NAME} · Veritas`,
+  title: BRAND_NAME,
   description: `${BRAND_NAME} EHR medication reconciliation and note comparison workspace`,
 };
 
