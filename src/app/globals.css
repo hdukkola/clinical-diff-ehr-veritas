@@ -2711,3 +2711,15 @@ pre.code .c {
   .cw-card, .cw-card button, .item { transition: none; }
   .cw-card.is-dragging, .cw-card.is-drop-target, .cw-card button:active, .item:active { transform: none; }
 }
+
+.assistant-panel { margin-bottom: 16px; border: 1px solid var(--border, #38383d); border-radius: 12px; overflow: hidden; }
+.assistant-toggle { display: flex; width: 100%; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px; background: transparent; color: inherit; border: 0; text-align: left; cursor: pointer; }
+.assistant-toggle strong, .assistant-toggle small { display: block; }
+.assistant-toggle small { margin-top: 3px; opacity: .7; }
+.assistant-content { padding: 0 16px 16px; font-size: 13px; }
+.assistant-content p { margin: 0 0 12px; line-height: 1.5; }
+.assistant-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.assistant-actions button { padding: 9px 12px; border: 1px solid var(--border, #555); border-radius: 8px; background: transparent; color: inherit; cursor: pointer; }
+.assistant-actions button:disabled { opacity: .5; cursor: wait; }
+.assistant-toggle:focus-visible, .assistant-actions button:focus-visible { outline: 2px solid currentColor; outline-offset: -3px; }
+.assistant-status { margin-top: 12px !important; opacity: .8; }

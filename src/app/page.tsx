@@ -18,6 +18,7 @@ import {
   type NoteRegimenChangeCategory,
 } from '@/lib/diff';
 import { BRAND_NAME } from '@/lib/branding';
+import { AssistantPanel } from '@/components/AssistantPanel';
 import {
   DEFAULT_MLX_MODEL_ID,
   SOCKET_ENDPOINTS,
@@ -2417,6 +2418,7 @@ export default function Home() {
           </div>
 
           <div className="col">
+            <AssistantPanel />
             <CockpitWidgets
               snapshotEntries={snapshotEntries}
               reviews={reviews}
