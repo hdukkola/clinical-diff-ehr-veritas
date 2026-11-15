@@ -2078,3 +2078,142 @@ export function buildReconciliationWorklist(
     resolvedCount,
   };
 }
+
+export type BeforeAfterRegimenRowKey = 'dose' | 'route' | 'frequency' | 'status';
+
+export type BeforeAfterRegimenRow = {
+  key: BeforeAfterRegimenRowKey;
+  label: string;
+  before: string | null | undefined;
+  after: string | null | undefined;
+  changed: boolean;
+};
+
+export type RegimenEvidenceRef = {
+  id: string;
+  label: string;
+  excerpt: string | null;
+  section: string | null;
+  recordedAt: string | null;
+  state: EvidenceStateKind;
+  stateLabel: string;
+};
+
+export type BeforeAfterRegimen = {
+  rows: BeforeAfterRegimenRow[];
+  earlierEvidence: RegimenEvidenceRef[];
+  laterEvidence: RegimenEvidenceRef[];
+};
+
+const PROVENANCE_STATUS_LABELS: Record<ProvenanceStatus, string> = {
+  documented: 'Documented',
+  patient_reported: 'Patient-reported',
+  unverified: 'Unverified',
+  unknown: 'Unknown provenance',
+};
+
+function resolveRegimenStatus(
+  med: Medication | undefined,
+  sideStatus: ProvenanceStatus | undefined,
+): string | undefined {
+  if (!med) return undefined;
+  if (sideStatus && sideStatus in PROVENANCE_STATUS_LABELS) {
+    return PROVENANCE_STATUS_LABELS[sideStatus];
+  }
+  if (typeof med.provenance === 'string' && med.provenance in PROVENANCE_STATUS_LABELS) {
+    return PROVENANCE_STATUS_LABELS[med.provenance as ProvenanceStatus];
+  }
+  if (
+    med.provenance &&
+    typeof med.provenance === 'object' &&
+    typeof med.provenance.status === 'string' &&
+    med.provenance.status in PROVENANCE_STATUS_LABELS
+  ) {
+    return PROVENANCE_STATUS_LABELS[med.provenance.status as ProvenanceStatus];
+  }
+  return 'Present in snapshot';
+}
+
+function toRegimenEvidenceRef(
+  link: ResolvedEvidenceLink,
+  change: MedicationChange | undefined,
+  index: number,
+): RegimenEvidenceRef {
+  const state = classifyLinkEvidenceState(link, change);
+  return {
+    id: link.id ?? `${link.noteId ?? link.sourceId ?? 'ev'}-${index}`,
+    label: link.sourceLabel ?? link.noteId ?? link.sourceId ?? 'Evidence reference',
+    excerpt: link.excerpt ?? null,
+    section: link.section ?? null,
+    recordedAt: link.recordedAt ?? null,
+    state,
+    stateLabel: EVIDENCE_STATE_LABELS[state],
+  };
+}
+
+/**
+ * Builds a structured Before/After regimen comparison (Dose, Route, Frequency, Status)
+ * paired with direct earlier/later evidence references from the change record.
+ */
+export function buildBeforeAfterRegimen(
+  beforeMed: Medication | undefined,
+  afterMed: Medication | undefined,
+  change: MedicationChange | undefined,
+): BeforeAfterRegimen {
+  const beforeStatus = resolveRegimenStatus(beforeMed, change?.provenance?.earlier.status);
+  const afterStatus = resolveRegimenStatus(afterMed, change?.provenance?.later.status);
+
+  const rows: BeforeAfterRegimenRow[] = [
+    {
+      key: 'dose',
+      label: 'Dose',
+      before: beforeMed ? beforeMed.dose : undefined,
+      after: afterMed ? afterMed.dose : undefined,
+      changed:
+        beforeMed && afterMed
+          ? beforeMed.dose !== afterMed.dose
+          : Boolean(beforeMed) !== Boolean(afterMed),
+    },
+    {
+      key: 'route',
+      label: 'Route',
+      before: beforeMed ? beforeMed.route : undefined,
+      after: afterMed ? afterMed.route : undefined,
+      changed:
+        beforeMed && afterMed
+          ? beforeMed.route !== afterMed.route
+          : Boolean(beforeMed) !== Boolean(afterMed),
+    },
+    {
+      key: 'frequency',
+      label: 'Frequency',
+      before: beforeMed ? beforeMed.frequency : undefined,
+      after: afterMed ? afterMed.frequency : undefined,
+      changed:
+        beforeMed && afterMed
+          ? beforeMed.frequency !== afterMed.frequency
+          : Boolean(beforeMed) !== Boolean(afterMed),
+    },
+    {
+      key: 'status',
+      label: 'Status',
+      before: beforeStatus,
+      after: afterStatus,
+      changed: beforeStatus !== afterStatus,
+    },
+  ];
+
+  const links = change?.evidenceLinks ?? [];
+  const earlierEvidence = links
+    .filter((link) => link.side === 'earlier' || link.side === 'both' || (!link.side && Boolean(beforeMed)))
+    .map((link, idx) => toRegimenEvidenceRef(link, change, idx));
+  const laterEvidence = links
+    .filter((link) => link.side === 'later' || link.side === 'both' || (!link.side && Boolean(afterMed)))
+    .map((link, idx) => toRegimenEvidenceRef(link, change, idx));
+
+  return {
+    rows,
+    earlierEvidence,
+    laterEvidence,
+  };
+}

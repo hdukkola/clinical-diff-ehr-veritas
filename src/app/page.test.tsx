@@ -1533,4 +1533,36 @@ describe('Clinical Diff Veritas Editorial UI', () => {
     const evidenceRegion = screen.getByLabelText('Evidence and provenance for Lisinopril');
     await waitFor(() => expect(evidenceRegion).toHaveFocus());
   });
+
+  it('shows before/after regimen dose, route, frequency, status, and direct evidence jump', async () => {
+    const user = userEvent.setup();
+    render(<Home />);
+
+    await user.click(within(getPatientsGroup()).getAllByRole('button')[0]);
+    const lisBtn = screen
+      .getAllByRole('button', { name: /Lisinopril/i })
+      .find((btn) => btn.closest('.entry'));
+    expect(lisBtn).toBeTruthy();
+    const lisRow = lisBtn!.closest('.entry') as HTMLElement;
+    await user.click(lisBtn!);
+
+    const regimenSection = within(lisRow).getByRole('region', {
+      name: 'Before/after regimen for Lisinopril',
+    });
+    expect(regimenSection).toHaveTextContent('Dose');
+    expect(regimenSection).toHaveTextContent('10 mg');
+    expect(regimenSection).toHaveTextContent('20 mg');
+    expect(regimenSection).toHaveTextContent('Route');
+    expect(regimenSection).toHaveTextContent('oral');
+    expect(regimenSection).toHaveTextContent('Frequency');
+    expect(regimenSection).toHaveTextContent('daily');
+    expect(regimenSection).toHaveTextContent('Status');
+    expect(regimenSection).toHaveTextContent('Unverified');
+    expect(regimenSection).toHaveTextContent('Earlier direct evidence');
+    expect(regimenSection).toHaveTextContent('Later direct evidence');
+
+    await user.click(within(regimenSection).getByRole('button', { name: 'Jump to evidence' }));
+    const evidenceRegion = within(lisRow).getByLabelText('Evidence and provenance for Lisinopril');
+    await waitFor(() => expect(evidenceRegion).toHaveFocus());
+  });
 });

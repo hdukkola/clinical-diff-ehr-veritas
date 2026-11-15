@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   analyzeSnapshots,
+  buildBeforeAfterRegimen,
   buildDocumentIndex,
   buildEncounterTimeline,
   buildReconciliationWorklist,
@@ -818,5 +819,81 @@ describe('compareNoteRegimens & normalizeNoteText', () => {
     expect(afterVerify.totalUnresolved).toBe(3);
     expect(afterVerify.resolvedCount).toBe(1);
     expect(afterVerify.changed).toEqual([]);
+  });
+
+  it('builds before/after regimen comparison with dose, route, frequency, status, and direct evidence', () => {
+    const beforeMed = {
+      id: 'm-reg-1',
+      name: 'Lisinopril',
+      dose: '10 mg',
+      route: 'oral',
+      frequency: 'daily',
+      provenance: 'documented' as const,
+      evidenceLinks: [
+        {
+          id: 'ev-early',
+          side: 'earlier' as const,
+          sourceKind: 'clinical_note' as const,
+          sourceLabel: 'Clinic Note A',
+          excerpt: 'Continue lisinopril 10 mg PO daily.',
+        },
+      ],
+    };
+    const afterMed = {
+      id: 'm-reg-1',
+      name: 'Lisinopril',
+      dose: '20 mg',
+      route: 'oral',
+      frequency: null,
+      provenance: 'patient_reported' as const,
+      evidenceLinks: [
+        {
+          id: 'ev-late',
+          side: 'later' as const,
+          sourceKind: 'discharge_summary' as const,
+          sourceLabel: 'Discharge Summary B',
+          excerpt: 'Patient reports taking lisinopril 20 mg.',
+        },
+      ],
+    };
+    const report = analyzeSnapshots(
+      { id: 's1', source: 'Clinic', recordedAt: '2026-01-01', medications: [beforeMed] },
+      { id: 's2', source: 'Discharge', recordedAt: '2026-01-10', medications: [afterMed] },
+    );
+
+    const regimen = buildBeforeAfterRegimen(beforeMed, afterMed, report.changes[0]);
+
+    expect(regimen.rows).toEqual([
+      { key: 'dose', label: 'Dose', before: '10 mg', after: '20 mg', changed: true },
+      { key: 'route', label: 'Route', before: 'oral', after: 'oral', changed: false },
+      { key: 'frequency', label: 'Frequency', before: 'daily', after: null, changed: true },
+      { key: 'status', label: 'Status', before: 'Documented', after: 'Patient-reported', changed: true },
+    ]);
+    expect(regimen.earlierEvidence).toHaveLength(1);
+    expect(regimen.earlierEvidence[0]).toMatchObject({
+      label: 'Clinic Note A',
+      excerpt: 'Continue lisinopril 10 mg PO daily.',
+    });
+    expect(regimen.laterEvidence).toHaveLength(1);
+    expect(regimen.laterEvidence[0]).toMatchObject({
+      label: 'Discharge Summary B',
+      excerpt: 'Patient reports taking lisinopril 20 mg.',
+    });
+  });
+
+  it('marks removed medication status as undefined in after snapshot without inventing values', () => {
+    const report = analyzeSnapshots(fixtureEarlier, fixtureLater);
+    const aspirinBefore = fixtureEarlier.medications.find((m) => m.id === 'm2');
+    const aspirinChange = report.changes.find((c) => c.medicationId === 'm2');
+    const regimen = buildBeforeAfterRegimen(aspirinBefore, undefined, aspirinChange);
+
+    const statusRow = regimen.rows.find((r) => r.key === 'status');
+    expect(statusRow).toEqual({
+      key: 'status',
+      label: 'Status',
+      before: 'Unverified',
+      after: undefined,
+      changed: true,
+    });
   });
 });

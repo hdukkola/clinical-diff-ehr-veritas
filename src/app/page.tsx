@@ -12,6 +12,7 @@ import {
 } from 'react';
 import {
   analyzeSnapshots,
+  buildBeforeAfterRegimen,
   buildDocumentIndex,
   buildEncounterTimeline,
   buildReconciliationWorklist,
@@ -3482,6 +3483,143 @@ export default function Home() {
                                         {entry.id}
                                       </span>
                                     </div>
+
+                                    {entry.kind !== 'same' && (() => {
+                                      const regimen = buildBeforeAfterRegimen(
+                                        entry.beforeMed,
+                                        entry.afterMed,
+                                        entry.change,
+                                      );
+                                      const focusEvidence = () => {
+                                        const el = document.querySelector<HTMLElement>(
+                                          `.entry[data-value="${CSS.escape(entry.id)}"] .evidence-block`,
+                                        );
+                                        el?.focus();
+                                      };
+                                      return (
+                                        <section
+                                          className="regimen-compare"
+                                          aria-label={`Before/after regimen for ${entry.name}`}
+                                        >
+                                          <div className="regimen-compare-head">
+                                            <div>
+                                              <span className="regimen-compare-kicker">
+                                                Before / after regimen
+                                              </span>
+                                              <span className="regimen-compare-sub">
+                                                Documented dose, route, frequency &amp; status
+                                              </span>
+                                            </div>
+                                            <button
+                                              type="button"
+                                              className="regimen-jump-btn"
+                                              onClick={focusEvidence}
+                                            >
+                                              Jump to evidence
+                                            </button>
+                                          </div>
+
+                                          <div className="regimen-rows" role="list">
+                                            {regimen.rows.map((r) => (
+                                              <div
+                                                key={r.key}
+                                                role="listitem"
+                                                className={`regimen-row ${r.changed ? 'is-changed' : ''}`}
+                                              >
+                                                <span className="regimen-row-label">{r.label}</span>
+                                                <span className="regimen-row-before">
+                                                  <span className="regimen-side-tag">Before</span>
+                                                  {r.before === undefined ? (
+                                                    <span className="na">Not in snapshot</span>
+                                                  ) : r.before === null ? (
+                                                    <span className="nd">Not documented</span>
+                                                  ) : (
+                                                    r.before
+                                                  )}
+                                                </span>
+                                                <span className="regimen-row-after">
+                                                  <span className="regimen-side-tag">After</span>
+                                                  {r.after === undefined ? (
+                                                    <span className="na">Not in snapshot</span>
+                                                  ) : r.after === null ? (
+                                                    <span className="nd">Not documented</span>
+                                                  ) : (
+                                                    r.after
+                                                  )}
+                                                </span>
+                                              </div>
+                                            ))}
+                                          </div>
+
+                                          <div className="regimen-evidence-pair">
+                                            <div className="regimen-evidence-col">
+                                              <div className="regimen-evidence-title">
+                                                Earlier direct evidence
+                                              </div>
+                                              {regimen.earlierEvidence.length === 0 ? (
+                                                <p className="regimen-evidence-empty">
+                                                  No direct evidence link attached to earlier record.
+                                                </p>
+                                              ) : (
+                                                <ul className="regimen-evidence-list">
+                                                  {regimen.earlierEvidence.map((ev) => (
+                                                    <li key={ev.id} className="regimen-evidence-item">
+                                                      <div className="regimen-evidence-meta">
+                                                        <strong>{ev.label}</strong>
+                                                        <span className="regimen-evidence-state">
+                                                          {ev.stateLabel}
+                                                        </span>
+                                                      </div>
+                                                      {ev.excerpt ? (
+                                                        <blockquote className="regimen-evidence-quote">
+                                                          {ev.excerpt}
+                                                        </blockquote>
+                                                      ) : (
+                                                        <p className="regimen-evidence-empty">
+                                                          No excerpt recorded.
+                                                        </p>
+                                                      )}
+                                                    </li>
+                                                  ))}
+                                                </ul>
+                                              )}
+                                            </div>
+                                            <div className="regimen-evidence-col">
+                                              <div className="regimen-evidence-title">
+                                                Later direct evidence
+                                              </div>
+                                              {regimen.laterEvidence.length === 0 ? (
+                                                <p className="regimen-evidence-empty">
+                                                  No direct evidence link attached to later record.
+                                                </p>
+                                              ) : (
+                                                <ul className="regimen-evidence-list">
+                                                  {regimen.laterEvidence.map((ev) => (
+                                                    <li key={ev.id} className="regimen-evidence-item">
+                                                      <div className="regimen-evidence-meta">
+                                                        <strong>{ev.label}</strong>
+                                                        <span className="regimen-evidence-state">
+                                                          {ev.stateLabel}
+                                                        </span>
+                                                      </div>
+                                                      {ev.excerpt ? (
+                                                        <blockquote className="regimen-evidence-quote">
+                                                          {ev.excerpt}
+                                                        </blockquote>
+                                                      ) : (
+                                                        <p className="regimen-evidence-empty">
+                                                          No excerpt recorded.
+                                                        </p>
+                                                      )}
+                                                    </li>
+                                                  ))}
+                                                </ul>
+                                              )}
+                                            </div>
+                                          </div>
+                                        </section>
+                                      );
+                                    })()}
 
                                     {entry.kind !== 'same' && (
                                       <div
