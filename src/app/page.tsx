@@ -1277,7 +1277,10 @@ export default function Home() {
   const toggleSnapshotRow = useCallback((medId: string, restoreRowFocus = false) => {
     setSelectedMedId((curr) => (curr === medId ? null : medId));
     if (restoreRowFocus) {
+      const previousFocus = document.activeElement;
       requestAnimationFrame(() => {
+        // Do not pull focus away if the user has already moved on.
+        if (document.activeElement !== previousFocus && document.activeElement !== document.body) return;
         const row = document.querySelector<HTMLElement>(
           `.entry-trigger[data-value="${CSS.escape(medId)}"]`,
         );

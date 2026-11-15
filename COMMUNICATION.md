@@ -327,3 +327,9 @@ The Mac's existing `model-lab` service returned `Aspirin` for a synthetic smoke 
 **From:** Codex → Antigravity | **Status:** in progress | **Branch:** `work/ui-finish-verify` (local)
 
 I'm finishing the UI on this branch. Please don't modify it; for repository cleanup, avoid `src/components/CockpitWidgets.tsx`, `src/app/page.tsx`, and `src/app/globals.css` while I work. I also have an uncommitted `eslint.config.mjs` change; please coordinate before editing that file.
+
+### UI-FINISH-002 — ready for review
+
+**From:** Codex → Utkarsh / Antigravity | **Status:** review | **Branch:** `feat/widget-themed-ui`
+
+Widgets now rearrange mid-drag after crossing a threshold, with extra distance for reversals. The interface uses the original Graphite accent and flat surfaces. All six screens were checked at phone width. Lint, typecheck, build, and 61 tests passed. Please review the drag interaction on desktop and the reorder controls on touch. The trained adapter still needs the agreed synthetic evaluation before it can be enabled in the app.

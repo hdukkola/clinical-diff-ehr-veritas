@@ -801,11 +801,38 @@ describe('Clinical Diff Veritas Editorial UI', () => {
         return this.data[type] ?? '';
       },
     };
+    const targetRect = { left: 0, top: 0, width: 100, height: 100, right: 100, bottom: 100, x: 0, y: 0, toJSON() {} } as DOMRect;
+    const sourceRect = { ...targetRect, left: 100, right: 200, x: 100 } as DOMRect;
+    vi.spyOn(diffCard, 'getBoundingClientRect').mockReturnValue(targetRect);
+    vi.spyOn(evalCard, 'getBoundingClientRect').mockReturnValue(sourceRect);
     fireEvent.dragStart(evalCard, { dataTransfer });
-    fireEvent.dragOver(diffCard, { dataTransfer });
+    const dragOverAt = (clientX: number) => {
+      const event = new MouseEvent('dragover', { bubbles: true, cancelable: true, clientX });
+      Object.defineProperty(event, 'dataTransfer', { value: dataTransfer });
+      fireEvent(diffCard, event);
+    };
+    dragOverAt(90);
+    expect(evalCard.style.order).toBe('5');
+    dragOverAt(44);
+    expect(evalCard.style.order).toBe('0');
+    dragOverAt(50);
+    expect(evalCard.style.order).toBe('0'); // A small reversal must not jitter back.
+    dragOverAt(56);
+    expect(evalCard.style.order).toBe('0'); // Layout motion alone must not reverse the move.
+    dragOverAt(96);
+    expect(evalCard.style.order).toBe('1');
+    dragOverAt(24);
+    expect(evalCard.style.order).toBe('0');
     fireEvent.drop(diffCard, { dataTransfer });
     fireEvent.dragEnd(evalCard);
     expect(getWidgetOrder()[0]).toBe('eval-metrics');
+
+    // Dropping without crossing the live-reorder threshold does not swap cards.
+    await user.click(within(cockpit).getByRole('button', { name: 'Reset layout' }));
+    fireEvent.dragStart(evalCard, { dataTransfer });
+    fireEvent.drop(diffCard, { dataTransfer });
+    fireEvent.dragEnd(evalCard);
+    expect(getWidgetOrder()[0]).toBe('diff-breakdown');
 
     // Drill-down: Medication Diff Breakdown 'Changed' chip navigates to Snapshot review with Changed filter
     const changedChip = within(diffCard).getByRole('button', { name: /Changed/i });
