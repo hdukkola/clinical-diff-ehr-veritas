@@ -71,7 +71,7 @@ export type SyntheticScenario = {
   externalRecords?: ExternalRecordReport[];
 };
 
-const baseSyntheticScenarios: SyntheticScenario[] = [
+const baseSyntheticScenarios: SyntheticScenario[] = process.env.NEXT_PUBLIC_CLINICAL_DIFF_EXAMPLE_WORKSPACE === '0' ? [] : [
   {
     id: 'scenario-morgan-lee-baseline',
     patientId: 'DEMO-001',

@@ -18,7 +18,7 @@ export const encounterTurns: ReadonlyArray<{
   speaker: string;
   quote: string;
   trace?: UtteranceTrace;
-}> = [
+}> = process.env.NEXT_PUBLIC_CLINICAL_DIFF_EXAMPLE_WORKSPACE === '0' ? [] : [
   {
     id: 't00',
     time: '00:00',
