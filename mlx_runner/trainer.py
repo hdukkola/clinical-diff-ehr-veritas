@@ -62,6 +62,7 @@ class TrainingResult:
     blocked_reason: str | None = None
     smoke_test: bool = False
     recovered_from_checkpoint: bool = False
+    initialized_from_checkpoint: bool = False
     memory_pressure_events: int = 0
 
 
@@ -90,6 +91,8 @@ class MemorySnapshot:
     timestamp: str
     free_pages: int
     free_gb: float
+    available_pages: int
+    available_gb: float
     wired_pages: int
     active_pages: int
     compressed_pages: int
@@ -137,12 +140,19 @@ class TrainingEngine:
         return conflicts
 
     def get_memory_snapshot(self) -> MemorySnapshot:
-        """Capture current memory pressure state."""
+        """Capture current memory pressure state using macOS-appropriate metrics.
+
+        On macOS, "free pages" alone is a poor indicator of memory pressure because
+        the system aggressively uses RAM for wired and active pages. The correct
+        available-memory estimate is free + purgeable + speculative pages, which the
+        kernel can reclaim when needed. We also try the ``memory_pressure`` command
+        when available for a direct OS-reported pressure level.
+        """
         try:
             mem_bytes = int(subprocess.check_output(["sysctl", "-n", "hw.memsize"], text=True).strip())
             total_gb = mem_bytes / (1024**3)
             vm = subprocess.check_output(["vm_stat"], text=True)
-            free_pages = wired_pages = active_pages = compressed_pages = 0
+            free_pages = wired_pages = active_pages = compressed_pages = speculative_pages = purgeable_pages = 0
             for line in vm.splitlines():
                 if "Pages free:" in line:
                     free_pages = int(line.split(":")[1].strip().replace(".", ""))
@@ -152,22 +162,54 @@ class TrainingEngine:
                     active_pages = int(line.split(":")[1].strip().replace(".", ""))
                 elif "Pages occupied by compressor:" in line:
                     compressed_pages = int(line.split(":")[1].strip().replace(".", ""))
+                elif "Pages speculative:" in line:
+                    speculative_pages = int(line.split(":")[1].strip().replace(".", ""))
+                elif "Pages purgeable:" in line:
+                    purgeable_pages = int(line.split(":")[1].strip().replace(".", ""))
+
+            # Available memory = free + speculative + purgeable (reclaimable by kernel)
+            available_pages = free_pages + speculative_pages + purgeable_pages
+            used_fraction = 1.0 - (available_pages * 16384 / mem_bytes)
+
+            # Also try memory_pressure command for OS-reported pressure level
+            pressure_level = "normal"
+            try:
+                mp = subprocess.check_output(["memory_pressure"], text=True, stderr=subprocess.DEVNULL)
+                # Parse "System-wide memory free percentage: X%" from memory_pressure output
+                import re
+                pct_match = re.search(
+                    r"System-wide memory free percentage:\s*(\d+)%", mp
+                )
+                if pct_match:
+                    free_pct = int(pct_match.group(1))
+                    used_fraction = 1.0 - free_pct / 100.0
+                else:
+                    # Fall back to computed value from vm_stat
+                    used_fraction = 1.0 - (available_pages * 16384 / mem_bytes)
+
+                if used_fraction >= self.config.resources.memory_abort_fraction:
+                    pressure_level = "critical"
+                elif used_fraction >= self.config.resources.memory_warn_fraction:
+                    pressure_level = "warn"
+            except (subprocess.CalledProcessError, FileNotFoundError, OSError, AttributeError):
+                # Fall back to computed pressure from vm_stat
+                if used_fraction >= self.config.resources.memory_abort_fraction:
+                    pressure_level = "critical"
+                elif used_fraction >= self.config.resources.memory_warn_fraction:
+                    pressure_level = "warn"
+
             free_gb = (free_pages * 16384) / (1024**3)
-            used_fraction = 1.0 - (free_gb / total_gb)
-            if used_fraction >= self.config.resources.memory_abort_fraction:
-                pressure = "critical"
-            elif used_fraction >= self.config.resources.memory_warn_fraction:
-                pressure = "warn"
-            else:
-                pressure = "normal"
+            available_gb = (available_pages * 16384) / (1024**3)
             return MemorySnapshot(
                 timestamp=datetime.now(timezone.utc).isoformat(),
                 free_pages=free_pages,
                 free_gb=free_gb,
+                available_pages=available_pages,
+                available_gb=available_gb,
                 wired_pages=wired_pages,
                 active_pages=active_pages,
                 compressed_pages=compressed_pages,
-                pressure_level=pressure,
+                pressure_level=pressure_level,
             )
         except (subprocess.CalledProcessError, ValueError, OSError):
             return MemorySnapshot(
@@ -199,12 +241,12 @@ class TrainingEngine:
         snapshot = self.get_memory_snapshot()
         if snapshot.pressure_level == "critical":
             reasons.append(
-                f"Memory pressure critical: {snapshot.free_gb:.1f} GB free "
+                f"Memory pressure critical: {snapshot.available_gb:.1f} GB available "
                 f"(abort threshold: {self.config.resources.memory_abort_fraction * 100:.0f}%)"
             )
         elif snapshot.pressure_level == "warn":
             reasons.append(
-                f"Memory pressure warning: {snapshot.free_gb:.1f} GB free "
+                f"Memory pressure warning: {snapshot.available_gb:.1f} GB available "
                 f"(warn threshold: {self.config.resources.memory_warn_fraction * 100:.0f}%)"
             )
 
@@ -344,7 +386,27 @@ class TrainingEngine:
         return removed
 
     def resume_from_checkpoint(self, checkpoint_path: Path | str) -> CheckpointInfo | None:
-        """Resume training from a verified checkpoint. Never silently resume unverified."""
+        """Resume training from a verified checkpoint with optimizer state.
+
+        This loads model weights AND optimizer/RNG state from the checkpoint,
+        continuing training exactly where it left off. Never silently resume
+        an unverified checkpoint.
+        """
+        info = self.verify_checkpoint(checkpoint_path)
+        if info is None:
+            return None
+        if not info.verified:
+            return None
+        return info
+
+    def initialize_from_checkpoint(self, checkpoint_path: Path | str) -> CheckpointInfo | None:
+        """Initialize a new training run from a verified checkpoint's model weights.
+
+        This loads the model weights from the checkpoint but starts with a FRESH
+        optimizer state (step 0). This is distinct from resume_from_checkpoint,
+        which restores the full training state including optimizer and RNG state.
+        Never silently initialize from an unverified checkpoint.
+        """
         info = self.verify_checkpoint(checkpoint_path)
         if info is None:
             return None
@@ -377,13 +439,15 @@ class TrainingEngine:
         self,
         smoke_test: bool = False,
         resume_from: Path | str | None = None,
+        initialize_from: Path | str | None = None,
     ) -> TrainingResult:
         """Run a training experiment with all safeguards."""
         start = time.time()
         self._status = TrainingStatus.RUNNING
         recovered = False
+        initialized_from_checkpoint = False
 
-        # If resuming, verify the checkpoint first
+        # If resuming, verify the checkpoint first (exact resume with optimizer state)
         if resume_from is not None:
             info = self.resume_from_checkpoint(resume_from)
             if info is None:
@@ -394,6 +458,18 @@ class TrainingEngine:
                     error_message=f"Cannot resume from unverified or missing checkpoint: {resume_from}",
                 )
             recovered = True
+
+        # If initializing from checkpoint, verify but start with fresh optimizer
+        if initialize_from is not None:
+            info = self.initialize_from_checkpoint(initialize_from)
+            if info is None:
+                self._status = TrainingStatus.FAILED
+                self.record_consecutive_failure()
+                return TrainingResult(
+                    status=TrainingStatus.FAILED,
+                    error_message=f"Cannot initialize from unverified or missing checkpoint: {initialize_from}",
+                )
+            initialized_from_checkpoint = True
 
         # 1. Require operator approval for non-smoke-test (checked first, before resources)
         if not smoke_test and self.config.require_operator_approval:
@@ -455,6 +531,7 @@ class TrainingEngine:
             result = self._run_training(smoke_test=smoke_test)
             result.duration_seconds = time.time() - start
             result.recovered_from_checkpoint = recovered
+            result.initialized_from_checkpoint = initialized_from_checkpoint
             result.memory_pressure_events = sum(
                 1 for s in self._memory_snapshots if s.pressure_level in ("warn", "critical")
             )
@@ -535,7 +612,7 @@ class TrainingEngine:
                             status=TrainingStatus.ABORTED,
                             error_message=(
                                 f"Training aborted: memory pressure critical "
-                                f"({snapshot.free_gb:.1f} GB free)"
+                                f"({snapshot.available_gb:.1f} GB available)"
                             ),
                         )
 
