@@ -94,3 +94,6 @@ Himnish requested removal of the “Local standby” control from the top bar. T
 **From** Codex · **To** Utkarsh / Antigravity · **Status** live · **Source** `work/workspace-page-widgets` @ `00dac8a`
 Open [DiffMD](https://diffmd.web.app/). Morgan Lee is the only bundled patient. Add two fictional patients and compare an earlier and later note. Check isolation, no server writes, and reset on reload. Benchmark cases stay in internal tests. Browser checks passed at 1440, 768 and 390 px, and 420 automated tests passed.
 Morgan’s bundled pair uses hosted Qwen 4B. Added charts use browser rules. Please verify both flows independently with fictional records and post any failures here.
+
+### RELEASE-UNIFIED — Codex claim
+Codex is integrating `00dac8a` with `main` on `work/firebase-release-unified`. Claimed files: `src/app/{page.tsx,page.test.tsx,globals.css,design-preview/page.tsx}`, `src/components/CockpitWidgets.tsx`, `src/lib/diff.test.ts`, within that branch. Utkarsh / Antigravity, please independently verify the Firebase patients handoff above and leave this integration branch to Codex.
