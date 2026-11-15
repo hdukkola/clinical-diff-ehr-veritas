@@ -17,7 +17,7 @@ The source dataset is the MIT-licensed [synthetic Clinical NER QDoRA release](ht
 
 ## Run definition
 
-30 updates, rank 8, alpha scaling as configured by MLX LM (`scale=20.0`), final two layers, batch and accumulation both 1, Adam at 1e-5, seed 42, gradient checkpointing, prompt masking, and a 512-token sequence limit. The plan begins from the untouched base and names a fresh output folder. It records weight saves every 10 steps and validation every 15 steps. Proposed watchdog thresholds are 1,800 seconds and 32 GiB of sampled child footprint. The supervisor tests used small CPU and Metal probes. Real training with this watchdog, quota and recovery policy still needs an approval-bound launch path. MLX saves adapter weights, so those files alone are insufficient to restore optimizer state.
+30 updates, rank 8 with MLX LM `scale=20.0`, final two layers, batch and accumulation both 1, Adam at 1e-5, seed 42, gradient checkpointing, prompt masking, and a 512-token sequence limit. The plan begins from the untouched base and names a fresh output folder. It records weight saves every 10 steps and validation every 15 steps. The launcher stops at 1,800 seconds, an observed 32 GiB child footprint, elevated macOS memory pressure, or under 10 GiB of available disk. It sets an advisory 28 GiB MLX allocator target and 1 GiB cache limit. A separate guard kills the worker group if the supervisor exits. The memory threshold is sampled and may be exceeded between readings. MLX saves adapter weights, so an interrupted run can retain readable checkpoints for inspection, but its optimizer state cannot be restored from those files.
 
 To rebuild the proposal offline with the locally cached inputs and frozen evaluation bundle:
 
@@ -25,4 +25,18 @@ To rebuild the proposal offline with the locally cached inputs and frozen evalua
 python3 -m mlx_runner.prepare_foreground "$BASE_SNAPSHOT" "$TRAIN_DATA" "$FROZEN_BUNDLE" "$NEW_PLAN_JSON"
 ```
 
-Preparation writes a new JSON file and prints its SHA-256. It validates and tokenizes local data without loading model weights into MLX. A manifest records the proposed settings and provides a specific candidate for review. The training entry point remains gated.
+Preparation writes a new JSON file and prints its SHA-256. It validates and tokenizes local data without loading model weights into MLX. Run the read-only launcher check from the same MLX environment:
+
+```sh
+python3 -m mlx_runner.run_foreground "$NEW_PLAN_JSON" --check
+```
+
+The prepared, checked local plan has SHA-256 `665f5f91b801120847e80bb0a3e0aab7465803d70f669ca26a28d35ec41a24eb`. An explicit `--approve-plan` matching its digest authorizes one foreground run. The CLI revalidates the settings, model files and data, stages only the two verified input splits, and atomically claims a new run directory. A dummy worker verified staging, first-use behavior, and shutdown after the supervisor was killed. Missing and wrong approval values were rejected. The exact plan's host check initially refused elevated memory pressure and passed after macOS returned to normal. This validation used zero training updates.
+
+After a completed run, evaluate the adapter using the unchanged scoring code:
+
+```sh
+python3 -m mlx_runner.evaluate_foreground "$RUN_DIR"
+```
+
+Match or exceed the step-360 strict results on the same development cases: 94.4% name F1 and 62.4% full tuple F1 on the 36 overlap-screened notes, fully valid JSON, at least six exact action and entity matches across eight cases, and zero proposed mutations on the four no-change cases. The rejection check reproduced the expected pass for the saved step-360 scores and rejected the untouched baseline scores. The development decision is recorded locally for human review. The serving model requires a separate decision.

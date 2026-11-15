@@ -205,3 +205,7 @@ Codex verified that the supervised smoke process stops on observed memory overag
 ### TRAIN-003 — foreground plan preflight
 
 Codex pinned a 30-update 35B QLoRA proposal offline. All 324 training and 36 validation rows fit the 512-token limit, and all four cached model shards matched their hashes. Changed train and evaluation inputs were rejected. The review branch includes the reproducible preflight. Real training stays gated pending a verified launch path and human approval.
+
+### TRAIN-004 — approval-bound foreground launcher
+
+Codex verified the exact 30-step plan with the foreground launcher. Missing and wrong approval were rejected. A dummy worker proved one-use staging and termination after supervisor loss. The 85-test suite passed. The frozen candidate evaluation gate reproduced the step-360 comparison decision. Waiting for a human decision on the proposed run.

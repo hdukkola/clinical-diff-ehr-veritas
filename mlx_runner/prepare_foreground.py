@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import argparse
-from hashlib import file_digest, sha256
+from hashlib import sha256
 import json
 import os
 from pathlib import Path
@@ -23,8 +23,11 @@ MAX_TOKENS = 512
 
 
 def digest(path: Path) -> str:
+    hash_value = sha256()
     with path.open("rb") as source:
-        return file_digest(source, "sha256").hexdigest()
+        for chunk in iter(lambda: source.read(1024 * 1024), b""):
+            hash_value.update(chunk)
+    return hash_value.hexdigest()
 
 
 def verify(path: Path, expected: str) -> None:
@@ -122,7 +125,9 @@ def build_plan(base: Path, data: Path, bundle: Path, output: Path) -> dict:
                  "provenance": "LLM-generated synthetic notes", "splits": splits},
         "evaluation": {"bundle": str(bundle), "sha256": EVAL_HASH, "scorer_sha256": SCORER_HASH,
                        "primary_notes": 36, "similarity_cutoff": 0.85, "synthetic_action_probes": 8},
-        "resource_limits": {"wall_seconds": 1800, "child_footprint_bytes": 32 * GIB},
+        "resource_limits": {"wall_seconds": 1800, "child_footprint_bytes": 32 * GIB,
+                            "min_free_disk_bytes": 10 * GIB,
+                            "mlx_memory_guideline_bytes": 28 * GIB, "mlx_cache_bytes": GIB},
         "mlx_lm_args": argv,
         "effective_settings": effective,
     }
