@@ -42,6 +42,10 @@ export type EvidenceLink = {
   section?: string;
   field?: MedicationFieldName;
   excerpt?: string | null;
+  /** The cited excerpt expressly documents this medication's absence. */
+  documentedAbsence?: boolean;
+  /** IDs of other excerpts that explicitly contradict this citation. */
+  contradictsEvidenceIds?: string[];
   span?: TextSpan | null;
   recordedAt?: string | null;
   resolutionStatus?: EvidenceResolutionStatus;

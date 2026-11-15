@@ -3732,6 +3732,7 @@ export default function Home() {
                                     {entry.kind !== 'same' && (
                                       <div
                                         className="evidence-block"
+                                        role="region"
                                         tabIndex={-1}
                                         aria-label={`Evidence and provenance for ${entry.name}`}
                                       >
@@ -3766,16 +3767,16 @@ export default function Home() {
 
                                         {entry.kind === 'onlyA' && (
                                           <p className="evidence-side-note">
-                                            {entry.change?.provenance?.later.status === 'documented'
-                                              ? 'Later side: Documented negative (explicitly absent in documented Snapshot B).'
-                                              : 'Later side: Not listed in Snapshot B (not assumed stopped).'}
+                                            Later side: Not listed in Snapshot B.
+                                            {!entryLinks.some(link => link.side === 'later' || link.side === 'both') &&
+                                              ' Missing reference for this side.'}
                                           </p>
                                         )}
                                         {entry.kind === 'onlyB' && (
                                           <p className="evidence-side-note">
-                                            {entry.change?.provenance?.earlier.status === 'documented'
-                                              ? 'Earlier side: Documented negative (explicitly absent in documented Snapshot A).'
-                                              : 'Earlier side: Not listed in Snapshot A.'}
+                                            Earlier side: Not listed in Snapshot A.
+                                            {!entryLinks.some(link => link.side === 'earlier' || link.side === 'both') &&
+                                              ' Missing reference for this side.'}
                                           </p>
                                         )}
 
@@ -3946,8 +3947,8 @@ export default function Home() {
                                                   linkState === 'unavailable_document';
                                                 const isMissingRef =
                                                   linkState === 'missing_reference';
-                                                const isConflicting =
-                                                  linkState === 'conflicting_excerpts';
+                                                const isAmbiguous =
+                                                  linkState === 'ambiguous_reference';
                                                 return (
                                                   <li
                                                     className={`evidence-item${isActiveCitation ? ' is-active' : ''}`}
@@ -3992,7 +3993,7 @@ export default function Home() {
                                                         </span>
                                                       )}
                                                     </div>
-                                                    {link.excerpt ? (
+                                                    {link.resolutionStatus === 'resolved' && link.excerpt ? (
                                                       <p>&ldquo;{link.excerpt}&rdquo;</p>
                                                     ) : isUnavailable ? (
                                                       <p className="nd">
@@ -4006,12 +4007,12 @@ export default function Home() {
                                                           ? ` — ${link.note}`
                                                           : ' — no source citation or excerpt recorded.'}
                                                       </p>
-                                                    ) : isConflicting ? (
+                                                    ) : isAmbiguous ? (
                                                       <p className="nd">
-                                                        Conflicting excerpts
+                                                        Ambiguous reference
                                                         {link.note
                                                           ? ` — ${link.note}`
-                                                          : ' — conflicting or ambiguous attribution across sources.'}
+                                                          : ' — the source could not be identified with certainty.'}
                                                       </p>
                                                     ) : (
                                                       <p className="nd">

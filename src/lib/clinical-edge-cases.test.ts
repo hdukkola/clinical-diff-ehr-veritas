@@ -237,6 +237,7 @@ describe('100 Clinical Diff & Cockpit Edge-Case Tests', () => {
           resolutionStatus: 'resolved',
           provenanceStatus: 'documented',
           excerpt: 'Patient is not taking Lisinopril.',
+          documentedAbsence: true,
           span: null,
           recordedAt: '2026-10-01',
         }),
@@ -250,6 +251,7 @@ describe('100 Clinical Diff & Cockpit Edge-Case Tests', () => {
           resolutionStatus: 'resolved',
           provenanceStatus: 'documented',
           excerpt: 'Metformin discontinued due to GI side effects.',
+          documentedAbsence: true,
           span: null,
           recordedAt: '2026-10-01',
         }),
@@ -261,8 +263,8 @@ describe('100 Clinical Diff & Cockpit Edge-Case Tests', () => {
         makeSnap('s1', [
           makeMed('m1', 'Lisinopril', {
             evidenceLinks: [
-              { id: 'e1', side: 'earlier', noteId: 'n1', excerpt: 'Continue Lisinopril 10 mg daily' },
-              { id: 'e2', side: 'earlier', noteId: 'n2', excerpt: 'Lisinopril discontinued on prior visit' },
+              { id: 'e1', side: 'earlier', noteId: 'n1', excerpt: 'Continue Lisinopril 10 mg daily', contradictsEvidenceIds: ['e2'] },
+              { id: 'e2', side: 'earlier', noteId: 'n2', excerpt: 'Lisinopril is not being taken at this visit', documentedAbsence: true },
             ],
           }),
         ]),

@@ -989,6 +989,7 @@ export function CockpitWidgets({
                       resolved: 'add',
                       documented_negative: 'accent',
                       partial: 'chg',
+                      ambiguous_reference: 'chg',
                       conflicting_excerpts: 'chg',
                       missing_reference: 'del',
                       unavailable_document: 'del',

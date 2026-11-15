@@ -15,7 +15,7 @@ import {
   searchChartRecords,
 } from './diff';
 import { earlier as fixtureEarlier, later as fixtureLater } from './fixtures';
-import type { EvidenceLink, Medication, Snapshot } from './types';
+import type { EvidenceLink, Medication, ResolvedEvidenceLink, Snapshot } from './types';
 
 const med = (
   id: string,
@@ -630,6 +630,7 @@ describe('compareNoteRegimens & normalizeNoteText', () => {
             resolutionStatus: 'resolved',
             provenanceStatus: 'documented',
             excerpt: 'Aspirin 81 mg daily discontinued at discharge.',
+            documentedAbsence: true,
           },
         ],
       }),
@@ -639,12 +640,15 @@ describe('compareNoteRegimens & normalizeNoteText', () => {
       kind: 'changed' as const,
       evidenceLinks: [
         {
+          id: 'clinic-dose',
           side: 'earlier' as const,
           resolutionStatus: 'resolved' as const,
           provenanceStatus: 'documented' as const,
           excerpt: 'Furosemide 20 mg daily',
+          contradictsEvidenceIds: ['pharmacy-dose'],
         },
         {
+          id: 'pharmacy-dose',
           side: 'earlier' as const,
           resolutionStatus: 'resolved' as const,
           provenanceStatus: 'documented' as const,
@@ -660,6 +664,74 @@ describe('compareNoteRegimens & normalizeNoteText', () => {
     expect(EVIDENCE_STATE_LABELS.unavailable_document).toBe('Unavailable document');
     expect(EVIDENCE_STATE_LABELS.documented_negative).toBe('Documented negative');
     expect(EVIDENCE_STATE_LABELS.conflicting_excerpts).toBe('Conflicting excerpts');
+  });
+
+  it('requires an explicit, resolved absence and ignores unrelated snapshot citations', () => {
+    const earlier = snapshot([med('aspirin')]);
+    const later = snapshot([], {
+      sourceKind: 'discharge_summary',
+      provenance: 'documented',
+      evidenceLinks: [{
+        id: 'unrelated',
+        medicationId: 'warfarin',
+        noteId: 'discharge',
+        documentedAbsence: true,
+        excerpt: 'The patient reports they are no longer taking Warfarin.',
+      }],
+    });
+    const omitted = analyzeSnapshots(earlier, later).changes[0];
+    expect(omitted.evidenceLinks).toHaveLength(1);
+    expect(classifyChangeEvidenceState(omitted)).toBe('partial');
+
+    later.evidenceLinks?.push({
+      id: 'aspirin-status',
+      medicationId: 'aspirin',
+      noteId: 'discharge',
+      documentedAbsence: true,
+      excerpt: 'The discharge note confirms the patient is no longer taking Aspirin.',
+    });
+    const confirmed = analyzeSnapshots(earlier, later).changes[0];
+    expect(confirmed.evidenceLinks?.find(link => link.side === 'later')).toMatchObject({
+      id: 'aspirin-status',
+      resolutionStatus: 'resolved',
+    });
+    expect(classifyChangeEvidenceState(confirmed)).toBe('documented_negative');
+  });
+
+  it('separates ambiguity, different wording, and unverified statements from explicit evidence', () => {
+    const first: ResolvedEvidenceLink = {
+      id: 'first',
+      side: 'later',
+      resolutionStatus: 'resolved',
+      provenanceStatus: 'documented',
+      excerpt: 'Lisinopril 20 mg daily. Aspirin held.',
+    };
+    const second: ResolvedEvidenceLink = {
+      ...first,
+      id: 'second',
+      excerpt: 'Continue 20 mg of Lisinopril once daily.',
+    };
+    expect(classifyLinkEvidenceState(first)).toBe('resolved');
+    expect(classifyChangeEvidenceState({ kind: 'changed', evidenceLinks: [first, second] }))
+      .toBe('resolved');
+
+    const ambiguous: ResolvedEvidenceLink = {
+      ...second,
+      resolutionStatus: 'ambiguous',
+      contradictsEvidenceIds: ['first'],
+      documentedAbsence: true,
+    };
+    expect(classifyLinkEvidenceState(ambiguous, { evidenceLinks: [first, ambiguous] }))
+      .toBe('ambiguous_reference');
+    expect(classifyLinkEvidenceState(first, { evidenceLinks: [first, ambiguous] }))
+      .toBe('resolved');
+    expect(classifyLinkEvidenceState({ ...ambiguous, resolutionStatus: 'unavailable' }))
+      .toBe('unavailable_document');
+    expect(classifyLinkEvidenceState({ ...ambiguous, resolutionStatus: 'partial' })).toBe('partial');
+    expect(classifyLinkEvidenceState({
+      ...first,
+      contradictsEvidenceIds: ['second'],
+    }, { evidenceLinks: [{ ...second, side: 'earlier' }] })).toBe('resolved');
   });
 
   it('builds chronological encounter timeline and separates undated records', () => {

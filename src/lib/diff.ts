@@ -210,6 +210,8 @@ function dedupeEvidenceLinks(links: ResolvedEvidenceLink[]): ResolvedEvidenceLin
       link.section ?? '',
       link.field ?? '',
       link.excerpt ?? '',
+      link.documentedAbsence === true,
+      JSON.stringify(link.contradictsEvidenceIds ?? []),
       link.span ? `${link.span.start}:${link.span.end}` : '',
       link.recordedAt ?? '',
       link.resolutionStatus,
@@ -324,10 +326,7 @@ function resolveEvidenceLink(
   const validSpan = isValidSpan(link.span) ? link.span : null;
 
   let resolutionStatus: EvidenceResolutionStatus;
-  if (linkAmbiguous) {
-    resolutionStatus = 'ambiguous';
-    flags.push('ambiguous_evidence_link');
-  } else if (link.resolutionStatus === 'unavailable') {
+  if (link.resolutionStatus === 'unavailable') {
     resolutionStatus = 'unavailable';
     flags.push('unresolved_evidence_link');
     gaps.push({
@@ -347,6 +346,9 @@ function resolveEvidenceLink(
       evidenceId: linkId,
       message: 'Evidence link is marked unresolved.',
     });
+  } else if (linkAmbiguous) {
+    resolutionStatus = 'ambiguous';
+    flags.push('ambiguous_evidence_link');
   } else if (
     hasValidTarget &&
     hasValidExcerpt &&
@@ -383,6 +385,10 @@ function resolveEvidenceLink(
     ...(section ? { section } : {}),
     ...(link.field ? { field: link.field } : {}),
     excerpt,
+    ...(link.documentedAbsence ? { documentedAbsence: true } : {}),
+    ...(link.contradictsEvidenceIds?.length
+      ? { contradictsEvidenceIds: link.contradictsEvidenceIds }
+      : {}),
     span: invalidSpan ? null : validSpan,
     recordedAt,
     resolutionStatus,
@@ -425,6 +431,7 @@ function evaluateSide(
   snapshot: Snapshot,
   medication: Medication | undefined,
   side: 'earlier' | 'later',
+  medicationId: string,
 ): { provenance: SideProvenance; evidenceLinks: ResolvedEvidenceLink[] } {
   const snapshotSourceBlank = isBlankProvidedText(snapshot.source);
   const snapshotSourceLabel = normalizeOptionalText(snapshot.source);
@@ -435,6 +442,15 @@ function evaluateSide(
   );
 
   if (!medication) {
+    const citations = (snapshot.evidenceLinks ?? [])
+      .filter(link => link.medicationId === medicationId)
+      .map(link => resolveEvidenceLink(
+        link,
+        snapshot,
+        side,
+        parseProvenanceStatusValue(snapshotMeta?.status).status ?? 'unknown',
+      ));
+
     return {
       provenance: {
         present: false,
@@ -444,10 +460,10 @@ function evaluateSide(
         attributedBy: snapshotAuthor,
         recordedAt: snapshotRecordedAt,
         ambiguous: false,
-        flags: [],
-        gaps: [],
+        flags: dedupeFlags(citations.flatMap(citation => citation.flags)),
+        gaps: dedupeGaps(citations.flatMap(citation => citation.gaps)),
       },
-      evidenceLinks: [],
+      evidenceLinks: citations.map(citation => citation.resolved),
     };
   }
 
@@ -891,8 +907,8 @@ function buildMedicationChange(
   later: Snapshot,
   after: Medication | undefined,
 ): MedicationChange {
-  const earlierEval = evaluateSide(earlier, before, 'earlier');
-  const laterEval = evaluateSide(later, after, 'later');
+  const earlierEval = evaluateSide(earlier, before, 'earlier', medicationId);
+  const laterEval = evaluateSide(later, after, 'later', medicationId);
   const provenance = buildChangeProvenance(
     earlierEval.provenance,
     laterEval.provenance,
@@ -1334,6 +1350,7 @@ export type EvidenceStateKind =
   | 'partial'
   | 'missing_reference'
   | 'unavailable_document'
+  | 'ambiguous_reference'
   | 'documented_negative'
   | 'conflicting_excerpts';
 
@@ -1342,36 +1359,30 @@ export const EVIDENCE_STATE_LABELS: Record<EvidenceStateKind, string> = {
   partial: 'Partial',
   missing_reference: 'Missing reference',
   unavailable_document: 'Unavailable document',
+  ambiguous_reference: 'Ambiguous reference',
   documented_negative: 'Documented negative',
   conflicting_excerpts: 'Conflicting excerpts',
 };
 
-const EXPLICIT_NEGATIVE_PATTERN =
-  /\b(discontinued|stopped|held|not taking|no longer taking|documented negative|explicitly absent|denied|withheld|omitted)\b/i;
-
 function isExplicitNegativeLink(link: ResolvedEvidenceLink): boolean {
-  if (link.provenanceStatus !== 'documented') {
-    return false;
-  }
-  const text = `${link.excerpt ?? ''} ${link.note ?? ''}`.trim();
-  return text.length > 0 && EXPLICIT_NEGATIVE_PATTERN.test(text);
+  return (
+    link.documentedAbsence === true &&
+    link.provenanceStatus === 'documented' &&
+    link.resolutionStatus === 'resolved' &&
+    Boolean(link.excerpt?.trim())
+  );
 }
 
-function hasConflictingExcerpts(links: ReadonlyArray<ResolvedEvidenceLink>): boolean {
-  const bySide: Record<'earlier' | 'later', Set<string>> = {
-    earlier: new Set<string>(),
-    later: new Set<string>(),
-  };
-
-  for (const link of links) {
-    const excerpt = link.excerpt?.trim().toLowerCase();
-    if (!excerpt) continue;
-    if (link.side === 'earlier' || link.side === 'later') {
-      bySide[link.side].add(excerpt);
-    }
-  }
-
-  return bySide.earlier.size > 1 || bySide.later.size > 1;
+function contradictsExcerpt(first: ResolvedEvidenceLink, second: ResolvedEvidenceLink): boolean {
+  return (
+    first.id !== second.id &&
+    first.resolutionStatus === 'resolved' &&
+    second.resolutionStatus === 'resolved' &&
+    Boolean(first.excerpt?.trim() && second.excerpt?.trim()) &&
+    (first.side === second.side || first.side === 'both' || second.side === 'both') &&
+    ((second.id !== undefined && first.contradictsEvidenceIds?.includes(second.id) === true) ||
+      (first.id !== undefined && second.contradictsEvidenceIds?.includes(first.id) === true))
+  );
 }
 
 /**
@@ -1381,20 +1392,19 @@ function hasConflictingExcerpts(links: ReadonlyArray<ResolvedEvidenceLink>): boo
  */
 export function classifyLinkEvidenceState(
   link: ResolvedEvidenceLink,
-  change?: Pick<MedicationChange, 'kind' | 'provenance' | 'provenanceFlags' | 'evidenceLinks'>,
+  change?: Pick<MedicationChange, 'evidenceLinks'>,
 ): EvidenceStateKind {
   if (link.resolutionStatus === 'unavailable') {
     return 'unavailable_document';
   }
-  if (
-    link.resolutionStatus === 'ambiguous' ||
-    change?.provenanceFlags?.includes('conflicting_provenance') ||
-    (change?.evidenceLinks ? hasConflictingExcerpts(change.evidenceLinks) : false)
-  ) {
-    return 'conflicting_excerpts';
-  }
   if (link.resolutionStatus === 'unresolved') {
     return 'missing_reference';
+  }
+  if (link.resolutionStatus === 'ambiguous') {
+    return 'ambiguous_reference';
+  }
+  if (change?.evidenceLinks?.some(other => contradictsExcerpt(link, other))) {
+    return 'conflicting_excerpts';
   }
   if (isExplicitNegativeLink(link)) {
     return 'documented_negative';
@@ -1410,31 +1420,23 @@ export function classifyChangeEvidenceState(
   change: Pick<MedicationChange, 'kind' | 'provenance' | 'provenanceFlags' | 'evidenceLinks'>,
 ): EvidenceStateKind {
   const links = change.evidenceLinks ?? [];
-  if (links.some((l) => l.resolutionStatus === 'unavailable')) {
+  const states = links.map(link => classifyLinkEvidenceState(link, change));
+  if (states.includes('unavailable_document')) {
     return 'unavailable_document';
   }
-  if (
-    links.some((l) => l.resolutionStatus === 'ambiguous') ||
-    change.provenance?.hasAmbiguousProvenance ||
-    change.provenanceFlags?.includes('conflicting_provenance') ||
-    hasConflictingExcerpts(links)
-  ) {
+  if (states.includes('conflicting_excerpts')) {
     return 'conflicting_excerpts';
   }
-  if (links.length === 0 || links.some((l) => l.resolutionStatus === 'unresolved')) {
+  if (states.length === 0 || states.includes('missing_reference')) {
     return 'missing_reference';
   }
-  if (
-    (change.kind === 'removed' && change.provenance?.later.status === 'documented') ||
-    (change.kind === 'added' && change.provenance?.earlier.status === 'documented') ||
-    links.some(isExplicitNegativeLink)
-  ) {
+  if (states.includes('ambiguous_reference')) {
+    return 'ambiguous_reference';
+  }
+  if (states.includes('documented_negative')) {
     return 'documented_negative';
   }
-  if (links.every((l) => l.resolutionStatus === 'resolved')) {
-    return 'resolved';
-  }
-  return 'partial';
+  return states.includes('partial') ? 'partial' : 'resolved';
 }
 
 export type EncounterTimelineKind = 'encounter' | 'note' | 'change';
@@ -2145,7 +2147,7 @@ function toRegimenEvidenceRef(
   return {
     id: link.id ?? `${link.noteId ?? link.sourceId ?? 'ev'}-${index}`,
     label: link.sourceLabel ?? link.noteId ?? link.sourceId ?? 'Evidence reference',
-    excerpt: link.excerpt ?? null,
+    excerpt: link.resolutionStatus === 'resolved' ? (link.excerpt ?? null) : null,
     section: link.section ?? null,
     recordedAt: link.recordedAt ?? null,
     state,
@@ -2304,7 +2306,7 @@ export function buildMedicationHistory(
       route: undefined,
       frequency: undefined,
       status: EVIDENCE_STATE_LABELS[state],
-      excerpt: link.excerpt ?? null,
+      excerpt: link.resolutionStatus === 'resolved' ? (link.excerpt ?? null) : null,
     });
   }
 
