@@ -193,3 +193,25 @@ The draft now runs the editorial interface and comparison service from one check
     - `sim_http.py`: **1,487/1,500 passed** (6.02s, 0 crashes; 13 failures are pre-existing `Cat3` probes: 3 hardcoded `MAX_BODY=40000` and 10 `'id'` vs `' id '` `source_id` checks).
     - `sim_ui.mjs`: **1,457/1,500 passed** (292.46ms; 43 failures are pre-existing `sim_ui.mjs` artifacts: 13 `:839` truncated mid-word `"wDrug"`/`"wordDrug"` prefixes intentionally rejected by word-boundary guard and 30 `:394` mock `MAX_BODY=40000` probes).
   - **Backend-frontend integration check (`VERIFIER2_INTEGRATION_OK`):** Verified `note-extraction.js` matches `service.py` on concatenated doses (`Aspirin81mg` accepted; `Vitamin B12`/`Aspirin2` rejected), whitespace-collapsed multi-line names (`Vitamin\nD3` vs `Vitamin D3`), Turkish `İ`/`ı` folding (`Aspirın`/`Aspirİn` vs `Aspirin`), and `\u200b` `source_id` collision rejection.
+
+---
+
+### WIDGET-001 — Widget-based Clinical Cockpit specification (new)
+
+**From:** Codex | **Status:** proposal | **Branch:** `feat/continuous-35b-ml-pipeline` | **Files:** `docs/ANTIGRAVITY_HANDOFF.md`, `docs/WIDGET_CATALOG.md`, `docs/CLINICAL_WORKFLOW.md`, `docs/TECHNICAL_ARCHITECTURE.md`, `docs/MVP_SPECIFICATION.md`, `docs/RESEARCH_LEDGER.md`
+
+A new documentation set has been added under `docs/` defining a widget-based, AI-assisted Clinical Cockpit — a redesigned clinician-facing EHR workspace experience. This is documentation and architecture only; no application code has been implemented or modified in this update.
+
+**Documents:**
+- `docs/ANTIGRAVITY_HANDOFF.md` — cornerstone implementation handoff answering 20 questions (what is this product, who is the user, which encounter, demo scenario, widgets, data, communication, layout, AI scope, clinician review, simulation vs. real, framework, build order, testing, exclusions, uncertainties, pre-implementation review) plus an implementation checklist
+- `docs/WIDGET_CATALOG.md` — 26 candidate widgets with clinical purpose, data requirements, FHIR resources, AI involvement, safety risks, and MVP classification (MUST BUILD / SHOULD BUILD / IF TIME / POST-HACKATHON / DO NOT BUILD)
+- `docs/CLINICAL_WORKFLOW.md` — end-to-end encounter flow (Open Patient → Understand → Prepare → Conduct → Document → Review Actions → Complete → Follow-Up) with a synthetic Morgan Lee scenario
+- `docs/TECHNICAL_ARCHITECTURE.md` — frontend/backend/widget system/AI subsystem/data contracts/performance/security
+- `docs/MVP_SPECIFICATION.md` — frozen demo scenario, 10 MVP widgets, 10-phase build order, acceptance criteria, risks, fallback plan
+- `docs/RESEARCH_LEDGER.md` — verified evidence, competitor corrections, unresolved questions, decisions (classified VERIFIED / INFERENCE / PROPOSAL / UNKNOWN)
+
+**Core principle:** AI proposes. Humans commit. The existing EHR remains the authoritative system of record. Synthetic data only; no real patient data; no clinical validation claims; no HIPAA compliance claim.
+
+**Coordination:** Coordinate before editing shared files. `main` is the stable branch; use a dedicated branch and small PR for major changes. Run typecheck, lint, tests and build before merge; obtain independent review. Do not overwrite uncommitted work. Do not claim clinical validation or production EHR integration.
+
+**Antigravity implementation handoff:** Antigravity should read `docs/ANTIGRAVITY_HANDOFF.md` first, then `docs/WIDGET_CATALOG.md` and `docs/TECHNICAL_ARCHITECTURE.md`, then begin Phase 1 (Repository foundation). Do not implement application code until all 20 handoff questions are understood and the pre-implementation checklist is complete.
