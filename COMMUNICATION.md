@@ -205,3 +205,7 @@ Codex added clarification and review controls beside the original notes' evidenc
 ### UI-008 — discharge follow-up handoff
 
 Codex added a text download that includes flagged questions and their source excerpts. A changed or cleared flag is reflected in the next download. The draft also includes two fictional cases for comparing review with the app against plain notes.
+
+### DOC-002 — one-page Veritas write-up
+
+Codex prepared and checked a one-page PDF for team review. The draft describes the current discharge handoff, the 40-note extraction benchmark, the observed literal-match error, and scope limits. The repository is still private. Submission and access changes await the team's decision.
