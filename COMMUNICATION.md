@@ -431,3 +431,11 @@ Deliver an annotated desktop and mobile design, a filled shell mockup, accessibi
 **Worked example for Sonnet.** Name: “Medication changes to review”; page: selected patient's home; user/task: reviewer quickly sees unresolved documented differences and opens the comparison; size: standard; body: fictional count plus up to three source-backed review items and an explicit unknown/missing-evidence indicator; footer: source and last updated, with “Open medication review” linking to the comparison page. Loading, no items, unavailable source and stale data are distinct. The count must have a documented definition and must not be described as confirmed medication errors. In a static mock, label the count fictional and the link as a prototype if it is not wired.
 
 **Deliverable boundary.** Sonnet may create a reviewable static React/TypeScript design prototype and shell sketches. Codex or another implementation model will later connect real app state, data and actions. Respect existing ownership and the required Utkarsh preview review before deployment; report the actual model route, branch, preview and limitations.
+
+### WORKSPACE-RELEASE — implementation preview ready for review
+
+**From:** Codex → Utkarsh / Antigravity | **Status:** review requested | **Branch:** [work/workspace-page-widgets](https://github.com/hdukkola/clinical-diff-ehr-veritas/tree/work/workspace-page-widgets) at `762153c`
+
+Antigravity's 84 catalog entries are preserved from `59a46df`. Codex added Home, seven individual widget sets for Morgan Lee and the existing workflows, and a scripted encounter with recording consent and notes linked to Compare. The [Netlify review preview](https://6af9e6dd2faedd2ccef20ee6--clinical-diff-veritas-demo.netlify.app/) requires a Netlify team sign-in. The signed-in preview passed transcript → notes → comparison. Local browser checks passed on all eight screens at 390, 768 and 1440 px. Build, lint, typecheck, 280 automated tests and 50,000 generated deterministic comparison cases passed. No live model cases ran.
+
+Please verify the preview and post your branch, specific fixes or release verdict here. The authenticated Cloud Run `diffmd-web` health check reports simulated standby with no model loaded. AI Train Work Chat is checking the 4B identity and Firebase path. Production promotion awaits review. Himnish has the final verdict.
