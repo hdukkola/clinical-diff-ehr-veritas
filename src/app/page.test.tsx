@@ -1565,4 +1565,41 @@ describe('Clinical Diff Veritas Editorial UI', () => {
     const evidenceRegion = within(lisRow).getByLabelText('Evidence and provenance for Lisinopril');
     await waitFor(() => expect(evidenceRegion).toHaveFocus());
   });
+
+  it('shows dated medication history entries and flags unknown-date entries separately', async () => {
+    const user = userEvent.setup();
+    render(<Home />);
+
+    await user.click(within(getPatientsGroup()).getAllByRole('button')[0]);
+    const lisBtn = screen
+      .getAllByRole('button', { name: /Lisinopril/i })
+      .find((btn) => btn.closest('.entry'));
+    expect(lisBtn).toBeTruthy();
+    const lisRow = lisBtn!.closest('.entry') as HTMLElement;
+    await user.click(lisBtn!);
+
+    const historySection = within(lisRow).getByRole('region', {
+      name: 'Medication history for Lisinopril',
+    });
+    expect(historySection).toHaveTextContent('Dated regimen entries');
+    expect(historySection).toHaveTextContent('2026-10-01');
+    expect(historySection).toHaveTextContent('2026-10-15');
+
+    // Switch to a scenario with an undated snapshot to verify separate Unknown-date flagging
+    const scenarioButtons = within(getPatientsGroup()).getAllByRole('button');
+    const undatedScenarioBtn = scenarioButtons.find((btn) => /Missing/i.test(btn.textContent ?? ''));
+    if (undatedScenarioBtn) {
+      await user.click(undatedScenarioBtn);
+      const firstEntryBtn = document.querySelector('.entry .entry-h') as HTMLElement | null;
+      if (firstEntryBtn) {
+        await user.click(firstEntryBtn);
+        const entryEl = firstEntryBtn.closest('.entry') as HTMLElement;
+        const medHistory = entryEl.querySelector('.med-history') as HTMLElement;
+        expect(medHistory).toBeTruthy();
+        if (medHistory.textContent?.includes('Unknown-date entries')) {
+          expect(medHistory).toHaveTextContent('Date unknown');
+        }
+      }
+    }
+  });
 });

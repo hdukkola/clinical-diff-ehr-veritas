@@ -251,8 +251,10 @@ function resolveEvidenceLink(
     : (explicitLinkLabel ?? snapshotLabel ?? undefined);
   const excerpt = normalizeOptionalText(link.excerpt);
   const recordedAt =
-    normalizeOptionalText(link.recordedAt) ??
-    normalizeOptionalText(snapshot.recordedAt);
+    link.recordedAt === null
+      ? null
+      : (normalizeOptionalText(link.recordedAt) ??
+         normalizeOptionalText(snapshot.recordedAt));
   const section = normalizeOptionalText(link.section) ?? undefined;
   const note = normalizeOptionalText(link.note) ?? undefined;
 
@@ -2216,4 +2218,100 @@ export function buildBeforeAfterRegimen(
     earlierEvidence,
     laterEvidence,
   };
+}
+
+export type MedicationHistoryEntry = {
+  id: string;
+  recordedAt: string | null;
+  dateLabel: string;
+  source: string;
+  role: string;
+  dose: string | null | undefined;
+  route: string | null | undefined;
+  frequency: string | null | undefined;
+  status: string;
+  excerpt?: string | null;
+};
+
+export type MedicationHistoryResult = {
+  dated: MedicationHistoryEntry[];
+  unknownDate: MedicationHistoryEntry[];
+};
+
+function isValidDatedTimestamp(value: string | null | undefined): value is string {
+  if (!value || !value.trim()) return false;
+  return !Number.isNaN(Date.parse(value));
+}
+
+/**
+ * Builds chronological dated regimen entries and separates unknown-date entries
+ * into an explicit group without guessing or fabricating dates.
+ */
+export function buildMedicationHistory(
+  beforeMed: Medication | undefined,
+  afterMed: Medication | undefined,
+  earlierSnap: Pick<Snapshot, 'id' | 'source' | 'recordedAt'>,
+  laterSnap: Pick<Snapshot, 'id' | 'source' | 'recordedAt'>,
+  change: MedicationChange | undefined,
+): MedicationHistoryResult {
+  const raw: MedicationHistoryEntry[] = [];
+
+  if (beforeMed) {
+    const dt = isValidDatedTimestamp(earlierSnap.recordedAt) ? earlierSnap.recordedAt : null;
+    raw.push({
+      id: `snap-earlier-${earlierSnap.id}-${beforeMed.id}`,
+      recordedAt: dt,
+      dateLabel: dt ?? 'Date unknown',
+      source: earlierSnap.source,
+      role: 'Earlier snapshot',
+      dose: beforeMed.dose,
+      route: beforeMed.route,
+      frequency: beforeMed.frequency,
+      status: resolveRegimenStatus(beforeMed, change?.provenance?.earlier.status) ?? 'Present in snapshot',
+    });
+  }
+
+  if (afterMed) {
+    const dt = isValidDatedTimestamp(laterSnap.recordedAt) ? laterSnap.recordedAt : null;
+    raw.push({
+      id: `snap-later-${laterSnap.id}-${afterMed.id}`,
+      recordedAt: dt,
+      dateLabel: dt ?? 'Date unknown',
+      source: laterSnap.source,
+      role: 'Later snapshot',
+      dose: afterMed.dose,
+      route: afterMed.route,
+      frequency: afterMed.frequency,
+      status: resolveRegimenStatus(afterMed, change?.provenance?.later.status) ?? 'Present in snapshot',
+    });
+  }
+
+  for (const [idx, link] of (change?.evidenceLinks ?? []).entries()) {
+    const dt = isValidDatedTimestamp(link.recordedAt) ? link.recordedAt : null;
+    const state = classifyLinkEvidenceState(link, change);
+    raw.push({
+      id: link.id ?? `ev-${idx}`,
+      recordedAt: dt,
+      dateLabel: dt ?? 'Date unknown',
+      source: link.sourceLabel ?? link.noteId ?? link.sourceId ?? 'Evidence reference',
+      role:
+        link.side === 'earlier'
+          ? 'Earlier evidence'
+          : link.side === 'later'
+            ? 'Later evidence'
+            : 'Evidence reference',
+      dose: undefined,
+      route: undefined,
+      frequency: undefined,
+      status: EVIDENCE_STATE_LABELS[state],
+      excerpt: link.excerpt ?? null,
+    });
+  }
+
+  const dated = raw
+    .filter((entry) => entry.recordedAt !== null)
+    .sort((a, b) => Date.parse(a.recordedAt!) - Date.parse(b.recordedAt!));
+  const unknownDate = raw.filter((entry) => entry.recordedAt === null);
+
+  return { dated, unknownDate };
 }

@@ -3533,3 +3533,127 @@ pre.code .c {
     min-height: 44px;
   }
 }
+
+/* Medication history */
+.med-history {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--sunk);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.med-history-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.med-history-kicker {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--strong);
+}
+
+.med-history-sub {
+  display: block;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.med-history-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.med-history-group-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--strong);
+}
+
+.med-history-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.med-history-item {
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--raised);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.med-history-group.is-unknown .med-history-item {
+  border-style: dashed;
+}
+
+.med-history-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  font-size: 12px;
+}
+
+.med-history-date {
+  font-weight: 600;
+  color: var(--strong);
+}
+
+.med-history-role {
+  font-size: 11px;
+  padding: 1px 6px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--muted);
+}
+
+.med-history-source {
+  color: var(--text);
+}
+
+.med-history-status {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.med-history-unknown-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border: 1px solid var(--warn);
+  border-radius: 6px;
+  color: var(--warn);
+}
+
+.med-history-detail {
+  font-size: 12.5px;
+  color: var(--text);
+}
+
+.med-history-empty {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+}

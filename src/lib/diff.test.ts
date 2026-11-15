@@ -4,6 +4,7 @@ import {
   buildBeforeAfterRegimen,
   buildDocumentIndex,
   buildEncounterTimeline,
+  buildMedicationHistory,
   buildReconciliationWorklist,
   classifyChangeEvidenceState,
   classifyLinkEvidenceState,
@@ -895,5 +896,62 @@ describe('compareNoteRegimens & normalizeNoteText', () => {
       after: undefined,
       changed: true,
     });
+  });
+
+  it('orders dated medication history entries chronologically and flags unknown dates separately', () => {
+    const beforeMed = {
+      id: 'm-hist-1',
+      name: 'Lisinopril',
+      dose: '10 mg',
+      route: 'oral',
+      frequency: 'daily',
+      provenance: 'documented' as const,
+      evidenceLinks: [
+        {
+          id: 'ev-dated-mid',
+          side: 'earlier' as const,
+          sourceKind: 'clinical_note' as const,
+          sourceLabel: 'Mid Note',
+          recordedAt: '2026-01-05',
+          excerpt: 'Lisinopril 10 mg daily continued.',
+        },
+        {
+          id: 'ev-undated',
+          side: 'later' as const,
+          sourceKind: 'patient_report' as const,
+          sourceLabel: 'Undated Patient Call',
+          recordedAt: null,
+          excerpt: 'Patient unsure when dose changed.',
+        },
+      ],
+    };
+    const afterMed = {
+      id: 'm-hist-1',
+      name: 'Lisinopril',
+      dose: '20 mg',
+      route: 'oral',
+      frequency: 'daily',
+      provenance: 'documented' as const,
+    };
+    const earlierSnap = { id: 's1', source: 'Clinic A', recordedAt: '2026-01-01', medications: [beforeMed] };
+    const laterSnap = { id: 's2', source: 'Clinic B', recordedAt: null, medications: [afterMed] };
+    const report = analyzeSnapshots(earlierSnap, laterSnap);
+
+    const history = buildMedicationHistory(
+      beforeMed,
+      afterMed,
+      earlierSnap,
+      laterSnap,
+      report.changes[0],
+    );
+
+    expect(history.dated.map((d) => d.recordedAt)).toEqual([
+      '2026-01-01',
+      '2026-01-05',
+    ]);
+    expect(history.unknownDate.length).toBeGreaterThanOrEqual(2);
+    expect(history.unknownDate.some((u) => u.source === 'Undated Patient Call' && u.dateLabel === 'Date unknown')).toBe(
+      true,
+    );
   });
 });

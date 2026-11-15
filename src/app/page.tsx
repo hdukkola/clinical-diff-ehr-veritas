@@ -15,6 +15,7 @@ import {
   buildBeforeAfterRegimen,
   buildDocumentIndex,
   buildEncounterTimeline,
+  buildMedicationHistory,
   buildReconciliationWorklist,
   classifyChangeEvidenceState,
   classifyLinkEvidenceState,
@@ -3617,6 +3618,113 @@ export default function Home() {
                                               )}
                                             </div>
                                           </div>
+                                        </section>
+                                      );
+                                    })()}
+
+                                    {(() => {
+                                      const history = buildMedicationHistory(
+                                        entry.beforeMed,
+                                        entry.afterMed,
+                                        activeScenario.earlier,
+                                        activeScenario.later,
+                                        entry.change,
+                                      );
+                                      const formatRegimenSummary = (h: {
+                                        dose: string | null | undefined;
+                                        route: string | null | undefined;
+                                        frequency: string | null | undefined;
+                                      }) => {
+                                        const parts = [h.dose, h.route, h.frequency].filter(
+                                          (v): v is string => typeof v === 'string' && v.trim().length > 0,
+                                        );
+                                        return parts.length > 0 ? parts.join(' · ') : 'Regimen details not documented';
+                                      };
+                                      return (
+                                        <section
+                                          className="med-history"
+                                          aria-label={`Medication history for ${entry.name}`}
+                                        >
+                                          <div className="med-history-head">
+                                            <div>
+                                              <span className="med-history-kicker">
+                                                Medication history
+                                              </span>
+                                              <span className="med-history-sub">
+                                                {history.dated.length} dated · {history.unknownDate.length}{' '}
+                                                unknown date
+                                              </span>
+                                            </div>
+                                          </div>
+
+                                          <div className="med-history-group">
+                                            <div className="med-history-group-title">
+                                              Dated regimen entries
+                                            </div>
+                                            {history.dated.length === 0 ? (
+                                              <p className="med-history-empty">
+                                                No dated regimen entries.
+                                              </p>
+                                            ) : (
+                                              <ol className="med-history-list">
+                                                {history.dated.map((h) => (
+                                                  <li key={h.id} className="med-history-item">
+                                                    <div className="med-history-meta">
+                                                      <time className="med-history-date">
+                                                        {h.dateLabel}
+                                                      </time>
+                                                      <span className="med-history-role">{h.role}</span>
+                                                      <span className="med-history-source">{h.source}</span>
+                                                      <span className="med-history-status">{h.status}</span>
+                                                    </div>
+                                                    {h.excerpt ? (
+                                                      <div className="med-history-detail">{h.excerpt}</div>
+                                                    ) : (
+                                                      <div className="med-history-detail">
+                                                        {formatRegimenSummary(h)}
+                                                      </div>
+                                                    )}
+                                                  </li>
+                                                ))}
+                                              </ol>
+                                            )}
+                                          </div>
+
+                                          {history.unknownDate.length > 0 && (
+                                            <div
+                                              className="med-history-group is-unknown"
+                                              role="region"
+                                              aria-label={`Unknown-date entries for ${entry.name}`}
+                                            >
+                                              <div className="med-history-group-title">
+                                                Unknown-date entries
+                                                <span className="med-history-unknown-badge">
+                                                  Date unknown
+                                                </span>
+                                              </div>
+                                              <ul className="med-history-list">
+                                                {history.unknownDate.map((h) => (
+                                                  <li key={h.id} className="med-history-item">
+                                                    <div className="med-history-meta">
+                                                      <span className="med-history-unknown-badge">
+                                                        {h.dateLabel}
+                                                      </span>
+                                                      <span className="med-history-role">{h.role}</span>
+                                                      <span className="med-history-source">{h.source}</span>
+                                                      <span className="med-history-status">{h.status}</span>
+                                                    </div>
+                                                    {h.excerpt ? (
+                                                      <div className="med-history-detail">{h.excerpt}</div>
+                                                    ) : (
+                                                      <div className="med-history-detail">
+                                                        {formatRegimenSummary(h)}
+                                                      </div>
+                                                    )}
+                                                  </li>
+                                                ))}
+                                              </ul>
+                                            </div>
+                                          )}
                                         </section>
                                       );
                                     })()}
