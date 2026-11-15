@@ -3,6 +3,18 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { RECORDING_WAV_BYTES, TRANSCRIPTION_MODEL, TRANSCRIPTION_WEIGHTS } from '@/lib/recording-transcription';
 import { POST } from './route';
 
+const training = vi.hoisted(() => ({
+  enabled: false,
+  caseStore: vi.fn(),
+}));
+vi.mock('@/lib/clerk-training', () => ({
+  get clerkTrainingEnabled() { return training.enabled; },
+}));
+vi.mock('@/lib/clerk-training-store', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@/lib/clerk-training-store')>(),
+  trainingCaseStore: training.caseStore,
+}));
+
 const worker = 'https://private-worker.run.app';
 const identity = { model: TRANSCRIPTION_MODEL, weightsSha256: TRANSCRIPTION_WEIGHTS };
 const transcript = {
@@ -15,7 +27,7 @@ const requestHeaders = {
   'X-DiffMD-Case-ID': 'SYNC-' + 'A'.repeat(32),
 };
 
-function request(headers = requestHeaders, body = new Uint8Array(48)) {
+function request(headers: HeadersInit = requestHeaders, body = new Uint8Array(48)) {
   return new Request('https://diffmd.web.app/api/recording-transcription', {
     method: 'POST', headers, body,
   });
@@ -32,6 +44,7 @@ describe('recording transcription', () => {
   });
 
   afterEach(() => {
+    training.enabled = false;
     vi.unstubAllGlobals();
     vi.unstubAllEnvs();
   });
@@ -88,5 +101,50 @@ describe('recording transcription', () => {
     const response = await POST(request());
     expect(response.status).toBe(504);
     expect(await response.json()).toEqual({ error: 'timeout' });
+  });
+
+  describe('Clerk training recorder', () => {
+    const origin = 'http://localhost:3193';
+    const caseHeaders = { ...requestHeaders, Origin: origin };
+    const readCase = vi.fn();
+    const ownedCase = vi.fn();
+
+    beforeEach(() => {
+      training.enabled = true;
+      vi.stubEnv('DIFFMD_CLERK_TRAINING_PROJECT', 'diffmd-training-veritas-26');
+      vi.stubEnv('DIFFMD_CLERK_TRAINING_ORIGIN', origin);
+      vi.stubEnv('DIFFMD_TRAINING_WHISPER_PORT', '18892');
+      readCase.mockReset().mockResolvedValue({ exists: true });
+      ownedCase.mockReset().mockReturnValue({ get: readCase });
+      training.caseStore.mockReset().mockResolvedValue({ records: { doc: ownedCase } });
+    });
+
+    it('sends audio to the loopback worker after verifying the exact owned case', async () => {
+      fetcher.mockResolvedValueOnce(Response.json(transcript));
+      const response = await POST(request(caseHeaders));
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual(transcript);
+      expect(ownedCase).toHaveBeenCalledWith(requestHeaders['X-DiffMD-Case-ID']);
+      expect(readCase).toHaveBeenCalledBefore(fetcher);
+      expect(fetcher).toHaveBeenCalledExactlyOnceWith('http://127.0.0.1:18892/transcribe', expect.objectContaining({
+        headers: { 'Content-Type': 'audio/wav' }, method: 'POST',
+      }));
+    });
+
+    it('rejects another origin, a missing own case, and an unapproved session without sending audio', async () => {
+      expect((await POST(request({ ...caseHeaders, Origin: 'https://example.com' }))).status).toBe(403);
+      expect(training.caseStore).not.toHaveBeenCalled();
+      readCase.mockResolvedValueOnce({ exists: false });
+      expect((await POST(request(caseHeaders))).status).toBe(403);
+      training.caseStore.mockResolvedValueOnce({ status: 403, error: 'invite_required' });
+      expect((await POST(request(caseHeaders))).status).toBe(403);
+      expect(fetcher).not.toHaveBeenCalled();
+    });
+
+    it('never falls back to the cloud worker when the local port is absent', async () => {
+      vi.stubEnv('DIFFMD_TRAINING_WHISPER_PORT', '');
+      expect((await POST(request(caseHeaders))).status).toBe(503);
+      expect(fetcher).not.toHaveBeenCalled();
+    });
   });
 });

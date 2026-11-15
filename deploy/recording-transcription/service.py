@@ -1,4 +1,5 @@
 """Private, bounded transcription for reviewed workspace notes."""
+import hashlib
 import io
 import json
 import os
@@ -13,6 +14,8 @@ MODEL = {
     "weightsSha256": "a03779c86df3323075f5e796cb2ce5029f00ec8869eee3fdfb897afe36c6d002",
 }
 MAX_BYTES = 960_044
+WHISPER = os.environ.get("DIFFMD_WHISPER_BIN", "/opt/whisper/whisper-cli")
+WEIGHTS = os.environ.get("DIFFMD_WHISPER_WEIGHTS", "/models/whisper-base.en.bin")
 
 
 def inspect_wav(data):
@@ -35,7 +38,7 @@ def transcribe(data, duration):
         audio.write_bytes(data)
         output = Path(directory) / "transcript"
         subprocess.run(
-            ["/opt/whisper/whisper-cli", "-m", "/models/whisper-base.en.bin",
+            [WHISPER, "-m", WEIGHTS,
              "-f", str(audio), "-l", "en", "-ng", "-t", "2", "-ml", "105",
              "-sow", "-oj", "-of", str(output)],
             check=True, timeout=24, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
@@ -114,4 +117,14 @@ class Handler(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    HTTPServer(("0.0.0.0", int(os.environ.get("PORT", "8080"))), Handler).serve_forever()
+    local = os.environ.get("DIFFMD_WHISPER_LOOPBACK") == "1"
+    if local:
+        digest = hashlib.sha256()
+        with open(WEIGHTS, "rb") as weights:
+            for chunk in iter(lambda: weights.read(1024 * 1024), b""):
+                digest.update(chunk)
+        if digest.hexdigest() != MODEL["weightsSha256"]:
+            raise SystemExit("Whisper weights checksum mismatch")
+        if not os.access(WHISPER, os.X_OK):
+            raise SystemExit("Whisper executable is unavailable")
+    HTTPServer(("127.0.0.1" if local else "0.0.0.0", int(os.environ.get("PORT", "8080"))), Handler).serve_forever()

@@ -136,6 +136,7 @@ export function useCloudCases(uid: string | undefined, getToken?: GetToken) {
   const [cases, setCases] = useState<CloudCase[]>([]);
   const [loading, setLoading] = useState(Boolean(uid));
   const [connected, setConnected] = useState(false);
+  const [trainingAccess, setTrainingAccess] = useState(false);
   const [error, setError] = useState('');
   const [attempt, setAttempt] = useState(0);
   const caseRevision = useRef(0);
@@ -146,10 +147,14 @@ export function useCloudCases(uid: string | undefined, getToken?: GetToken) {
     let stop: (() => void) | undefined;
     function failed(cause: unknown) {
       if (canceled) return;
-      setCases([]);
+      const denied = errorCode(cause) === 'permission-denied';
+      if (!getToken || denied) {
+        setCases([]);
+        setTrainingAccess(false);
+      }
       setLoading(false);
       setConnected(false);
-      setError(errorCode(cause) === 'permission-denied'
+      setError(denied
         ? 'Cloud workspace access is limited to invited accounts.'
         : 'Could not load cloud cases. Try again.');
     }
@@ -165,6 +170,7 @@ export function useCloudCases(uid: string | undefined, getToken?: GetToken) {
             AbortSignal.any([lifetime.signal, AbortSignal.timeout(8000)]));
           if (!canceled && revision === caseRevision.current) {
             setCases(result.cases);
+            setTrainingAccess(true);
             setConnected(true);
             setLoading(false);
             setError('');
@@ -224,7 +230,7 @@ export function useCloudCases(uid: string | undefined, getToken?: GetToken) {
     retry(true);
   }
 
-  return { cases, loading, connected, error, retry, applyTrainingCaseChange };
+  return { cases, loading, connected, error, retry, applyTrainingCaseChange, trainingAccess };
 }
 
 export async function createCloudCase(uid: string, name: string, getToken?: GetToken): Promise<CloudCase> {

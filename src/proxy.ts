@@ -15,4 +15,4 @@ export default function proxy(request: NextRequest, event: NextFetchEvent) {
   return authenticate(request, event);
 }
 
-export const config = { matcher: ['/', '/api/training/cases'] };
+export const config = { matcher: ['/', '/api/training/cases', '/api/recording-transcription'] };

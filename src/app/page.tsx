@@ -58,6 +58,7 @@ import { AssistantPanel } from '@/components/AssistantPanel';
 import { applyChartCorrections, chartCorrectionsFor, type ChartAspect, type ChartCorrection } from '@/lib/patient-chat';
 import { EncounterAudioNote } from '@/components/EncounterAudioNote';
 import { RecordingTranscription } from '@/components/RecordingTranscription';
+import { LiveMeetingNotes } from '@/components/LiveMeetingNotes';
 import { SYNTHETIC_ASSISTANT_NOTES } from '@/lib/assistant-evidence';
 import {
   DEFAULT_MLX_MODEL_ID,
@@ -2948,7 +2949,7 @@ function Workspace({ session }: { session: CloudSession }) {
   /* ------------------------------------------------------------------
      Render
      ------------------------------------------------------------------ */
-  if (clerkTrainingEnabled && !cloud.connected) {
+  if (clerkTrainingEnabled && !cloud.connected && !cloud.trainingAccess) {
     return (
       <main className="canvas">
         <div className="col">
@@ -3291,6 +3292,18 @@ function Workspace({ session }: { session: CloudSession }) {
                 </header>
                 {view === 'patient' && caseRemovalError?.id === activeScenario.id && (
                   <p role="alert">{caseRemovalError.message}</p>
+                )}
+                {view === 'patient' && cloudCase && clerkToken && process.env.NEXT_PUBLIC_DIFFMD_LIVE_RECORDING === '1' && (
+                  <LiveMeetingNotes key={cloudUser + '/' + cloudCase.id} caseId={cloudCase.id} getToken={clerkToken}
+                    disabled={cloudWrite || !cloud.connected}
+                    onUse={(text) => {
+                      const note = [laterNoteText.trimEnd(), text].filter(Boolean).join('\n\n');
+                      if (note.length > 12_000) return false;
+                      updateNote('later', note);
+                      setAnnouncement('Meeting transcript added to the later note draft. Review and save the note.');
+                      navigateTo('extract');
+                      return true;
+                    }} />
                 )}
                 {view === 'patient' && cloudCase && session.user && !clerkTrainingEnabled && process.env.NEXT_PUBLIC_DIFFMD_RECORDING_TRANSCRIPTION === '1' && (
                   <RecordingTranscription key={session.user.uid + '/' + cloudCase.id} uid={session.user.uid}

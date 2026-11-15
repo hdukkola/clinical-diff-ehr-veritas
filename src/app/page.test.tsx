@@ -147,7 +147,7 @@ describe('Clinical Diff Veritas Editorial UI', () => {
     });
     const cases = vi.spyOn(cloudWorkspace, 'useCloudCases').mockReturnValue({
       cases: [caseRecord], loading: false, connected: true, error: '', retry: vi.fn(),
-      applyTrainingCaseChange: vi.fn(),
+      applyTrainingCaseChange: vi.fn(), trainingAccess: false,
     });
     const save = vi.spyOn(cloudWorkspace, 'saveCloudCaseNotes').mockResolvedValue(2);
     const playback = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:recording-qa');

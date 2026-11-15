@@ -1,11 +1,7 @@
-import { auth } from '@clerk/nextjs/server';
-import { getApps, initializeApp } from 'firebase-admin/app';
-import { getFirestore } from 'firebase-admin/firestore';
-import { clerkTrainingEnabled } from '@/lib/clerk-training';
+import {
+  trainingAccessError, trainingCaseId, trainingCaseStore,
+} from '@/lib/clerk-training-store';
 
-const projectId = 'diffmd-training-veritas-26';
-const caseId = /^SYNC-[A-F0-9]{32}$/;
-const clerkId = /^user_[A-Za-z0-9]{1,64}$/;
 const headers = { 'Cache-Control': 'private, no-store' };
 
 function reply(status: number, body: object) {
@@ -39,23 +35,12 @@ async function readPayload(request: Request): Promise<Record<string, unknown> | 
 }
 
 export async function POST(request: Request) {
-  if (!clerkTrainingEnabled || process.env.DIFFMD_CLERK_TRAINING_PROJECT !== projectId) {
-    return reply(404, { error: 'training_unavailable' });
-  }
-  if (!process.env.DIFFMD_CLERK_TRAINING_ORIGIN
-    || request.headers.get('Origin') !== process.env.DIFFMD_CLERK_TRAINING_ORIGIN) {
-    return reply(403, { error: 'invalid_origin' });
-  }
+  const access = trainingAccessError(request);
+  if (access) return reply(access.status, { error: access.error });
   try {
-    const { userId, sessionId, actor } = await auth({ acceptsToken: 'session_token' });
-    if (!userId || !sessionId || actor || !clerkId.test(userId)) return reply(401, { error: 'sign_in_required' });
-
-    const app = getApps().find(({ name }) => name === 'diffmd-clerk-training')
-      ?? initializeApp({ projectId }, 'diffmd-clerk-training');
-    const database = getFirestore(app);
-    const invite = await database.collection('workspaceClerkAccounts').doc(userId).get();
-    if (invite.get('enabled') !== true) return reply(403, { error: 'invite_required' });
-    const records = database.collection('clerkTrainingWorkspaces').doc(userId).collection('cases');
+    const store = await trainingCaseStore();
+    if (!store.records) return reply(store.status, { error: store.error });
+    const { database, records } = store;
 
     if (request.headers.get('Content-Type') !== 'application/json') return reply(415, { error: 'invalid_request' });
     const data = await readPayload(request);
@@ -83,7 +68,7 @@ export async function POST(request: Request) {
     }
     if (data.action === 'remove') {
       const { id, version } = data;
-      if (typeof id !== 'string' || !caseId.test(id) || typeof version !== 'number'
+      if (typeof id !== 'string' || !trainingCaseId.test(id) || typeof version !== 'number'
         || !Number.isSafeInteger(version) || version < 1) {
         return reply(400, { error: 'invalid_case' });
       }
@@ -98,7 +83,7 @@ export async function POST(request: Request) {
     }
     if (data.action === 'save') {
       const { id, earlier, later, version } = data;
-      if (typeof id !== 'string' || !caseId.test(id) || typeof earlier !== 'string' || earlier.length > 12000
+      if (typeof id !== 'string' || !trainingCaseId.test(id) || typeof earlier !== 'string' || earlier.length > 12000
         || typeof later !== 'string' || later.length > 12000 || typeof version !== 'number'
         || !Number.isSafeInteger(version) || version < 1 || version >= Number.MAX_SAFE_INTEGER) {
         return reply(400, { error: 'invalid_case' });
