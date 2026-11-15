@@ -453,3 +453,34 @@ Please prioritize these concrete source-level risks before the filming preview, 
 3. **Design fit:** `WorkspaceWidgets` currently provides a shared title/value/detail/action shell and a wide flag; most workflow widgets are compact metrics in a one-column rail. This is a useful foundation, but the requested richer evidence, chart and variable-size shell designs should remain proposed until designed and reviewed; don't describe counts or shortcut cards as those completed features. For filming, prioritize source navigation, unambiguous labels, readable patient context and functional shortcuts over adding more cards.
 
 Please post your verification and preview findings here; report whether each item is addressed, and preserve the current branch and file claims. No clinical validation, deployment approval, or Sonnet execution is implied by this review.
+
+### Reply — DESIGN-SONNET-001 / DESIGN-SONNET-002 & WORKSPACE-RELEASE Ready for Review
+
+**From:** Utkarsh / Antigravity | **To:** Codex / Himnish | **Status:** ready for review
+
+1. **Sonnet Widget Design & Shell Spec (DESIGN-SONNET-001 & DESIGN-SONNET-002):**
+   - **Branch:** design/sonnet-widget-shell @ 5755be (also cherry-picked onto eat/workspace-page-widgets-ag)
+   - **Files:** [docs/WIDGET_DESIGN_SONNET.md](docs/WIDGET_DESIGN_SONNET.md), [src/design/widget-shell/WidgetShell.tsx](src/design/widget-shell/WidgetShell.tsx), [src/design/widget-shell/ExampleBodies.tsx](src/design/widget-shell/ExampleBodies.tsx), [src/design/widget-shell/mock-data.ts](src/design/widget-shell/mock-data.ts), [src/design/widget-shell/widget-shell.css](src/design/widget-shell/widget-shell.css), [src/app/design-preview/page.tsx](src/app/design-preview/page.tsx), [src/app/design-preview/page.test.tsx](src/app/design-preview/page.test.tsx).
+   - **What it delivers:** Reusable 12-column widget shell (compact=3, standard=6, wide=9, ull=12 + 	all variant), all 8 states (eady, loading, empty, unavailable, error, stale, partial, estricted) with text + glyph + border patterns, current/proposed/mocked provenance badges, the DESIGN-SONNET-002 worked example (*Medication changes to review* with documented denominator and explicit unknown/missing-evidence badges), page-to-widget matrix, and static preview at /design-preview with all mock buttons disabled (disabled, ria-disabled="true").
+   - **Checks on 5755be:** 
+pm run typecheck (0 errors), 
+pm run lint (0 errors), 
+px vitest run src/app/design-preview/page.test.tsx (12/12 passed), 
+pm run build (static route /design-preview prerendered).
+
+2. **Integrated Workspace Release (WORKSPACE-RELEASE):**
+   - **Branch:** eat/workspace-page-widgets-ag @ 65065e3 (stacked on origin/work/workspace-page-widgets @ 762153c without overwriting Codex's branch)
+   - **What it adds on top of 762153c:**
+     - Traceable per-utterance links in [src/components/EncounterTranscript.tsx](src/components/EncounterTranscript.tsx) (Trace to earlier note at  0:13, Trace to discharge note at  0:37, and Trace Aspirin in Snapshot review at  0:54 jumping directly to Aspirin's expanded provenance/evidence).
+     - Full 100-surface clinical & specialty widget builders ([src/lib/widgets-clinical.ts](src/lib/widgets-clinical.ts), [src/lib/widgets-specialty.ts](src/lib/widgets-specialty.ts)) wired into BacklogCatalogDrawer (Widget library).
+     - Static /design-preview route and WidgetShell design spec.
+   - **50,000-Case & Full Suite Verification on 65065e3:**
+     - src/lib/diff-scale.test.ts: **50,000 / 50,000 passed, 0 failed, 0 timed out** across all 5 deterministic comparison families (10,000 cases each).
+     - Full Vitest suite (
+pm test -- --run): **13 test files, 390 / 390 tests passed** (including 26/26 in src/app/page.test.tsx and 12/12 in src/app/design-preview/page.test.tsx).
+     - 
+pm run typecheck (0 errors), 
+pm run lint (0 errors), 
+pm run build (passed).
+   - **Cloud Run 4B / Hosted Service Status Check:**
+     - Local environment has no MLX_SERVICE_URL or Cloud Run 4B credentials configured; /api/assistant returns 503 (status: 'unavailable', "The trained model is not connected to a verified hosted service yet.") and /api/health / /api/compare report standby (provider: 'deterministic_replay', configured: false, eachable: false, simulated: true). Existing 35B deployment was left completely untouched.
