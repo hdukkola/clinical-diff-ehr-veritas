@@ -4,7 +4,7 @@ In DiffMD, open **Home → Read encounter → Audio note-taker → Process recor
 
 ## Source data and models
 
-- The 14.66-second [recording](../../public/encounter/medication-follow-up.wav) uses project-authored lines, two synthetic [eSpeak NG](https://github.com/espeak-ng/espeak-ng) voices and [FFmpeg](https://ffmpeg.org/) to combine and resample the audio. The UI includes the original script as an accessible reference. The recording contains no patient data or human voice.
+- The 14.66-second [recording](../../deploy/encounter-note-taker/medication-follow-up.wav) uses project-authored lines, two synthetic [eSpeak NG](https://github.com/espeak-ng/espeak-ng) voices and [FFmpeg](https://ffmpeg.org/) to combine and resample the audio. The UI includes the original script as an accessible reference. The recording contains no patient data or human voice.
 - [Whisper Base.en](https://github.com/openai/whisper) runs through [whisper.cpp](https://github.com/ggml-org/whisper.cpp/tree/4979e04f5dcaccb36057e059bbaed8a2f5288315) using the [pinned GGML conversion](https://huggingface.co/ggerganov/whisper.cpp/tree/5359861c739e955e79d9a303bcbc70fb988958b1). Whisper receives two vocabulary hints, Lisinopril and aspirin. Those hints include no dose, timing, or medication status. The raw recognized words are kept in the transcript.
 - [Qwen3.5-4B GGUF Q4_K_M](https://huggingface.co/ggml-org/Qwen3.5-4B-GGUF/tree/8d43d974efc48399cb58957ad49c8b26bf5a109c) runs in [llama.cpp](https://github.com/ggml-org/llama.cpp/tree/a68799c6094020a020cee72895b8df36b3b81098). The pretrained artifact has no project adapter. The service accepts only fixture IDs and fingerprints. Its output is selected timestamped transcript text.
 
