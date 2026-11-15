@@ -11,10 +11,24 @@ const apiKey = process.env.NEXT_PUBLIC_DIFFMD_FIREBASE_API_KEY;
 const appId = process.env.NEXT_PUBLIC_DIFFMD_FIREBASE_APP_ID;
 const projectId = process.env.NEXT_PUBLIC_DIFFMD_FIREBASE_PROJECT;
 const authDomain = process.env.NEXT_PUBLIC_DIFFMD_FIREBASE_AUTH_DOMAIN;
+const localWidgetQa = process.env.NODE_ENV === 'development'
+  && process.env.NEXT_PUBLIC_DIFFMD_LOCAL_WIDGET_QA === '1';
+const hostedTrainingData = process.env.NODE_ENV === 'development'
+  && process.env.NEXT_PUBLIC_DIFFMD_TRAINING_WORKSPACE === '1';
+const qaProject = 'demo-diffmd-widget-qa';
+const trainingProject = 'diffmd-training-veritas-26';
+export const trainingWorkspace = localWidgetQa || hostedTrainingData;
 export const cloudWorkspaceEnabled = Boolean(apiKey && appId && projectId && authDomain);
 export const CLOUD_CASE_LIMIT = 100;
 
 async function connectWorkspace() {
+  if (localWidgetQa && (projectId !== qaProject || window.location.hostname !== '127.0.0.1')) {
+    throw new Error('Widget QA requires the local demo project and a loopback browser address.');
+  }
+  if (hostedTrainingData && (projectId !== trainingProject
+    || authDomain !== `${trainingProject}.firebaseapp.com` || window.location.hostname !== 'localhost')) {
+    throw new Error('Training requires the separate DiffMD Training project and localhost.');
+  }
   const [app, auth, store] = await Promise.all([
     import('firebase/app'), import('firebase/auth'), import('firebase/firestore'),
   ]);
@@ -23,7 +37,9 @@ async function connectWorkspace() {
     persistence: auth.browserSessionPersistence,
     popupRedirectResolver: auth.browserPopupRedirectResolver,
   });
+  if (localWidgetQa) auth.connectAuthEmulator(identity, 'http://127.0.0.1:9199');
   const database = store.initializeFirestore(client, { localCache: store.memoryLocalCache() });
+  if (localWidgetQa) store.connectFirestoreEmulator(database, '127.0.0.1', 8180);
   return { auth, identity, store, database };
 }
 

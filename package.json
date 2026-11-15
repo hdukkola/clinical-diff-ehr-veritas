@@ -9,6 +9,8 @@
     "lint": "eslint",
     "test": "vitest run",
     "typecheck": "next typegen && tsc --noEmit",
+    "qa:widgets": "firebase emulators:exec --config firebase.widget-qa.json --project demo-diffmd-widget-qa --only auth,firestore \"node scripts/serve-widget-qa.mjs\"",
+    "qa:widgets:training": "node scripts/serve-widget-qa.mjs --training",
     "eval:model": "node tests/model-eval/run_model_eval.mjs"
   },
   "dependencies": {

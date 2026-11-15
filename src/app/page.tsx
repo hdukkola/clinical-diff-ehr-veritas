@@ -41,7 +41,7 @@ import {
 } from '@/lib/browser-patients';
 import {
   CLOUD_CASE_LIMIT, CloudCaseConflict, cloudWorkspaceEnabled, createCloudCase,
-  saveCloudCaseNotes, useCloudCases, useCloudSession, type CaseNotes,
+  saveCloudCaseNotes, trainingWorkspace, useCloudCases, useCloudSession, type CaseNotes,
 } from '@/lib/cloud-workspace';
 import { BRAND_NAME } from '@/lib/branding';
 import { WorkspaceWidgets, type WorkspaceWidget } from '@/components/WorkspaceWidgets';
@@ -2522,6 +2522,8 @@ function Workspace({ session }: { session: ReturnType<typeof useCloudSession> })
   const noteFlaggedCount = extractResult
     ? extractResult.differences.filter((d) => noteReviewDecisions[d.key] === 'clarify').length
     : 0;
+  const notePendingCount = extractResult ? noteDiffCount - noteDecidedCount : '—';
+  const notesEntered = Number(Boolean(earlierNoteText.trim())) + Number(Boolean(laterNoteText.trim()));
 
   const activePaletteObj = PALETTES.find((p) => p.id === palette) ?? PALETTES[0];
   const socketModelSummary = socketStatus.model
@@ -2583,6 +2585,11 @@ function Workspace({ session }: { session: ReturnType<typeof useCloudSession> })
   const jump = (title: string, value: string | number, next: ViewId, text: string, detail?: string) =>
     metric(title, value, detail, text, () => navigateTo(next));
 
+  function openNoteResults() {
+    navigateTo('extract', !extractResult);
+    if (extractResult) focusSection('extraction-result-title');
+  }
+
   const chatChart = patientScenarios.find((chart) => chart.id === chatChartId) ?? activeScenario;
 
   function openChartChat() {
@@ -2610,10 +2617,13 @@ function Workspace({ session }: { session: ReturnType<typeof useCloudSession> })
       widgets = [
         metric('Patient workspace', patientName, activeScenario.patientId,
           hasSelectedPatient ? 'Open patient' : undefined, () => selectPatient(activeScenario.id)),
-        jump('Medication review', pendingReviews, 'diff', 'Open snapshot review', 'Changes awaiting a decision'),
+        isDemoPatient
+          ? jump('Medication review', pendingReviews, 'diff', 'Open snapshot review', 'Changes awaiting a decision')
+          : metric('Medication review', notePendingCount, 'Compared changes awaiting a decision', 'Open note review', openNoteResults),
         jump('Note comparison', compareStatus, 'extract', 'Open Compare notes', 'Compare earlier and later notes'),
         metric('Ask about a patient', patientName, undefined, 'Open AI chat', openChartChat),
-        jump('Suggestion queue', openTriageCount, 'triage', 'Open suggestions', 'Decisions pending'),
+        jump('Suggestion queue', isDemoPatient ? openTriageCount : extractResult ? noteFlaggedCount : '—', 'triage', 'Open suggestions',
+          isDemoPatient ? 'Decisions pending' : 'Differences flagged for clarification'),
         metric(cloudUser ? 'Cases in your account' : 'Patients in this browser', patientScenarios.length),
         jump('Activity log', audit.length, 'audit', 'Open session activity', audit[0]?.action),
         exampleWorkspace ? jump('Model connection', serviceStatus, 'models', 'Open connections')
@@ -2622,8 +2632,12 @@ function Workspace({ session }: { session: ReturnType<typeof useCloudSession> })
           navigateTo('patient', false);
           focusSection('transcript-title');
         }) : metric('Encounter record', 'No recording'),
-        metric('Source documents', documentIndex.counts.total, 'Indexed records for this chart', 'Open documents', () => openSnapshot('documents')),
-        metric('Review worklist', reviewedCount, 'Changes with a recorded decision', 'Open worklist', () => openSnapshot('worklist')),
+        isDemoPatient
+          ? metric('Source documents', documentIndex.counts.total, 'Indexed records for this chart', 'Open documents', () => openSnapshot('documents'))
+          : metric('Source documents', hasSelectedPatient ? notesEntered : '—', 'Earlier and later notes with text', 'Open notes', () => navigateTo('extract')),
+        isDemoPatient
+          ? metric('Review worklist', reviewedCount, 'Changes with a recorded decision', 'Open worklist', () => openSnapshot('worklist'))
+          : metric('Review worklist', extractResult ? noteDecidedCount : '—', 'Changes with a recorded decision', 'Open note review', openNoteResults),
       ];
       break;
     case 'patient':
@@ -2647,9 +2661,13 @@ function Workspace({ session }: { session: ReturnType<typeof useCloudSession> })
         metric('Discharge conversation', '01:02', 'Recording consent included', 'Read transcript', () => focusSection('transcript-title')),
       ] : [
         jump('Note comparison', compareStatus, 'extract', 'Compare patient notes', 'Enter an earlier and a later note'),
-        metric('Notes entered', Number(Boolean(earlierNoteText.trim())) + Number(Boolean(laterNoteText.trim()))),
-        metric('Note differences', extractResult ? noteDiffCount : '—'),
-        metric('Decisions recorded', noteDecidedCount),
+        metric('Notes entered', notesEntered, 'Earlier and later notes with text', 'Edit notes', () => navigateTo('extract')),
+        metric('Note differences', extractResult ? noteDiffCount : '—', 'Medication differences from these notes', 'Open note review', openNoteResults),
+        metric('Decisions recorded', extractResult ? noteDecidedCount : '—', 'Review decisions for this comparison', 'Open note review', openNoteResults),
+        metric('Changes awaiting review', notePendingCount, undefined, 'Open note review', openNoteResults),
+        metric('Clarifications', extractResult ? noteFlaggedCount : '—', 'Differences flagged for clarification'),
+        metric('Earlier excerpts', extractResult?.earlier.quotes.length ?? '—', 'Medication mentions linked to the earlier note'),
+        metric('Later excerpts', extractResult?.later.quotes.length ?? '—', 'Medication mentions linked to the later note'),
         metric('Ask about a patient', patientName, undefined, 'Open chart assistant', openChartChat),
       ];
       break;
@@ -2682,13 +2700,20 @@ function Workspace({ session }: { session: ReturnType<typeof useCloudSession> })
         metric('Undated entries', encounterTimeline.undated.length, undefined, 'Check timeline', () => openSnapshot('timeline')),
         metric('Compared snapshots', isDemoPatient ? 2 : 0, undefined, 'Open medication lists', () => openSnapshot('snapshots')),
         metric('Comparison rules', undefined, 'How missing fields and differences are interpreted', 'Read method', () => openSnapshot('method')),
-      ] : [];
+      ] : [
+        metric('Note differences', extractResult ? noteDiffCount : '—', 'Medication differences from these notes', 'Open note review', openNoteResults),
+        metric('Changes awaiting review', notePendingCount, undefined, 'Open note review', openNoteResults),
+        metric('Decisions recorded', extractResult ? noteDecidedCount : '—', undefined, 'Open note review', openNoteResults),
+        metric('Earlier excerpts', extractResult?.earlier.quotes.length ?? '—', 'Medication mentions linked to the earlier note'),
+        metric('Later excerpts', extractResult?.later.quotes.length ?? '—', 'Medication mentions linked to the later note'),
+      ];
       break;
     case 'triage':
       widgetTitle = 'Suggestion tools';
       widgets = !isDemoPatient ? [
-        metric('Review queue', noteFlaggedCount, 'Differences flagged for clarification'),
-        metric('Decisions recorded', noteDecidedCount, undefined, 'Open note comparison', () => navigateTo('extract')),
+        metric('Review queue', extractResult ? noteFlaggedCount : '—', 'Differences flagged for clarification'),
+        metric('Decisions recorded', extractResult ? noteDecidedCount : '—', undefined, 'Open note comparison', openNoteResults),
+        metric('Changes awaiting review', notePendingCount, undefined, 'Open note review', openNoteResults),
       ] : [
         metric('Suggestions generated', suggestions.length, undefined, 'Open queue', () => focusSection('o-queue')),
         metric('Awaiting decision', openTriageCount),
@@ -2983,6 +3008,12 @@ function Workspace({ session }: { session: ReturnType<typeof useCloudSession> })
           </div>
 
           <div className={isOverview ? "col overview-col" : "col"}>
+            {trainingWorkspace && (
+              <aside className="training-workspace-notice" aria-label="Training workspace">
+                <strong>Training workspace</strong>
+                <span>Synthetic patient data only. Use invented case references and notes.</span>
+              </aside>
+            )}
             {patientRequired && (
               <section className="workspace-overview">
                 <header className="workspace-overview-heading">
@@ -3587,11 +3618,9 @@ function Workspace({ session }: { session: ReturnType<typeof useCloudSession> })
                 <p className="lede">{extractResult
                   ? `${noteDiffCount} medication differences and ${noteDecidedCount} review decisions in the current comparison.`
                   : 'Compare an earlier and a later note to review the medication differences.'}</p>
-                {extractResult && <button type="button" className="btn" onClick={() => {
-                  navigateTo('extract', false);
-                  focusSection('extraction-result-title');
-                }}>Review comparison evidence</button>}
-                {!extractResult && <button type="button" className="btn" onClick={() => navigateTo('extract')}>Compare patient notes</button>}
+                <button type="button" className="btn" onClick={openNoteResults}>
+                  {extractResult ? 'Review comparison evidence' : 'Compare patient notes'}
+                </button>
               </section>
             )}
             {view === 'diff' && isDemoPatient && (

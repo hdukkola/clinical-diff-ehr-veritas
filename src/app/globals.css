@@ -4119,6 +4119,16 @@ pre.code .c {
   max-width: 1240px;
 }
 
+.training-workspace-notice {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  padding: 10px 0;
+  margin-bottom: 18px;
+  border-bottom: 1px solid var(--line);
+  font-size: 0.875rem;
+}
+
 .workspace-overview-heading,
 .encounter-transcript > header {
   display: flex;

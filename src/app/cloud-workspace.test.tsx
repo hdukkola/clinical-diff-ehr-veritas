@@ -14,6 +14,7 @@ const mocked = vi.hoisted(() => ({
 
 vi.mock('@/lib/cloud-workspace', () => ({
   cloudWorkspaceEnabled: true,
+  trainingWorkspace: false,
   CLOUD_CASE_LIMIT: 100,
   CloudCaseConflict: class extends Error {},
   useCloudSession: () => ({ user: mocked.uid ? { uid: mocked.uid } : null, error: '', pending: false, changeAccount: mocked.changeAccount }),
@@ -88,5 +89,49 @@ describe('Account workspace', () => {
     } finally {
       confirm.mockRestore();
     }
+  });
+
+  it('updates comparison widgets from the selected account case and clears stale counts on edit', async () => {
+    const user = userEvent.setup();
+    const earlier = 'Lisinopril 10 mg daily';
+    mocked.cases = [
+      { ...cloudRecord, earlier, later: 'Lisinopril 20 mg daily' },
+      { ...cloudRecord, id: 'SYNC-0123456789ABCDEF0123456789ABCDEF', name: 'Second reference' },
+    ];
+    render(<Home />);
+    const main = within(screen.getByRole('main'));
+    const select = (name: RegExp) => user.click(screen.getByRole('button', { name }));
+    const value = (title: string) => document.querySelector(`[data-page-widget="${title}"] .page-widget-value`);
+
+    await select(/^Cloud reference/);
+    const patient = within(main.getByRole('region', { name: 'Patient summary' }));
+    await user.click(patient.getByRole('button', { name: 'Add widgets' }));
+    await user.click(patient.getByRole('button', { name: 'Add Changes awaiting review' }));
+    expect(value('Notes entered')).toHaveTextContent('2');
+    expect(value('Note differences')).toHaveTextContent('—');
+    await openNotes(user);
+    await user.click(main.getByRole('button', { name: 'Compare notes' }));
+    const result = await main.findByRole('region', { name: 'Mention differences' });
+    await user.click(within(result).getByRole('button', { name: 'Flag for clarification' }));
+    await select(/^Cloud reference/);
+    expect(value('Note differences')).toHaveTextContent('1');
+    expect(value('Changes awaiting review')).toHaveTextContent('0');
+
+    await select(/^Second reference/);
+    expect(value('Notes entered')).toHaveTextContent('0');
+    expect(value('Note differences')).toHaveTextContent('—');
+    await select(/^Cloud reference/);
+    expect(value('Note differences')).toHaveTextContent('1');
+    await openNotes(user);
+    await user.click(main.getByRole('button', { name: 'Add widgets' }));
+    await user.click(main.getByRole('button', { name: 'Add Differences found' }));
+    await user.clear(main.getByRole('textbox', { name: 'Later note' }));
+    expect(value('Differences found')).toHaveTextContent('—');
+    await user.type(main.getByRole('textbox', { name: 'Later note' }), earlier);
+    await user.click(main.getByRole('button', { name: 'Compare notes' }));
+    await main.findByRole('region', { name: 'Mention differences' });
+    expect(value('Differences found')).toHaveTextContent('0');
+    await select(/^Cloud reference/);
+    expect(value('Note differences')).toHaveTextContent('0');
   });
 });
