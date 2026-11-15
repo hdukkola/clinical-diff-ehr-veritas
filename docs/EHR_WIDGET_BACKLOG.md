@@ -2,6 +2,20 @@
 
 Start at **01**. Each numbered item is one proposed delivery with an observable completion condition. The later sections cover specialty, patient, and operational surfaces so their research and build work can be planned alongside the clinical cockpit.
 
+## Full-product finish line
+
+The complete Clinical Diff product is the target. The numbered items are a delivery sequence for that product. Every item stays in scope unless Himnish explicitly approves a change. Track each as queued, in progress, blocked, verified, or scope changed with a link to the decision and evidence. A blocked item stays open.
+
+The full product is finished when:
+
+- All approved backlog items have an implemented and verified outcome, and the team has reconciled additional findings from the vendor research against the backlog.
+- The complete synthetic workflow works on the release deployment, from comparison through source inspection, human review, follow-up and audit. The related chart, specialty, patient-facing and operational surfaces are reachable and verified.
+- The trained-model workflow uses the expected remote base and adapter, verified by a remote health check, with at least 95% on the agreed synthetic test set and zero critical safety failures. Record the actual denominator, failures and timeouts. Himnish decides if the model scope changes.
+- The release passes integration checks, including keyboard and touch navigation, desktop/tablet/phone layouts, reduced motion, performance, and error states. Handoff includes the public URL, version, model/evaluation evidence, known limitations, and recovery steps.
+- Himnish reviews and accepts the release. The current synthetic scope remains in effect. Any move to real patient data, live EHR writes or production clinical use requires a separate decision.
+
+**Current item:** 01, Source evidence drill-down. The [first task spec](WIDGET_BUILD_TEMPLATE.md#first-specification-for-review) documents the current behavior and the missing path.
+
 ## How the swarm works
 
 1. Run one swarm on one numbered item at a time. Assign an implementer, a reviewer, and a verifier within that swarm. Each contributes an equal recommendation. Himnish makes the final decision on scope and tradeoffs.
