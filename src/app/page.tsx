@@ -30,6 +30,7 @@ import {
 } from '@/lib/diff';
 import { BRAND_NAME } from '@/lib/branding';
 import { AssistantPanel } from '@/components/AssistantPanel';
+import { SYNTHETIC_ASSISTANT_NOTES } from '@/lib/assistant-evidence';
 import {
   DEFAULT_MLX_MODEL_ID,
   SOCKET_ENDPOINTS,
@@ -145,10 +146,8 @@ const DIFF_GLYPHS: Record<'changed' | 'onlyA' | 'onlyB' | 'same', { glyph: strin
   same: { glyph: '·', label: 'Unchanged' },
 };
 
-const DEFAULT_EARLIER_NOTE =
-  'Sample outpatient medication list. The note explicitly lists Lisinopril 10 mg daily, Metformin 500 mg twice daily, and Aspirin 81 mg daily.';
-const DEFAULT_LATER_NOTE =
-  'Sample discharge medication list. The note explicitly lists Lisinopril 20 mg daily, Metformin 500 mg twice daily, and Atorvastatin 20 mg nightly.';
+const DEFAULT_EARLIER_NOTE = SYNTHETIC_ASSISTANT_NOTES.earlier.text;
+const DEFAULT_LATER_NOTE = SYNTHETIC_ASSISTANT_NOTES.later.text;
 
 /* ------------------------------------------------------------------
    Deterministic Local Medication-Mention Extractor
@@ -2771,7 +2770,12 @@ export default function Home() {
               activeReport={activeReport}
               triageByScenario={triageByScenario}
               socketStatus={socketStatus}
-              evalSummary={evalSummary}
+              evalSummary={evalSummary && {
+                ...evalSummary,
+                totalCases: evalSummary.totals.tested,
+                heldOutCases: evalSummary.families.heldOut.tested,
+                scenarioCases: evalSummary.families.workspace.tested + evalSummary.families.hf.tested,
+              }}
               audit={audit}
               onNavigate={handleCockpitNavigate}
               onSelectEvidenceChange={handleSelectEvidenceChange}

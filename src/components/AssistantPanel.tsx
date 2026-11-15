@@ -1,6 +1,11 @@
 'use client';
 
 import { useState } from 'react';
+import {
+  validateSyntheticAssistantResult,
+  type SyntheticAssistantNote,
+  type SyntheticAssistantResult,
+} from '@/lib/assistant-evidence';
 
 export interface AssistantPanelProps {
   patientLabel?: string;
@@ -16,10 +21,12 @@ export function AssistantPanel({
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
+  const [answer, setAnswer] = useState<SyntheticAssistantResult | null>(null);
 
-  async function ask(note: 'earlier' | 'later') {
+  async function ask(note: SyntheticAssistantNote) {
     setBusy(true);
     setMessage('');
+    setAnswer(null);
     try {
       const response = await fetch('/api/assistant', {
         method: 'POST',
@@ -30,6 +37,10 @@ export function AssistantPanel({
       const result: unknown = await response.json();
       if (!response.ok && result && typeof result === 'object' && 'error' in result && typeof result.error === 'string') {
         setMessage(result.error);
+      } else if (response.ok) {
+        const verified = validateSyntheticAssistantResult(result, note);
+        setAnswer(verified);
+        if (!verified) setMessage('The model response could not be verified.');
       } else {
         setMessage('The model response could not be verified.');
       }
@@ -60,7 +71,22 @@ export function AssistantPanel({
           <button type="button" disabled={busy} onClick={() => void ask('earlier')}>Check demo earlier note</button>
           <button type="button" disabled={busy} onClick={() => void ask('later')}>Check demo discharge note</button>
         </div>
-        <p className="assistant-status" role="status" aria-live="polite">{busy ? 'Checking…' : message || 'Hosted model connection unavailable.'}</p>
+        <p className="assistant-status" role="status" aria-live="polite">
+          {busy ? 'Checking…' : answer?.status === 'abstained'
+            ? 'Synthetic test response · Abstained. Review the selected note.'
+            : answer?.status === 'answered' ? 'Synthetic test response · Review the cited text.'
+              : message || 'Hosted model connection unavailable.'}
+        </p>
+        {answer?.status === 'answered' && (
+          <ul className="assistant-evidence" aria-label="Synthetic medication evidence">
+            {answer.evidence.map(({ medication, excerpt }) => (
+              <li key={medication}>
+                <strong>{medication}</strong> <span>{answer.source}</span>
+                <blockquote>{excerpt}</blockquote>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>}
     </section>
   );

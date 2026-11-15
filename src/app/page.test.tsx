@@ -53,6 +53,43 @@ describe('Clinical Diff Veritas Editorial UI', () => {
     }
   });
 
+  it('renders exact assistant evidence and clears it on abstention or unverified output', async () => {
+    const user = userEvent.setup();
+    const fetch = globalThis.fetch;
+    const responses = [
+      { mode: 'synthetic-test', note: 'earlier', status: 'answered', evidence: [
+        { medication: 'Lisinopril', excerpt: 'Lisinopril 10 mg daily' },
+      ] },
+      { mode: 'synthetic-test', note: 'later', status: 'abstained' },
+      { mode: 'synthetic-test', note: 'earlier', status: 'answered', evidence: [
+        { medication: 'Lisinopril', excerpt: 'Lisinopril 20 mg daily' },
+      ] },
+    ];
+    const request = vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) =>
+      input === '/api/assistant' ? Promise.resolve(Response.json(responses.shift())) : fetch(input, init),
+    );
+    try {
+      render(<Home />);
+      const panel = within(screen.getByRole('region', { name: 'Synthetic note assistant' }));
+      await user.click(panel.getByRole('button', { name: /Note assistant/ }));
+      await user.click(panel.getByRole('button', { name: 'Check demo earlier note' }));
+      const evidence = await panel.findByRole('list', { name: 'Synthetic medication evidence' });
+      expect(evidence).toHaveTextContent('Demo earlier note');
+      expect(within(evidence).getByText('Lisinopril 10 mg daily', { selector: 'blockquote' })).toBeInTheDocument();
+      expect(panel.getByRole('status')).toHaveTextContent('Synthetic test response');
+
+      await user.click(panel.getByRole('button', { name: 'Check demo discharge note' }));
+      await waitFor(() => expect(panel.getByRole('status')).toHaveTextContent('Abstained'));
+      expect(panel.queryByRole('list')).not.toBeInTheDocument();
+
+      await user.click(panel.getByRole('button', { name: 'Check demo earlier note' }));
+      await waitFor(() => expect(panel.getByRole('status')).toHaveTextContent('could not be verified'));
+      expect(panel.queryByRole('list')).not.toBeInTheDocument();
+    } finally {
+      request.mockRestore();
+    }
+  });
+
   it('renders the default Compare notes view with accessibility landmarks and collapsed right rail', async () => {
     const user = userEvent.setup();
     render(<Home />);

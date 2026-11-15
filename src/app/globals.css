@@ -3429,6 +3429,23 @@ pre.code .c {
 .assistant-toggle:focus-visible, .assistant-actions button:focus-visible { outline: 2px solid currentColor; outline-offset: -3px; }
 .assistant-status { margin-top: 12px !important; opacity: .8; }
 
+.assistant-evidence {
+  display: grid;
+  gap: 8px;
+  padding: 0;
+  list-style: none;
+  overflow-wrap: anywhere;
+}
+
+.assistant-evidence li {
+  border: 1px solid var(--line);
+  padding: 8px 10px;
+  border-radius: 8px;
+}
+
+.assistant-evidence span { color: var(--muted); }
+.assistant-evidence blockquote { margin: 3px 0 0; }
+
 /* Before/after regimen comparison */
 .regimen-compare {
   margin-top: 14px;
