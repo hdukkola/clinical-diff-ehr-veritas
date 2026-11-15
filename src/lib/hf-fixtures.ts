@@ -34,6 +34,7 @@ export type HfFixtureProvenance = {
 export type HfNotePair = {
   id: string;
   title: string;
+  comparisonKind?: 'longitudinal' | 'cross-source';
   dataset: string;
   license: HfLicense;
   split: string;
@@ -1235,7 +1236,8 @@ export const hfNoteComparisonPairs: HfNotePair[] = [
   },
   {
     id: 'hf-note-qdora-typos-vs-clean',
-    title: 'Shorthand Clinic Note → Urgent Care Bronchitis Plan (QDORA Rows 0 & 32)',
+    title: 'Cross-Source Shorthand Note vs. Urgent Care Bronchitis Plan (QDORA Rows 0 & 32)',
+    comparisonKind: 'cross-source',
     dataset: 'oopere/clinical-ner-qdora',
     license: 'MIT',
     split: 'test',
@@ -1251,9 +1253,9 @@ export const hfNoteComparisonPairs: HfNotePair[] = [
       syntheticOnly: true,
       recordId: 'test-row-0-to-32',
     },
-    earlierLabel: 'Earlier shorthand note (oopere/clinical-ner-qdora test #0)',
+    earlierLabel: 'Cross-source shorthand note (oopere/clinical-ner-qdora test #0)',
     earlierNote:
-      '42 y.o male pt comin in c/o fevr and chst pain for like 3 days now. also has a bad cough. vitls r temp 38.8 hr 102 bp 130/85. put him on amoxicillin 500mg twice a day n he is takin tylenol for the fever but didnt say how much. sendin home to rest',
+      '45 y.o male pt comin in c/o fevr and chst pain for like 3 days now. also has a bad cough. vitls r temp 38.8 hr 102 bp 130/85. put him on amoxicillin 500mg twice a day n he is takin tylenol for the fever but didnt say how much. sendin home to rest',
     laterLabel: 'Later urgent care note (oopere/clinical-ner-qdora test #32)',
     laterNote:
       'HPI: 45-year-old male presents to the urgent care clinic complaining of a persistent productive cough and intermittent chest tightness for the past 5 days. Patient reports associated fatigue and subjective fevers at home. He denies any nausea or vomiting. Physical examination reveals mild wheezing in the bilateral lower lobes. \n\nVitals: Temp 101.2 F, HR 88 bpm, BP 132/84 mmHg. \n\nAssessment: Acute bronchitis. \n\nPlan: Start Amoxicillin 500mg three times daily for 7 days. Patient advised to use Albuterol HFA 90mcg inhaler, 2 puffs every 4-6 hours as needed for wheezing. Follow up if symptoms worsen.',
@@ -1261,7 +1263,8 @@ export const hfNoteComparisonPairs: HfNotePair[] = [
   },
   {
     id: 'hf-note-qdora-abbreviations',
-    title: 'Abbreviated Outpatient Note → Asthma Exacerbation Rx (QDORA Rows 7 & 18)',
+    title: 'Cross-Source Abbreviated Note vs. Asthma Exacerbation Rx (QDORA Rows 7 & 18)',
+    comparisonKind: 'cross-source',
     dataset: 'oopere/clinical-ner-qdora',
     license: 'MIT',
     split: 'test',
@@ -1280,9 +1283,9 @@ export const hfNoteComparisonPairs: HfNotePair[] = [
     earlierLabel: 'Earlier abbreviated note (oopere/clinical-ner-qdora test #7)',
     earlierNote:
       '68 yo pt presents to the clinic c/o SOB and DOE x 4 days. Pt states sx began gradually. Hx of HTN. Vitals: Temp 37.8, HR 92, BP 145/88, wt 82kg. Rx: Continue Lisinopril 10mg PO qd. Added Albuterol HFA 2 puffs q4h PRN for wheezing.',
-    laterLabel: 'Later exacerbation note (oopere/clinical-ner-qdora test #18)',
+    laterLabel: 'Cross-source exacerbation note (oopere/clinical-ner-qdora test #18)',
     laterNote:
-      '62 yo pt presents c/o SOB and DOE x 4 days. Sx worsening over the last 24 hrs. Temp 38.2, HR 105, BP 140/90. Hx of mild persistent asthma. Rx Albuterol 90mcg 2 puffs q4h PRN, Prednisone 40mg PO qd.',
+      '68 yo pt presents c/o SOB and DOE x 4 days. Sx worsening over the last 24 hrs. Temp 38.2, HR 105, BP 140/90. Hx of mild persistent asthma. Rx Albuterol 90mcg 2 puffs q4h PRN, Prednisone 40mg PO qd.',
     referenceMedications: ['Lisinopril', 'Albuterol HFA', 'Albuterol', 'Prednisone'],
   },
   {
@@ -1313,7 +1316,8 @@ export const hfNoteComparisonPairs: HfNotePair[] = [
   },
   {
     id: 'hf-note-qdora-cardiac-typos-implicit',
-    title: 'ER Typos Note → Chronic Care Implicit Note (QDORA Rows 24 & 34)',
+    title: 'Cross-Source ER Typos Note vs. Chronic Care Note (QDORA Rows 24 & 34)',
+    comparisonKind: 'cross-source',
     dataset: 'oopere/clinical-ner-qdora',
     license: 'MIT',
     split: 'test',
@@ -1329,9 +1333,9 @@ export const hfNoteComparisonPairs: HfNotePair[] = [
       syntheticOnly: true,
       recordId: 'test-row-24-to-34',
     },
-    earlierLabel: 'Earlier ER shorthand note (oopere/clinical-ner-qdora test #24)',
+    earlierLabel: 'Cross-source ER shorthand note (oopere/clinical-ner-qdora test #24)',
     earlierNote:
-      'pt is 45yo m coming in with sob chest panes and nauzea x 3 d . he looks uncomfy T 101.2 hr110 bp 140/90 . takes asprin 81 mg qd and lsnopril 10mg dont know freq needs ekg stat',
+      'pt is 55yo m coming in with sob chest panes and nauzea x 3 d . he looks uncomfy T 101.2 hr110 bp 140/90 . takes asprin 81 mg qd and lsnopril 10mg dont know freq needs ekg stat',
     laterLabel: 'Later clinic note (oopere/clinical-ner-qdora test #34)',
     laterNote:
       "The patient is a 55-year-old male who presents to the clinic stating he has been feeling unwell for the past 10 days. He mentions that he can't climb stairs without stopping to catch his breath. He also reports that he wakes up at night sweating profusely and soaking his sheets. Over the last week, he noticed that his food doesn't taste like anything, making it hard to eat. Vital signs recorded by the nurse today: Temp 37.8 C, pulse 88 bpm, BP 130/85 mmHg. He is currently taking Lisinopril 10 mg daily and Atorvastatin 20 mg once a day for his chronic conditions.",

@@ -314,7 +314,7 @@ const baseSyntheticScenarios: SyntheticScenario[] = [
   {
     id: 'scenario-conflicting-patient-vs-pharmacy',
     patientId: 'SYN-006',
-    patientLabel: 'Devon Morales (Synthetic)',
+    patientLabel: 'Devon Morales (Synthetic • SYN-006 • 2026-10-10→2026-10-12)',
     title: 'Conflicting sources: patient-reported intake vs. pharmacy fill history',
     summary:
       'Compares patient portal self-report against 90-day community pharmacy dispensing history showing dose/frequency discrepancies and OTC vs. Rx differences.',
@@ -362,7 +362,7 @@ const baseSyntheticScenarios: SyntheticScenario[] = [
   {
     id: 'scenario-conflicting-pharmacy-vs-discharge',
     patientId: 'SYN-006',
-    patientLabel: 'Devon Morales (Synthetic)',
+    patientLabel: 'Devon Morales (Synthetic • SYN-006 • 2026-10-12→2026-10-14)',
     title: 'Conflicting sources: pharmacy fill history vs. hospital discharge summary',
     summary:
       'Compares community pharmacy dispensing history against a subsequent hospital discharge summary with conflicting dose and omitted sleep aid.',

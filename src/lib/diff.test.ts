@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { analyzeSnapshots, compareSnapshots } from './diff';
+import { analyzeSnapshots, compareNoteRegimens, compareSnapshots, normalizeNoteText } from './diff';
 import { earlier as fixtureEarlier, later as fixtureLater } from './fixtures';
 import type { EvidenceLink, Medication, Snapshot } from './types';
 
@@ -527,5 +527,54 @@ describe('analyzeSnapshots', () => {
         'missing_timestamp',
       ]),
     );
+  });
+});
+
+describe('compareNoteRegimens & normalizeNoteText', () => {
+  it('normalizes literal <br> and <br/> markup to newlines', () => {
+    expect(normalizeNoteText('Line 1<br>Line 2<br/>Line 3<br />Line 4')).toBe(
+      'Line 1\nLine 2\nLine 3\nLine 4',
+    );
+  });
+
+  it('surfaces amoxicillin frequency and duration changes', () => {
+    const report = compareNoteRegimens(
+      'put him on amoxicillin 500 mg twice daily n he is takin tylenol for the fever.',
+      'Plan: Start Amoxicillin 500 mg three times daily for seven days. Added Albuterol HFA 90 mcg inhalation every 4-6 hours as needed.',
+    );
+
+    const amox = report.items.find(i => i.medicationName === 'Amoxicillin');
+    expect(amox).toBeDefined();
+    expect(amox?.status).toBe('changed');
+    expect(amox?.changeCategories).toEqual(['Frequency changed', 'Duration changed']);
+    expect(amox?.earlierRegimen?.dose).toBe('500 mg');
+    expect(amox?.earlierRegimen?.frequency).toBe('twice daily');
+    expect(amox?.laterRegimen?.frequency).toBe('three times daily');
+    expect(amox?.laterRegimen?.duration).toBe('7 days');
+
+    const tylenol = report.items.find(i => i.medicationName === 'Tylenol');
+    expect(tylenol?.status).toBe('earlier_only');
+    expect(tylenol?.statusLabel).toBe('Mentioned only in earlier note');
+    expect(tylenol?.absenceNote).toBe('Not mentioned in later note (not explicitly discontinued)');
+
+    const albuterol = report.items.find(i => i.medicationName === 'Albuterol HFA');
+    expect(albuterol?.status).toBe('later_only');
+    expect(albuterol?.statusLabel).toBe('Mentioned only in later note');
+  });
+
+  it('detects dose, route, and explicit clinical discontinuation', () => {
+    const report = compareNoteRegimens(
+      'Lisinopril 10 mg PO daily. Acebutolol 200 mg PO BID.',
+      'Lisinopril 20 mg IV daily. Acebutolol no longer indicated and stopped.',
+    );
+
+    const lisinopril = report.items.find(i => i.medicationName === 'Lisinopril');
+    expect(lisinopril?.status).toBe('changed');
+    expect(lisinopril?.changeCategories).toEqual(['Dose changed', 'Route changed']);
+
+    const acebutolol = report.items.find(i => i.medicationName === 'Acebutolol');
+    expect(acebutolol?.status).toBe('discontinued');
+    expect(acebutolol?.statusLabel).toBe('Clinically discontinued');
+    expect(acebutolol?.changeCategories).toEqual(['Clinically discontinued']);
   });
 });

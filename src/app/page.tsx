@@ -10,7 +10,14 @@ import {
   type FormEvent,
   type KeyboardEvent as ReactKeyboardEvent,
 } from 'react';
-import { analyzeSnapshots, compareSnapshots } from '@/lib/diff';
+import {
+  analyzeSnapshots,
+  compareNoteRegimens,
+  compareSnapshots,
+  normalizeNoteText,
+  type NoteRegimenChangeCategory,
+} from '@/lib/diff';
+import { BRAND_NAME } from '@/lib/branding';
 import {
   DEFAULT_MLX_MODEL_ID,
   SOCKET_ENDPOINTS,
@@ -294,11 +301,16 @@ type QuoteSnippet = {
 
 type MentionDifference = {
   key: string;
-  kind: 'earlier_only' | 'later_only';
+  kind: 'earlier_only' | 'later_only' | 'regimen_changed' | 'discontinued';
   name: string;
   normName: string;
   label: string;
   quotes: QuoteSnippet[];
+  statusLabel?: string;
+  changeCategories?: NoteRegimenChangeCategory[];
+  earlierExcerpt?: string | null;
+  laterExcerpt?: string | null;
+  absenceNote?: string | null;
 };
 
 type NoteComparisonResult = {
@@ -1161,8 +1173,8 @@ export default function Home() {
         if (pair) {
           setEarlierNoteLabel(pair.earlierLabel || 'Earlier note');
           setLaterNoteLabel(pair.laterLabel || 'Discharge note');
-          setEarlierNoteText(pair.earlierNote);
-          setLaterNoteText(pair.laterNote);
+          setEarlierNoteText(normalizeNoteText(pair.earlierNote));
+          setLaterNoteText(normalizeNoteText(pair.laterNote));
         }
       }
     },
@@ -1389,13 +1401,87 @@ export default function Home() {
         ? [...activePreset.referenceMedications, ...allMedicationTerms]
         : allMedicationTerms;
 
-      const res = runDeterministicNoteComparison(
+      const baseRes = runDeterministicNoteComparison(
         earlierNoteText,
         laterNoteText,
         earlierNoteLabel,
         laterNoteLabel,
         extraCandidates,
       );
+
+      const regimenReport = compareNoteRegimens(earlierNoteText, laterNoteText);
+      const existingKeys = new Set(baseRes.differences.map((d) => d.normName));
+      const regimenByNorm = new Map(
+        regimenReport.items.map((item) => [item.normalizedName, item]),
+      );
+
+      const enrichedDifferences: MentionDifference[] = baseRes.differences.map((d) => {
+        const reg = regimenByNorm.get(d.normName);
+        if (!reg) {
+          return {
+            ...d,
+            statusLabel:
+              d.kind === 'earlier_only'
+                ? 'Mentioned only in earlier note'
+                : 'Mentioned only in later note',
+          };
+        }
+        return {
+          ...d,
+          statusLabel: reg.statusLabel,
+          changeCategories: reg.changeCategories,
+          earlierExcerpt: reg.earlierExcerpt,
+          laterExcerpt: reg.laterExcerpt,
+          absenceNote: reg.absenceNote,
+        };
+      });
+
+      for (const item of regimenReport.items) {
+        if (
+          (item.status === 'changed' || item.status === 'discontinued') &&
+          !existingKeys.has(item.normalizedName)
+        ) {
+          const quotes: QuoteSnippet[] = [];
+          if (item.earlierExcerpt) {
+            quotes.push({
+              key: `reg-earlier-${item.normalizedName}`,
+              prefix: '',
+              match: item.earlierExcerpt,
+              suffix: '',
+              hasLeadingEllipsis: false,
+              hasTrailingEllipsis: false,
+            });
+          }
+          if (item.laterExcerpt) {
+            quotes.push({
+              key: `reg-later-${item.normalizedName}`,
+              prefix: '',
+              match: item.laterExcerpt,
+              suffix: '',
+              hasLeadingEllipsis: false,
+              hasTrailingEllipsis: false,
+            });
+          }
+          enrichedDifferences.push({
+            key: `${item.status}:${item.normalizedName}`,
+            kind: item.status === 'discontinued' ? 'discontinued' : 'regimen_changed',
+            name: item.medicationName,
+            normName: item.normalizedName,
+            label: item.status === 'discontinued' ? laterNoteLabel : `${earlierNoteLabel} → ${laterNoteLabel}`,
+            quotes,
+            statusLabel: item.statusLabel,
+            changeCategories: item.changeCategories,
+            earlierExcerpt: item.earlierExcerpt,
+            laterExcerpt: item.laterExcerpt,
+            absenceNote: item.absenceNote,
+          });
+        }
+      }
+
+      const res: NoteComparisonResult = {
+        ...baseRes,
+        differences: enrichedDifferences,
+      };
 
       setExtractResult(res);
       setNoteReviewDecisions({});
@@ -1992,7 +2078,7 @@ export default function Home() {
             <span className="brand-symbol" aria-hidden="true">
               ±
             </span>
-            Clinical Diff
+            {BRAND_NAME}
           </a>
           {view !== 'extract' && (
             <div className="crumbs" id="crumbs">
@@ -2236,56 +2322,47 @@ export default function Home() {
                     </button>
                   </div>
 
-                  <div
-                    className="extract-socket-meta"
-                    aria-label="Open model socket status"
-                    style={{
-                      display: 'flex',
-                      flexWrap: 'wrap',
-                      alignItems: 'center',
-                      gap: '6px 10px',
-                      marginTop: 8,
-                      fontSize: 12,
-                      color: 'var(--muted)',
-                    }}
-                  >
-                    <span>
-                      Socket readiness:{' '}
-                      <span
-                        className={socketStatus.state === 'live' ? 'e-tag verified' : 'e-tag'}
-                        data-testid="extract-socket-readiness"
-                      >
-                        {socketStatus.state}
-                      </span>
-                    </span>
-                    <span>
-                      Model: <span className="mono">{socketModelSummary}</span>
-                    </span>
-                    <span>
-                      Open sockets: <span className="mono">{socketStatus.endpoints.socket}</span> ·{' '}
-                      <span className="mono">{socketStatus.endpoints.health}</span> ·{' '}
-                      <span className="mono">{socketStatus.endpoints.compare}</span>
-                    </span>
-                  </div>
+                  <p className="extract-scope" style={{ marginTop: 8 }}>
+                    Synthetic data only — simulated or rule-based results are never presented as live AI.
+                  </p>
 
-                  <div className="extract-presets">
-                    <label htmlFor="note-preset-select">Note preset</label>
-                    <select
-                      id="note-preset-select"
-                      value={selectedPresetId}
-                      onChange={(e) => handleSelectPreset(e.target.value)}
+                  <details className="extract-diagnostics" style={{ marginTop: 8 }}>
+                    <summary style={{ cursor: 'pointer', fontSize: 12, color: 'var(--muted)' }}>
+                      Example details &amp; technical diagnostics
+                    </summary>
+                    <div
+                      className="extract-socket-meta"
+                      aria-label="Open model socket status"
+                      style={{
+                        display: 'flex',
+                        flexWrap: 'wrap',
+                        alignItems: 'center',
+                        gap: '6px 10px',
+                        marginTop: 8,
+                        fontSize: 12,
+                        color: 'var(--muted)',
+                      }}
                     >
-                      <option value="default">
-                        Fictional outpatient &amp; discharge example
-                      </option>
-                      {hfNoteComparisonPairs.map((pair) => (
-                        <option key={pair.id} value={pair.id}>
-                          {pair.title} ({pair.dataset} · {pair.license})
-                        </option>
-                      ))}
-                    </select>
+                      <span>
+                        Socket readiness:{' '}
+                        <span
+                          className={socketStatus.state === 'live' ? 'e-tag verified' : 'e-tag'}
+                          data-testid="extract-socket-readiness"
+                        >
+                          {socketStatus.state}
+                        </span>
+                      </span>
+                      <span>
+                        Model: <span className="mono">{socketModelSummary}</span>
+                      </span>
+                      <span>
+                        Open sockets: <span className="mono">{socketStatus.endpoints.socket}</span> ·{' '}
+                        <span className="mono">{socketStatus.endpoints.health}</span> ·{' '}
+                        <span className="mono">{socketStatus.endpoints.compare}</span>
+                      </span>
+                    </div>
                     {activePreset && (
-                      <div className="extract-preset-meta">
+                      <div className="extract-preset-meta" style={{ marginTop: 8 }}>
                         <span className="e-tag">{activePreset.dataset}</span>
                         <span className="e-tag verified">{activePreset.license}</span>
                         <span className="e-tag">Synthetic only</span>
@@ -2300,6 +2377,24 @@ export default function Home() {
                         </a>
                       </div>
                     )}
+                  </details>
+
+                  <div className="extract-presets" style={{ marginTop: 12 }}>
+                    <label htmlFor="note-preset-select">Note preset</label>
+                    <select
+                      id="note-preset-select"
+                      value={selectedPresetId}
+                      onChange={(e) => handleSelectPreset(e.target.value)}
+                    >
+                      <option value="default">
+                        Fictional outpatient &amp; discharge example
+                      </option>
+                      {hfNoteComparisonPairs.map((pair) => (
+                        <option key={pair.id} value={pair.id}>
+                          {pair.title} ({pair.license})
+                        </option>
+                      ))}
+                    </select>
                   </div>
 
                   <form id="extraction-form" onSubmit={handleCompareNotes}>
@@ -2431,8 +2526,35 @@ export default function Home() {
                               <li key={entry.key}>
                                 <div className="extract-row-title">
                                   <strong>{entry.name}</strong>
-                                  <span>{entry.label} only</span>
+                                  <span>{entry.statusLabel ?? `${entry.label} only`}</span>
                                 </div>
+                                {entry.changeCategories && entry.changeCategories.length > 0 && (
+                                  <div
+                                    style={{
+                                      display: 'flex',
+                                      flexWrap: 'wrap',
+                                      gap: 6,
+                                      marginBottom: 6,
+                                    }}
+                                  >
+                                    {entry.changeCategories.map((cat) => (
+                                      <span key={cat} className="e-tag">
+                                        {cat}
+                                      </span>
+                                    ))}
+                                  </div>
+                                )}
+                                {entry.absenceNote && (
+                                  <p
+                                    style={{
+                                      fontSize: 12,
+                                      color: 'var(--muted)',
+                                      margin: '0 0 6px',
+                                    }}
+                                  >
+                                    {entry.absenceNote}
+                                  </p>
+                                )}
                                 {entry.quotes.map((q) => (
                                   <blockquote key={q.key}>
                                     {q.hasLeadingEllipsis ? '…' : ''}
@@ -2505,7 +2627,8 @@ export default function Home() {
 
                     <p className="extract-result-note">
                       Extracted mentions can be missed. Compare the source text before drawing
-                      conclusions.
+                      conclusions. Unsupported in note-text comparison: allergies, labs, and
+                      non-medication orders.
                     </p>
                   </section>
                 ) : (
@@ -2533,27 +2656,32 @@ export default function Home() {
                 </p>
 
                 {activeScenario.provenance && (
-                  <div className="extract-preset-meta" style={{ marginTop: 10 }}>
-                    <span className="e-tag">{activeScenario.provenance.dataset}</span>
-                    <span className="e-tag verified">{activeScenario.provenance.license}</span>
-                    <span className="e-tag">
-                      {activeScenario.provenance.split} · row {activeScenario.provenance.rowIndex}
-                    </span>
-                    <span className="e-tag">Synthetic only</span>
-                    <a
-                      href={activeScenario.provenance.sourceUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="btn quiet"
-                      style={{ height: 24, padding: '0 6px', fontSize: 11.5 }}
-                    >
-                      Source
-                    </a>
-                  </div>
+                  <details style={{ marginTop: 10 }}>
+                    <summary style={{ cursor: 'pointer', fontSize: 12, color: 'var(--muted)' }}>
+                      Example details
+                    </summary>
+                    <div className="extract-preset-meta" style={{ marginTop: 8 }}>
+                      <span className="e-tag">{activeScenario.provenance.dataset}</span>
+                      <span className="e-tag verified">{activeScenario.provenance.license}</span>
+                      <span className="e-tag">
+                        {activeScenario.provenance.split} · row {activeScenario.provenance.rowIndex}
+                      </span>
+                      <span className="e-tag">Synthetic only</span>
+                      <a
+                        href={activeScenario.provenance.sourceUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="btn quiet"
+                        style={{ height: 24, padding: '0 6px', fontSize: 11.5 }}
+                      >
+                        Source
+                      </a>
+                    </div>
+                  </details>
                 )}
 
                 <div className="editorial-notice warning" role="note" aria-label="Clinical review notice">
-                  Clinical Diff EHR · AI proposes, clinicians verify. Review required before chart commit.
+                  {BRAND_NAME} · Review required before chart commit.
                 </div>
 
                 <div className="tabs" role="tablist" aria-label="Snapshot review tabs">

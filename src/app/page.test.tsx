@@ -95,15 +95,15 @@ describe('Clinical Diff Veritas Editorial UI', () => {
     await waitFor(() => expect(resultHeading).toHaveFocus());
 
     const resultSection = resultHeading.closest('section')!;
-    expect(within(resultSection).getByText('2 differences')).toBeInTheDocument();
+    expect(within(resultSection).getByText('3 differences')).toBeInTheDocument();
     expect(within(resultSection).getByRole('status')).toHaveTextContent(
-      '2 to review · 0 flagged for clarification',
+      '3 to review · 0 flagged for clarification',
     );
 
     const marks = Array.from(resultSection.querySelectorAll('ul.extract-rows blockquote mark')).map(
       (el) => el.textContent,
     );
-    expect(marks).toEqual(['Aspirin', 'Atorvastatin']);
+    expect(marks.slice(0, 2)).toEqual(['Aspirin', 'Atorvastatin']);
 
     // All extracted mentions details element shows both sides
     const details = resultSection.querySelector('details')!;
@@ -123,7 +123,7 @@ describe('Clinical Diff Veritas Editorial UI', () => {
       within(resultSection).getByText('Why does Aspirin appear only in the earlier note?'),
     ).toBeInTheDocument();
     expect(within(resultSection).getByRole('status')).toHaveTextContent(
-      '1 to review · 1 flagged for clarification',
+      '2 to review · 1 flagged for clarification',
     );
 
     const atorvastatinGroup = within(resultSection).getByRole('group', {
@@ -135,14 +135,14 @@ describe('Clinical Diff Veritas Editorial UI', () => {
     await user.click(atorvastatinReviewed);
     expect(atorvastatinReviewed).toHaveAttribute('aria-pressed', 'true');
     expect(within(resultSection).getByRole('status')).toHaveTextContent(
-      '0 to review · 1 flagged for clarification',
+      '1 to review · 1 flagged for clarification',
     );
 
     // Toggle reviewed off
     await user.click(atorvastatinReviewed);
     expect(atorvastatinReviewed).toHaveAttribute('aria-pressed', 'false');
     expect(within(resultSection).getByRole('status')).toHaveTextContent(
-      '1 to review · 1 flagged for clarification',
+      '2 to review · 1 flagged for clarification',
     );
 
     // Switch to an HF synthetic note comparison pair and run comparison
@@ -777,5 +777,32 @@ describe('Clinical Diff Veritas Editorial UI', () => {
       globalThis.EventSource = origEventSource;
       globalThis.fetch = origFetch;
     }
+  });
+
+  it('collapses technical diagnostics by default and surfaces amoxicillin frequency/duration changes', async () => {
+    const user = userEvent.setup();
+    render(<Home />);
+
+    const diagnostics = document.querySelector('details.extract-diagnostics');
+    expect(diagnostics).not.toBeNull();
+    expect(diagnostics).not.toHaveAttribute('open');
+    expect(screen.getByText(/Synthetic data only/i)).toBeInTheDocument();
+
+    const earlierInput = screen.getByLabelText(/Earlier note/i);
+    const laterInput = screen.getByLabelText(/Discharge note/i);
+    await user.clear(earlierInput);
+    await user.type(earlierInput, 'Start amoxicillin 500 mg twice daily.');
+    await user.clear(laterInput);
+    await user.type(laterInput, 'Continue amoxicillin 500 mg three times daily for seven days.');
+
+    const form = document.getElementById('extraction-form')!;
+    await user.click(within(form).getByRole('button', { name: /Compare notes/i }));
+
+    const resultSection = document.getElementById('extraction-result');
+    expect(resultSection).not.toBeNull();
+    expect(resultSection).toHaveTextContent('amoxicillin');
+    expect(resultSection).toHaveTextContent('Frequency changed');
+    expect(resultSection).toHaveTextContent('Duration changed');
+    expect(resultSection).toHaveTextContent(/Unsupported in note-text comparison/i);
   });
 });

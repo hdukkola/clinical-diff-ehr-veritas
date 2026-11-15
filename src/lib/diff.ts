@@ -1011,3 +1011,318 @@ export function analyzeSnapshots(
     evidenceLinks,
   };
 }
+
+export type ExtractedMedicationRegimen = {
+  name: string;
+  normalizedName: string;
+  dose: string | null;
+  route: string | null;
+  frequency: string | null;
+  duration: string | null;
+  discontinued: boolean;
+  excerpt: string;
+};
+
+export type NoteRegimenChangeCategory =
+  | 'Mentioned only in earlier note'
+  | 'Mentioned only in later note'
+  | 'Clinically discontinued'
+  | 'Dose changed'
+  | 'Frequency changed'
+  | 'Route changed'
+  | 'Duration changed';
+
+export type NoteRegimenChange = {
+  medicationName: string;
+  normalizedName: string;
+  status: 'unchanged' | 'changed' | 'earlier_only' | 'later_only' | 'discontinued';
+  statusLabel: string;
+  changeCategories: NoteRegimenChangeCategory[];
+  earlierRegimen: ExtractedMedicationRegimen | null;
+  laterRegimen: ExtractedMedicationRegimen | null;
+  earlierExcerpt: string | null;
+  laterExcerpt: string | null;
+  absenceNote: string | null;
+};
+
+export type NoteRegimenComparisonReport = {
+  normalizedEarlierNote: string;
+  normalizedLaterNote: string;
+  items: NoteRegimenChange[];
+};
+
+const NUMBER_WORDS: Record<string, string> = {
+  one: '1',
+  two: '2',
+  three: '3',
+  four: '4',
+  five: '5',
+  six: '6',
+  seven: '7',
+  eight: '8',
+  nine: '9',
+  ten: '10',
+  fourteen: '14',
+};
+
+const KNOWN_MEDICATIONS: Array<{ pattern: RegExp; canonical: string }> = [
+  { pattern: /\bamoxicillin(?:\s*-\s*clavulanate)?\b/i, canonical: 'Amoxicillin' },
+  { pattern: /\btylenol\b|\bacetaminophen\b/i, canonical: 'Tylenol' },
+  { pattern: /\balbuterol(?:\s+sulfate)?(?:\s+hfa)?\b/i, canonical: 'Albuterol HFA' },
+  { pattern: /\blisinopril\b|\blsnopril\b/i, canonical: 'Lisinopril' },
+  { pattern: /\bmetformin\b/i, canonical: 'Metformin' },
+  { pattern: /\baspirin\b|\basprin\b/i, canonical: 'Aspirin' },
+  { pattern: /\batorvastatin\b|\blipitor\b/i, canonical: 'Atorvastatin' },
+  { pattern: /\bprednisone\b/i, canonical: 'Prednisone' },
+  { pattern: /\bglipizide\b/i, canonical: 'Glipizide' },
+  { pattern: /\bmetoprolol(?:\s+succinate(?:\s+er)?)?\b/i, canonical: 'Metoprolol Succinate' },
+  { pattern: /\bwarfarin\b/i, canonical: 'Warfarin' },
+  { pattern: /\bfurosemide\b/i, canonical: 'Furosemide' },
+  { pattern: /\benoxaparin\b/i, canonical: 'Enoxaparin' },
+  { pattern: /\bprilosec\b|\bomeprazole\b/i, canonical: 'Prilosec' },
+  { pattern: /\bseroquel\b|\bquetiapine\b/i, canonical: 'Seroquel' },
+  { pattern: /\bclopidogrel\b/i, canonical: 'Clopidogrel' },
+  { pattern: /\bverapamil(?:\s+hydrochloride)?\b/i, canonical: 'Verapamil Hydrochloride' },
+  { pattern: /\bursodiol\b/i, canonical: 'Ursodiol' },
+  { pattern: /\bacebutolol\b/i, canonical: 'Acebutolol' },
+  { pattern: /\bnahco3\b|\bsodium\s+bicarbonate\b/i, canonical: 'NaHCO3' },
+  { pattern: /\bvitamin\s+d\b/i, canonical: 'Vitamin D' },
+];
+
+const DISCONTINUED_CUE_RE =
+  /\b(stopped|discontinued|no\s+longer\s+indicated|d\/c|dc'd|held|hold)\b/i;
+
+/**
+ * Normalizes literal `<br>` / `<br/>` markup and CRLF line endings to `\n`.
+ */
+export function normalizeNoteText(text: string): string {
+  return text
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/\r\n?/g, '\n')
+    .split('\n')
+    .map(line => line.trimEnd())
+    .join('\n')
+    .trim();
+}
+
+function normalizeDoseText(clause: string): string | null {
+  const match = clause.match(
+    /\b(\d+(?:\.\d+)?)\s*(mg|mcg|g|ml|units?|meq|puffs?)\b/i,
+  );
+  if (!match) return null;
+  const amount = match[1];
+  const unit = match[2].toLowerCase();
+  return `${amount} ${unit}`;
+}
+
+function normalizeRouteText(clause: string): string | null {
+  if (/\b(?:po|by\s+mouth|oral)\b/i.test(clause)) return 'oral';
+  if (/\b(?:subcutaneous|subq|sq|sc)\b/i.test(clause)) return 'subcutaneous';
+  if (/\b(?:inhaler|inhalation|inhaled|puffs?)\b/i.test(clause)) return 'inhalation';
+  if (/\b(?:iv|intravenous)\b/i.test(clause)) return 'intravenous';
+  if (/\b(?:im|intramuscular)\b/i.test(clause)) return 'intramuscular';
+  if (/\btopical\b/i.test(clause)) return 'topical';
+  return null;
+}
+
+function normalizeFrequencyText(clause: string): string | null {
+  if (/\b(?:three\s+times\s+(?:a\s+day|daily)|tid)\b/i.test(clause)) {
+    return 'three times daily';
+  }
+  if (/\b(?:twice\s+(?:a\s+day|daily)|bid)\b/i.test(clause)) {
+    return 'twice daily';
+  }
+  if (/\b(?:every\s+4\s*-\s*6\s*hours(?:\s+as\s+needed)?|q4-6h(?:\s+prn)?)\b/i.test(clause)) {
+    return 'every 4-6 hours as needed';
+  }
+  if (/\b(?:every\s+4\s*hours(?:\s+as\s+needed)?|q4h(?:\s+prn)?)\b/i.test(clause)) {
+    return 'every 4 hours as needed';
+  }
+  if (/\b(?:every\s+6\s*hours(?:\s+as\s+needed)?|q6h(?:\s+prn)?)\b/i.test(clause)) {
+    return 'every 6 hours as needed';
+  }
+  if (/\b(?:at\s+bedtime|qhs)\b/i.test(clause)) {
+    return 'at bedtime';
+  }
+  if (/\b(?:once\s+(?:a\s+day|daily)|daily|qd)\b/i.test(clause)) {
+    return 'daily';
+  }
+  return null;
+}
+
+function normalizeDurationText(clause: string): string | null {
+  const match = clause.match(
+    /\b(?:for|x)\s+(\d+|one|two|three|four|five|six|seven|eight|nine|ten|fourteen)\s+(days?|weeks?|months?)\b/i,
+  );
+  if (!match) return null;
+  const rawCount = match[1].toLowerCase();
+  const count = NUMBER_WORDS[rawCount] ?? rawCount;
+  const unit = match[2].toLowerCase().replace(/s$/, '');
+  const plural = count === '1' ? unit : `${unit}s`;
+  return `${count} ${plural}`;
+}
+
+/**
+ * Deterministically extracts medication regimens (dose, route, frequency, duration,
+ * and explicit discontinuation cues) from a clinical note.
+ */
+export function extractMedicationRegimensFromNote(
+  noteText: string,
+): ExtractedMedicationRegimen[] {
+  const normalized = normalizeNoteText(noteText);
+  if (!normalized) return [];
+
+  const clauses = normalized
+    .split(/(?<=[.!?\n;])\s+|\n+/)
+    .map(c => c.trim())
+    .filter(Boolean);
+
+  const byMed = new Map<string, ExtractedMedicationRegimen>();
+
+  for (const clause of clauses) {
+    for (const { pattern, canonical } of KNOWN_MEDICATIONS) {
+      const match = clause.match(pattern);
+      if (!match || match.index === undefined) continue;
+
+      const tail = clause.slice(match.index);
+      const nextMedMatch = KNOWN_MEDICATIONS
+        .filter(k => k.canonical !== canonical)
+        .map(k => tail.slice(match[0].length).search(k.pattern))
+        .filter(idx => idx > 0)
+        .sort((a, b) => a - b)[0];
+
+      const medSegment =
+        nextMedMatch !== undefined
+          ? tail.slice(0, match[0].length + nextMedMatch).trim()
+          : tail.trim();
+
+      const key = canonical.toLowerCase();
+      const existing = byMed.get(key);
+      const extracted: ExtractedMedicationRegimen = {
+        name: canonical,
+        normalizedName: key,
+        dose: normalizeDoseText(medSegment) ?? existing?.dose ?? null,
+        route: normalizeRouteText(medSegment) ?? existing?.route ?? null,
+        frequency: normalizeFrequencyText(medSegment) ?? existing?.frequency ?? null,
+        duration: normalizeDurationText(medSegment) ?? existing?.duration ?? null,
+        discontinued:
+          DISCONTINUED_CUE_RE.test(clause) || (existing?.discontinued ?? false),
+        excerpt: existing ? `${existing.excerpt} | ${clause}` : clause,
+      };
+      byMed.set(key, extracted);
+    }
+  }
+
+  return Array.from(byMed.values());
+}
+
+/**
+ * Compares two clinical notes deterministically at the medication-regimen level,
+ * surfacing dose, frequency, route, and duration changes as well as presence/absence
+ * vs. explicit clinical discontinuation.
+ */
+export function compareNoteRegimens(
+  earlierNote: string,
+  laterNote: string,
+): NoteRegimenComparisonReport {
+  const normalizedEarlierNote = normalizeNoteText(earlierNote);
+  const normalizedLaterNote = normalizeNoteText(laterNote);
+
+  const earlierRegimens = extractMedicationRegimensFromNote(normalizedEarlierNote);
+  const laterRegimens = extractMedicationRegimensFromNote(normalizedLaterNote);
+
+  const earlierMap = new Map(earlierRegimens.map(r => [r.normalizedName, r]));
+  const laterMap = new Map(laterRegimens.map(r => [r.normalizedName, r]));
+
+  const allKeys = Array.from(new Set([...earlierMap.keys(), ...laterMap.keys()]));
+  const items: NoteRegimenChange[] = [];
+
+  for (const key of allKeys) {
+    const earlier = earlierMap.get(key) ?? null;
+    const later = laterMap.get(key) ?? null;
+    const medicationName = earlier?.name ?? later?.name ?? key;
+
+    if (earlier && !later) {
+      items.push({
+        medicationName,
+        normalizedName: key,
+        status: 'earlier_only',
+        statusLabel: 'Mentioned only in earlier note',
+        changeCategories: ['Mentioned only in earlier note'],
+        earlierRegimen: earlier,
+        laterRegimen: null,
+        earlierExcerpt: earlier.excerpt,
+        laterExcerpt: null,
+        absenceNote: 'Not mentioned in later note (not explicitly discontinued)',
+      });
+      continue;
+    }
+
+    if (!earlier && later) {
+      items.push({
+        medicationName,
+        normalizedName: key,
+        status: 'later_only',
+        statusLabel: 'Mentioned only in later note',
+        changeCategories: ['Mentioned only in later note'],
+        earlierRegimen: null,
+        laterRegimen: later,
+        earlierExcerpt: null,
+        laterExcerpt: later.excerpt,
+        absenceNote: 'Not mentioned in earlier note',
+      });
+      continue;
+    }
+
+    if (earlier && later) {
+      if (later.discontinued && !earlier.discontinued) {
+        items.push({
+          medicationName,
+          normalizedName: key,
+          status: 'discontinued',
+          statusLabel: 'Clinically discontinued',
+          changeCategories: ['Clinically discontinued'],
+          earlierRegimen: earlier,
+          laterRegimen: later,
+          earlierExcerpt: earlier.excerpt,
+          laterExcerpt: later.excerpt,
+          absenceNote: 'Explicitly discontinued in later note',
+        });
+        continue;
+      }
+
+      const changeCategories: NoteRegimenChangeCategory[] = [];
+      if (earlier.dose !== later.dose && (earlier.dose || later.dose)) {
+        changeCategories.push('Dose changed');
+      }
+      if (earlier.frequency !== later.frequency && (earlier.frequency || later.frequency)) {
+        changeCategories.push('Frequency changed');
+      }
+      if (earlier.route !== later.route && (earlier.route || later.route)) {
+        changeCategories.push('Route changed');
+      }
+      if (earlier.duration !== later.duration && (earlier.duration || later.duration)) {
+        changeCategories.push('Duration changed');
+      }
+
+      items.push({
+        medicationName,
+        normalizedName: key,
+        status: changeCategories.length > 0 ? 'changed' : 'unchanged',
+        statusLabel: changeCategories.length > 0 ? 'Regimen changed' : 'Unchanged',
+        changeCategories,
+        earlierRegimen: earlier,
+        laterRegimen: later,
+        earlierExcerpt: earlier.excerpt,
+        laterExcerpt: later.excerpt,
+        absenceNote: null,
+      });
+    }
+  }
+
+  return {
+    normalizedEarlierNote,
+    normalizedLaterNote,
+    items,
+  };
+}
