@@ -2466,11 +2466,7 @@ export default function Home() {
       widgetTitle = 'Workspace overview';
       widgets = [
         metric('Patient workspace', patientName, activeScenario.patientId,
-          hasSelectedPatient ? 'Open patient' : 'Add patient',
-          () => {
-            if (hasSelectedPatient) selectPatient(activeScenario.id);
-            else showPatientForm();
-          }),
+          hasSelectedPatient ? 'Open patient' : undefined, () => selectPatient(activeScenario.id)),
         jump('Medication review', pendingReviews, 'diff', 'Open snapshot review', 'Changes awaiting a decision'),
         jump('Note comparison', compareStatus, 'extract', 'Open Compare notes', 'Compare earlier and later notes'),
         metric('Ask about a patient', patientName, undefined, 'Open AI chat', openChartChat),
