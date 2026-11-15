@@ -2,10 +2,12 @@
 
 import {
   useCallback,
+  useId,
   useMemo,
   useRef,
   useState,
   type DragEvent,
+  type ReactNode,
 } from 'react';
 import type { SocketStatus } from '@/lib/ai-socket';
 import type { SnapshotComparisonReport } from '@/lib/types';
@@ -92,36 +94,68 @@ const WIDGET_TITLES: Record<CockpitWidgetId, string> = {
   'session-activity': 'Session Activity',
 };
 
-const RING_RADIUS = 22;
-const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
+const WIDGET_SUBTITLES: Record<CockpitWidgetId, string> = {
+  'diff-breakdown': 'Earlier vs later regimen',
+  'review-progress': 'Decisions on changed items',
+  'provenance-health': 'Evidence link resolution',
+  'triage-queue': 'AI suggestion status',
+  'model-socket': 'Extraction runtime',
+  'eval-metrics': 'Extraction accuracy',
+  'session-activity': 'Recent actions',
+};
 
-interface RingSlice {
+/** 12-column rhythm: featured cards span 6, compact status cards span 4. */
+const WIDGET_SPAN: Record<CockpitWidgetId, 4 | 6> = {
+  'diff-breakdown': 6,
+  'review-progress': 6,
+  'provenance-health': 4,
+  'triage-queue': 4,
+  'model-socket': 4,
+  'eval-metrics': 6,
+  'session-activity': 6,
+};
+
+type Tone = 'add' | 'del' | 'chg' | 'unk' | 'accent';
+
+interface RingItem {
   key: string;
   label: string;
   value: number;
   color: string;
-  length: number;
-  offset: number;
+  tone: Tone;
 }
 
-function buildRingSlices(
-  items: ReadonlyArray<{ key: string; label: string; value: number; color: string }>,
+interface RingArc extends RingItem {
+  length: number;
+  offset: number;
+  full: boolean;
+}
+
+function computeRingArcs(
+  items: ReadonlyArray<RingItem>,
   total: number,
-): RingSlice[] {
+  circumference: number,
+  stroke: number,
+  rounded: boolean,
+): RingArc[] {
   if (total <= 0) return [];
+  const visible = items.filter((item) => item.value > 0);
+  const gap = visible.length > 1 ? 2.5 : 0;
+  const arcs: RingArc[] = [];
   let accumulated = 0;
-  const slices: RingSlice[] = [];
-  for (const item of items) {
-    if (item.value <= 0) continue;
-    const length = (item.value / total) * RING_CIRCUMFERENCE;
-    slices.push({
+  for (const item of visible) {
+    const frac = item.value / total;
+    const slice = frac * circumference;
+    const full = visible.length === 1 && frac >= 0.9999;
+    arcs.push({
       ...item,
-      length,
-      offset: -accumulated,
+      full,
+      length: full ? circumference : Math.max(0.01, slice - gap - (rounded ? stroke : 0)),
+      offset: full ? 0 : -(accumulated + gap / 2 + (rounded ? stroke / 2 : 0)),
     });
-    accumulated += length;
+    accumulated += slice;
   }
-  return slices;
+  return arcs;
 }
 
 function classifyAuditActor(actor: string): 'clinician' | 'ai' | 'system' {
@@ -135,13 +169,20 @@ function classifyAuditActor(actor: string): 'clinician' | 'ai' | 'system' {
   return 'system';
 }
 
-function buildActivitySparkline(audit: ReadonlyArray<CockpitAuditEntry>): {
-  points: string;
+const SPARK_W = 260;
+const SPARK_H = 76;
+const SPARK_TOP = 8;
+const SPARK_BASE = 64;
+
+interface Sparkline {
+  linePath: string;
   areaPath: string;
   lastX: number;
   lastY: number;
   buckets: number[];
-} {
+}
+
+function buildActivitySparkline(audit: ReadonlyArray<CockpitAuditEntry>): Sparkline {
   const bucketCount = 8;
   const chronological = [...audit].reverse();
   const buckets = Array.from({ length: bucketCount }, () => 0);
@@ -159,32 +200,28 @@ function buildActivitySparkline(audit: ReadonlyArray<CockpitAuditEntry>): {
   }
 
   const maxVal = Math.max(3, ...buckets);
-  const width = 148;
-  const height = 36;
-  const padX = 4;
-  const padY = 5;
-  const innerW = width - padX * 2;
-  const innerH = height - padY * 2;
+  const padX = 8;
+  const innerW = SPARK_W - padX * 2;
+  const innerH = SPARK_BASE - SPARK_TOP;
 
-  const coords = buckets.map((val, idx) => {
-    const x = padX + (idx / (bucketCount - 1)) * innerW;
-    const y = padY + innerH - (val / maxVal) * innerH;
-    return { x: Number(x.toFixed(1)), y: Number(y.toFixed(1)) };
-  });
+  const coords = buckets.map((val, idx) => ({
+    x: Number((padX + (idx / (bucketCount - 1)) * innerW).toFixed(1)),
+    y: Number((SPARK_BASE - (val / maxVal) * innerH).toFixed(1)),
+  }));
 
-  const points = coords.map((p) => `${p.x},${p.y}`).join(' ');
+  // Horizontal-tangent bezier segments: smooth, never overshoots the data.
+  let linePath = `M ${coords[0].x} ${coords[0].y}`;
+  for (let i = 1; i < coords.length; i += 1) {
+    const prev = coords[i - 1];
+    const cur = coords[i];
+    const mid = Number(((prev.x + cur.x) / 2).toFixed(1));
+    linePath += ` C ${mid} ${prev.y}, ${mid} ${cur.y}, ${cur.x} ${cur.y}`;
+  }
   const first = coords[0];
   const last = coords[coords.length - 1];
-  const linePart = coords.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
-  const areaPath = `${linePart} L ${last.x} ${height - 2} L ${first.x} ${height - 2} Z`;
+  const areaPath = `${linePath} L ${last.x} ${SPARK_BASE} L ${first.x} ${SPARK_BASE} Z`;
 
-  return {
-    points,
-    areaPath,
-    lastX: last.x,
-    lastY: last.y,
-    buckets,
-  };
+  return { linePath, areaPath, lastX: last.x, lastY: last.y, buckets };
 }
 
 function clampRatio(value: number): number {
@@ -194,6 +231,294 @@ function clampRatio(value: number): number {
 
 function arraysEqual(a: ReadonlyArray<CockpitWidgetId>, b: ReadonlyArray<CockpitWidgetId>): boolean {
   return a.length === b.length && a.every((item, idx) => item === b[idx]);
+}
+
+function percentLabel(value: number, total: number): string {
+  return total > 0 ? `${Math.round((value / total) * 100)}%` : '—';
+}
+
+/* ------------------------------------------------------------------ */
+/* Icons                                                               */
+/* ------------------------------------------------------------------ */
+
+function GripIcon() {
+  return (
+    <svg viewBox="0 0 10 16" width="10" height="16" aria-hidden="true" focusable="false">
+      {[3, 8, 13].map((cy) =>
+        [2.5, 7.5].map((cx) => <circle key={`${cx}-${cy}`} cx={cx} cy={cy} r="1.15" fill="currentColor" />),
+      )}
+    </svg>
+  );
+}
+
+function ChevronIcon({ dir }: { dir: 'left' | 'right' }) {
+  return (
+    <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true" focusable="false">
+      <path
+        d={dir === 'left' ? 'M7.5 2.5 4 6l3.5 3.5' : 'M4.5 2.5 8 6 4.5 9.5'}
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Ring chart (donut / gauge) with interactive segments + legend       */
+/* ------------------------------------------------------------------ */
+
+interface RingChartProps {
+  items: ReadonlyArray<RingItem>;
+  total: number;
+  centerValue: string;
+  centerLabel: string;
+  ariaLabel: string;
+  size?: number;
+  stroke?: number;
+  rounded?: boolean;
+  onSelect?: (key: string) => void;
+  footer?: ReactNode;
+}
+
+function RingChart({
+  items,
+  total,
+  centerValue,
+  centerLabel,
+  ariaLabel,
+  size = 116,
+  stroke = 12,
+  rounded = false,
+  onSelect,
+  footer,
+}: RingChartProps) {
+  const [active, setActive] = useState<string | null>(null);
+  const c = size / 2;
+  const r = (size - stroke) / 2 - 3;
+  const circumference = 2 * Math.PI * r;
+  const arcs = computeRingArcs(items, total, circumference, stroke, rounded);
+  const activeItem = active ? items.find((item) => item.key === active && item.value > 0) : undefined;
+
+  const shownValue = activeItem ? String(activeItem.value) : centerValue;
+  const shownLabel = activeItem
+    ? `${activeItem.label} · ${percentLabel(activeItem.value, total)}`
+    : centerLabel;
+
+  return (
+    <div className="cw-ring-layout">
+      <div className="cw-ring" style={{ width: size, height: size }}>
+        <svg
+          className="cw-ring-svg"
+          viewBox={`0 0 ${size} ${size}`}
+          width={size}
+          height={size}
+          role="img"
+          aria-label={ariaLabel}
+        >
+          <circle cx={c} cy={c} r={r} fill="none" stroke="var(--line)" strokeWidth={stroke} opacity="0.85" />
+          {arcs.map((arc) => {
+            const isActive = active === arc.key;
+            const isDim = active !== null && !isActive;
+            return (
+              <circle
+                key={arc.key}
+                cx={c}
+                cy={c}
+                r={r}
+                fill="none"
+                stroke={arc.color}
+                strokeWidth={isActive ? stroke + 2 : stroke}
+                strokeLinecap={rounded && !arc.full ? 'round' : 'butt'}
+                strokeDasharray={`${arc.length} ${circumference}`}
+                strokeDashoffset={arc.offset}
+                transform={`rotate(-90 ${c} ${c})`}
+                pointerEvents="stroke"
+                className={`cw-arc${onSelect ? ' is-action' : ''}${isDim ? ' is-dim' : ''}`}
+                data-segment={arc.key}
+                onMouseEnter={() => setActive(arc.key)}
+                onMouseLeave={() => setActive(null)}
+                onClick={
+                  onSelect
+                    ? (e) => {
+                        e.stopPropagation();
+                        onSelect(arc.key);
+                      }
+                    : undefined
+                }
+              >
+                <title>{`${arc.label}: ${arc.value}`}</title>
+              </circle>
+            );
+          })}
+        </svg>
+        <div className="cw-ring-center" aria-hidden="true">
+          <span className="cw-ring-value">{shownValue}</span>
+          <span className="cw-ring-label">{shownLabel}</span>
+        </div>
+      </div>
+
+      <div className="cw-legend">
+        {items.map((item) => {
+          const rowClass = `cw-legend-row tone-${item.tone}${active === item.key ? ' is-active' : ''}${
+            active !== null && active !== item.key ? ' is-dim' : ''
+          }`;
+          const content = (
+            <>
+              <span className="cw-dot" aria-hidden="true" />
+              <span className="cw-legend-label">{item.label}</span>
+              <span className="cw-legend-val">{item.value}</span>
+              <span className="cw-legend-pct">{percentLabel(item.value, total)}</span>
+            </>
+          );
+          return onSelect ? (
+            <button
+              key={item.key}
+              type="button"
+              className={`${rowClass} is-action`}
+              onClick={() => onSelect(item.key)}
+              onMouseEnter={() => setActive(item.key)}
+              onMouseLeave={() => setActive(null)}
+              onFocus={() => setActive(item.key)}
+              onBlur={() => setActive(null)}
+            >
+              {content}
+            </button>
+          ) : (
+            <div
+              key={item.key}
+              className={rowClass}
+              onMouseEnter={() => setActive(item.key)}
+              onMouseLeave={() => setActive(null)}
+            >
+              {content}
+            </div>
+          );
+        })}
+        {footer}
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Stacked pill bar                                                    */
+/* ------------------------------------------------------------------ */
+
+interface BarSegment {
+  key: string;
+  value: number;
+  color: string;
+}
+
+function layoutBar(segments: ReadonlyArray<BarSegment>, total: number, width: number, gap: number) {
+  const live = segments.filter((s) => s.value > 0);
+  const usable = width - gap * Math.max(0, live.length - 1);
+  const rects: Array<{ key: string; x: number; w: number; color: string }> = [];
+  let x = 0;
+  for (const seg of live) {
+    const w = total > 0 ? (seg.value / total) * usable : 0;
+    rects.push({ key: seg.key, x, w, color: seg.color });
+    x += w + gap;
+  }
+  return rects;
+}
+
+function StackedBar({
+  segments,
+  total,
+  height = 12,
+  ariaLabel,
+}: {
+  segments: ReadonlyArray<BarSegment>;
+  total: number;
+  height?: number;
+  ariaLabel?: string;
+}) {
+  const width = 240;
+  const rects = layoutBar(segments, total, width, 3);
+  return (
+    <svg
+      className="cw-bar-svg"
+      viewBox={`0 0 ${width} ${height}`}
+      width="100%"
+      preserveAspectRatio="xMidYMid meet"
+      style={{ aspectRatio: `${width} / ${height}` }}
+      {...(ariaLabel ? { role: 'img', 'aria-label': ariaLabel } : { 'aria-hidden': true })}
+    >
+      <rect x="0" y="0" width={width} height={height} rx={height / 2} fill="var(--sunk)" />
+      {rects.map((rect) => (
+        <rect
+          key={rect.key}
+          x={rect.x}
+          y="0"
+          width={rect.w}
+          height={height}
+          rx={Math.min(height / 2, rect.w / 2)}
+          fill={rect.color}
+        />
+      ))}
+    </svg>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Activity sparkline (smooth area + line)                             */
+/* ------------------------------------------------------------------ */
+
+function ActivitySpark({ spark, ariaLabel, idle }: { spark: Sparkline; ariaLabel: string; idle: boolean }) {
+  const gradId = `cw-spark-${useId().replace(/[^a-zA-Z0-9_-]/g, '')}`;
+  const mid = (SPARK_TOP + SPARK_BASE) / 2;
+  return (
+    <svg
+      className="cw-spark-svg"
+      viewBox={`0 0 ${SPARK_W} ${SPARK_H}`}
+      width="100%"
+      style={{ aspectRatio: `${SPARK_W} / ${SPARK_H}` }}
+      role="img"
+      aria-label={ariaLabel}
+    >
+      <defs>
+        <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.22" />
+          <stop offset="100%" stopColor="var(--accent)" stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      {[SPARK_TOP, mid, SPARK_BASE].map((y, i) => (
+        <line
+          key={y}
+          x1="0"
+          x2={SPARK_W}
+          y1={y}
+          y2={y}
+          stroke="var(--line)"
+          strokeWidth="1"
+          strokeDasharray={i === 2 ? undefined : '2 4'}
+        />
+      ))}
+      <path d={spark.areaPath} fill={`url(#${gradId})`} opacity={idle ? 0.5 : 1} />
+      <path
+        d={spark.linePath}
+        fill="none"
+        stroke="var(--accent)"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        opacity={idle ? 0.5 : 1}
+      />
+      <circle cx={spark.lastX} cy={spark.lastY} r="6" fill="var(--accent)" opacity="0.16" />
+      <circle
+        cx={spark.lastX}
+        cy={spark.lastY}
+        r="3"
+        fill="var(--raised)"
+        stroke="var(--accent)"
+        strokeWidth="2"
+      />
+    </svg>
+  );
 }
 
 /**
@@ -328,17 +653,13 @@ export function CockpitWidgets({
     };
   }, [snapshotEntries]);
 
-  const diffSlices = useMemo(
-    () =>
-      buildRingSlices(
-        [
-          { key: 'changed', label: 'Changed', value: diffCounts.changed, color: 'var(--chg)' },
-          { key: 'onlyA', label: 'Earlier only', value: diffCounts.onlyA, color: 'var(--del)' },
-          { key: 'onlyB', label: 'Later only', value: diffCounts.onlyB, color: 'var(--add)' },
-          { key: 'same', label: 'Same', value: diffCounts.same, color: 'var(--unk)' },
-        ],
-        diffCounts.total,
-      ),
+  const diffItems = useMemo<RingItem[]>(
+    () => [
+      { key: 'changed', label: 'Changed', value: diffCounts.changed, color: 'var(--chg)', tone: 'chg' },
+      { key: 'onlyA', label: 'Earlier only', value: diffCounts.onlyA, color: 'var(--del)', tone: 'del' },
+      { key: 'onlyB', label: 'Later only', value: diffCounts.onlyB, color: 'var(--add)', tone: 'add' },
+      { key: 'same', label: 'Same', value: diffCounts.same, color: 'var(--unk)', tone: 'unk' },
+    ],
     [diffCounts],
   );
 
@@ -361,15 +682,12 @@ export function CockpitWidgets({
     const total = reviewable.length;
     const completed = verified + flagged + deferred;
     const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
-    const slices = buildRingSlices(
-      [
-        { key: 'verified', label: 'Verified', value: verified, color: 'var(--add)' },
-        { key: 'flagged', label: 'Flagged', value: flagged, color: 'var(--del)' },
-        { key: 'deferred', label: 'Deferred', value: deferred, color: 'var(--chg)' },
-      ],
-      total,
-    );
-    return { verified, flagged, deferred, completed, total, pct, slices };
+    const items: RingItem[] = [
+      { key: 'verified', label: 'Verified', value: verified, color: 'var(--add)', tone: 'add' },
+      { key: 'flagged', label: 'Flagged', value: flagged, color: 'var(--del)', tone: 'del' },
+      { key: 'deferred', label: 'Deferred', value: deferred, color: 'var(--chg)', tone: 'chg' },
+    ];
+    return { verified, flagged, deferred, completed, total, pct, items };
   }, [activeScenarioId, reviews, snapshotEntries]);
 
   const provenanceStats = useMemo(() => {
@@ -412,15 +730,12 @@ export function CockpitWidgets({
     }
 
     const total = list.length;
-    const slices = buildRingSlices(
-      [
-        { key: 'open', label: 'Open', value: open, color: 'var(--accent)' },
-        { key: 'accepted', label: 'Accepted', value: accepted, color: 'var(--add)' },
-        { key: 'overridden', label: 'Overridden', value: overridden, color: 'var(--chg)' },
-      ],
-      total,
-    );
-    return { open, accepted, overridden, total, slices };
+    const items: RingItem[] = [
+      { key: 'open', label: 'Open', value: open, color: 'var(--accent)', tone: 'accent' },
+      { key: 'accepted', label: 'Accepted', value: accepted, color: 'var(--add)', tone: 'add' },
+      { key: 'overridden', label: 'Overridden', value: overridden, color: 'var(--chg)', tone: 'chg' },
+    ];
+    return { open, accepted, overridden, total, items };
   }, [activeScenarioId, triageByScenario]);
 
   const auditStats = useMemo(() => {
@@ -463,225 +778,87 @@ export function CockpitWidgets({
 
   const renderWidgetBody = (id: CockpitWidgetId) => {
     switch (id) {
-      case 'diff-breakdown': {
-        const legendItems: Array<{
-          key: CockpitDiffFilter;
-          label: string;
-          count: number;
-          toneClass: string;
-        }> = [
-          { key: 'changed', label: 'Changed', count: diffCounts.changed, toneClass: 'chg' },
-          { key: 'onlyA', label: 'Earlier', count: diffCounts.onlyA, toneClass: 'del' },
-          { key: 'onlyB', label: 'Later', count: diffCounts.onlyB, toneClass: 'add' },
-          { key: 'same', label: 'Same', count: diffCounts.same, toneClass: 'unk' },
-        ];
-
+      case 'diff-breakdown':
         return (
           <div className="cw-body">
-            <div className="cw-donut-row">
-              <svg
-                className="cw-ring-svg"
-                viewBox="0 0 64 64"
-                width="64"
-                height="64"
-                role="img"
-                aria-label={`Medication diff donut: ${diffCounts.changed} changed, ${diffCounts.onlyA} earlier-only, ${diffCounts.onlyB} later-only, ${diffCounts.same} same`}
-              >
-                <circle
-                  cx="32"
-                  cy="32"
-                  r={RING_RADIUS}
-                  fill="none"
-                  stroke="var(--sunk)"
-                  strokeWidth="8"
-                />
-                {diffSlices.map((slice) => (
-                  <circle
-                    key={slice.key}
-                    cx="32"
-                    cy="32"
-                    r={RING_RADIUS}
-                    fill="none"
-                    stroke={slice.color}
-                    strokeWidth="8"
-                    strokeDasharray={`${slice.length} ${RING_CIRCUMFERENCE}`}
-                    strokeDashoffset={slice.offset}
-                    transform="rotate(-90 32 32)"
-                    pointerEvents="stroke"
-                    className="cw-segment"
-                    data-segment={slice.key}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onNavigate('diff', slice.key as CockpitDiffFilter);
-                    }}
-                  >
-                    <title>{`${slice.label}: ${slice.value}`}</title>
-                  </circle>
-                ))}
-                <text x="32" y="31" textAnchor="middle" className="cw-ring-num">
-                  {diffCounts.total}
-                </text>
-                <text x="32" y="41" textAnchor="middle" className="cw-ring-sub">
-                  meds
-                </text>
-              </svg>
-
-              <div className="cw-chip-grid">
-                {legendItems.map((item) => (
-                  <button
-                    key={item.key}
-                    type="button"
-                    className={`cw-chip tone-${item.toneClass}`}
-                    onClick={() => onNavigate('diff', item.key)}
-                  >
-                    <span className="cw-swatch" aria-hidden="true" />
-                    <span className="cw-chip-label">{item.label}</span>
-                    <span className="cw-chip-val">{item.count}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
+            <RingChart
+              items={diffItems}
+              total={diffCounts.total}
+              centerValue={String(diffCounts.total)}
+              centerLabel="medications"
+              size={136}
+              stroke={14}
+              ariaLabel={`Medication diff donut: ${diffCounts.changed} changed, ${diffCounts.onlyA} earlier-only, ${diffCounts.onlyB} later-only, ${diffCounts.same} same`}
+              onSelect={(key) => onNavigate('diff', key as CockpitDiffFilter)}
+            />
           </div>
         );
-      }
 
       case 'review-progress':
         return (
-          <button
-            type="button"
-            className="cw-drill-btn"
-            onClick={() => onNavigate('diff', 'all')}
-          >
-            <div className="cw-donut-row">
-              <svg
-                className="cw-ring-svg"
-                viewBox="0 0 64 64"
-                width="64"
-                height="64"
-                role="img"
-                aria-label={`Clinician review progress: ${reviewStats.completed} of ${reviewStats.total} reviewed (${reviewStats.verified} verified, ${reviewStats.flagged} flagged, ${reviewStats.deferred} deferred)`}
-              >
-                <circle
-                  cx="32"
-                  cy="32"
-                  r={RING_RADIUS}
-                  fill="none"
-                  stroke="var(--line-2)"
-                  strokeWidth="7"
-                />
-                {reviewStats.slices.map((slice) => (
-                  <circle
-                    key={slice.key}
-                    cx="32"
-                    cy="32"
-                    r={RING_RADIUS}
-                    fill="none"
-                    stroke={slice.color}
-                    strokeWidth="7"
-                    strokeDasharray={`${slice.length} ${RING_CIRCUMFERENCE}`}
-                    strokeDashoffset={slice.offset}
-                    transform="rotate(-90 32 32)"
-                  />
-                ))}
-                <text x="32" y="31" textAnchor="middle" className="cw-ring-num">
-                  {reviewStats.total > 0 ? `${reviewStats.pct}%` : '—'}
-                </text>
-                <text x="32" y="41" textAnchor="middle" className="cw-ring-sub">
-                  {reviewStats.completed}/{reviewStats.total}
-                </text>
-              </svg>
-
-              <dl className="cw-kv-list">
-                <div>
-                  <dt className="tone-add">Verified</dt>
-                  <dd>{reviewStats.verified}</dd>
+          <button type="button" className="cw-drill-btn" onClick={() => onNavigate('diff', 'all')}>
+            <RingChart
+              items={reviewStats.items}
+              total={reviewStats.total}
+              centerValue={reviewStats.total > 0 ? `${reviewStats.pct}%` : '—'}
+              centerLabel={`${reviewStats.completed} of ${reviewStats.total} reviewed`}
+              size={136}
+              stroke={11}
+              rounded
+              ariaLabel={`Clinician review progress: ${reviewStats.completed} of ${reviewStats.total} reviewed (${reviewStats.verified} verified, ${reviewStats.flagged} flagged, ${reviewStats.deferred} deferred)`}
+              footer={
+                <div className="cw-legend-note">
+                  <span>Pending</span>
+                  <b>{Math.max(0, reviewStats.total - reviewStats.completed)}</b>
                 </div>
-                <div>
-                  <dt className="tone-del">Flagged</dt>
-                  <dd>{reviewStats.flagged}</dd>
-                </div>
-                <div>
-                  <dt className="tone-chg">Deferred</dt>
-                  <dd>{reviewStats.deferred}</dd>
-                </div>
-              </dl>
-            </div>
+              }
+            />
           </button>
         );
 
       case 'provenance-health': {
         const total = provenanceStats.totalLinks;
-        const barW = 168;
-        const resolvedW = total > 0 ? (provenanceStats.resolved / total) * barW : 0;
-        const partialW = total > 0 ? (provenanceStats.partial / total) * barW : 0;
-        const unresolvedW = total > 0 ? (provenanceStats.unresolved / total) * barW : 0;
+        const resolvedPct = percentLabel(provenanceStats.resolved, total);
+        const pills: Array<{ key: string; label: string; value: number; tone: Tone; color: string }> = [
+          { key: 'resolved', label: 'Resolved', value: provenanceStats.resolved, tone: 'add', color: 'var(--add)' },
+          { key: 'partial', label: 'Partial', value: provenanceStats.partial, tone: 'chg', color: 'var(--chg)' },
+          { key: 'unresolved', label: 'Unresolved', value: provenanceStats.unresolved, tone: 'del', color: 'var(--del)' },
+        ];
 
         return (
-          <button
-            type="button"
-            className="cw-drill-btn"
-            onClick={() => onNavigate('diff', 'all')}
-          >
+          <button type="button" className="cw-drill-btn" onClick={() => onNavigate('diff', 'all')}>
             <div className="cw-stack-wrap">
-              <svg
-                className="cw-bar-svg"
-                viewBox={`0 0 ${barW} 14`}
-                width="100%"
-                height="14"
-                role="img"
-                aria-label={`Provenance evidence bar: ${provenanceStats.resolved} resolved, ${provenanceStats.partial} partial, ${provenanceStats.unresolved} unresolved of ${total} evidence links`}
-              >
-                <rect
-                  x="0"
-                  y="2"
-                  width={barW}
-                  height="10"
-                  rx="5"
-                  fill="var(--sunk)"
-                  stroke="var(--line)"
-                  strokeWidth="1"
-                />
-                {resolvedW > 0 && (
-                  <rect x="0" y="2" width={resolvedW} height="10" rx="3" fill="var(--add)" />
-                )}
-                {partialW > 0 && (
-                  <rect
-                    x={resolvedW}
-                    y="2"
-                    width={partialW}
-                    height="10"
-                    fill="var(--chg)"
-                  />
-                )}
-                {unresolvedW > 0 && (
-                  <rect
-                    x={resolvedW + partialW}
-                    y="2"
-                    width={unresolvedW}
-                    height="10"
-                    rx="3"
-                    fill="var(--del)"
-                  />
-                )}
-              </svg>
-
-              <div className="cw-metric-row">
-                <span className="cw-metric-pill">
-                  <b>{provenanceStats.totalLinks}</b>
-                  <small>evidence links</small>
-                </span>
-                <span
-                  className={`cw-metric-pill ${
-                    provenanceStats.gapCount > 0 ? 'tone-chg' : 'tone-add'
-                  }`}
-                >
-                  <b>{provenanceStats.gapCount}</b>
-                  <small>{provenanceStats.gapCount === 1 ? 'gap' : 'gaps'}</small>
-                </span>
+              <div className="cw-hero-row">
+                <div className="cw-hero">
+                  <span className="cw-hero-num">{resolvedPct}</span>
+                  <span className="cw-hero-cap">resolved</span>
+                </div>
+                <div className="cw-hero-side">
+                  <span className="cw-hero-meta">
+                    <b>{total}</b> {total === 1 ? 'link' : 'links'}
+                  </span>
+                  <span className={`cw-gap-pill ${provenanceStats.gapCount > 0 ? 'tone-chg' : 'tone-add'}`}>
+                    <span className="cw-dot" aria-hidden="true" />
+                    {provenanceStats.gapCount} {provenanceStats.gapCount === 1 ? 'gap' : 'gaps'}
+                  </span>
+                </div>
               </div>
-              <div className="cw-subline">
-                {provenanceStats.resolved} resolved · {provenanceStats.partial} partial ·{' '}
-                {provenanceStats.unresolved} unresolved
+
+              <StackedBar
+                segments={pills.map((p) => ({ key: p.key, value: p.value, color: p.color }))}
+                total={total}
+                height={12}
+                ariaLabel={`Provenance evidence bar: ${provenanceStats.resolved} resolved, ${provenanceStats.partial} partial, ${provenanceStats.unresolved} unresolved of ${total} evidence links`}
+              />
+
+              <div className="cw-pill-row">
+                {pills.map((pill) => (
+                  <span key={pill.key} className={`cw-pill tone-${pill.tone}`}>
+                    <span className="cw-dot" aria-hidden="true" />
+                    <b>{pill.value}</b>
+                    <small>{pill.label}</small>
+                  </span>
+                ))}
               </div>
             </div>
           </button>
@@ -690,118 +867,68 @@ export function CockpitWidgets({
 
       case 'triage-queue':
         return (
-          <button
-            type="button"
-            className="cw-drill-btn"
-            onClick={() => onNavigate('triage')}
-          >
-            <div className="cw-donut-row">
-              <svg
-                className="cw-ring-svg"
-                viewBox="0 0 64 64"
-                width="64"
-                height="64"
-                role="img"
-                aria-label={`AI triage queue: ${triageStats.open} open, ${triageStats.accepted} accepted, ${triageStats.overridden} overridden`}
-              >
-                <circle
-                  cx="32"
-                  cy="32"
-                  r={RING_RADIUS}
-                  fill="none"
-                  stroke="var(--line-2)"
-                  strokeWidth="7"
-                />
-                {triageStats.slices.map((slice) => (
-                  <circle
-                    key={slice.key}
-                    cx="32"
-                    cy="32"
-                    r={RING_RADIUS}
-                    fill="none"
-                    stroke={slice.color}
-                    strokeWidth="7"
-                    strokeDasharray={`${slice.length} ${RING_CIRCUMFERENCE}`}
-                    strokeDashoffset={slice.offset}
-                    transform="rotate(-90 32 32)"
-                  />
-                ))}
-                <text x="32" y="31" textAnchor="middle" className="cw-ring-num">
-                  {triageStats.open}
-                </text>
-                <text x="32" y="41" textAnchor="middle" className="cw-ring-sub">
-                  open
-                </text>
-              </svg>
-
-              <dl className="cw-kv-list">
-                <div>
-                  <dt className="tone-accent">Open</dt>
-                  <dd>{triageStats.open}</dd>
+          <button type="button" className="cw-drill-btn" onClick={() => onNavigate('triage')}>
+            <RingChart
+              items={triageStats.items}
+              total={triageStats.total}
+              centerValue={String(triageStats.open)}
+              centerLabel="open"
+              size={96}
+              stroke={9}
+              ariaLabel={`AI triage queue: ${triageStats.open} open, ${triageStats.accepted} accepted, ${triageStats.overridden} overridden`}
+              footer={
+                <div className="cw-legend-note">
+                  <span>Resolved</span>
+                  <b>
+                    {triageStats.accepted + triageStats.overridden}/{triageStats.total}
+                  </b>
                 </div>
-                <div>
-                  <dt className="tone-add">Accepted</dt>
-                  <dd>{triageStats.accepted}</dd>
-                </div>
-                <div>
-                  <dt className="tone-chg">Overridden</dt>
-                  <dd>{triageStats.overridden}</dd>
-                </div>
-              </dl>
-            </div>
+              }
+            />
           </button>
         );
 
       case 'model-socket': {
-        const stateTone =
-          socketStatus.state === 'live'
-            ? 'add'
-            : socketStatus.state === 'replay'
-              ? 'chg'
-              : 'unk';
+        const stateTone: Tone =
+          socketStatus.state === 'live' ? 'add' : socketStatus.state === 'replay' ? 'chg' : 'unk';
         return (
-          <button
-            type="button"
-            className="cw-drill-btn"
-            onClick={() => onNavigate('models')}
-          >
-            <div className="cw-socket-row">
-              <svg
-                className={`cw-pulse-svg tone-${stateTone}`}
-                viewBox="0 0 44 44"
-                width="44"
-                height="44"
-                role="img"
-                aria-label={`Model socket state: ${socketLabel}`}
-              >
-                <circle
-                  cx="22"
-                  cy="22"
-                  r="17"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeOpacity="0.28"
-                  className={socketStatus.state === 'live' ? 'cw-pulse-ring' : undefined}
-                />
-                <circle
-                  cx="22"
-                  cy="22"
-                  r="11"
-                  fill="currentColor"
-                  fillOpacity="0.14"
-                />
-                <circle cx="22" cy="22" r="5" fill="currentColor" />
-              </svg>
-
-              <div className="cw-socket-meta">
-                <div className="cw-socket-state">
-                  <span className={`cw-state-badge tone-${stateTone}`}>{socketLabel}</span>
-                  <span className="cw-socket-ep">{socketStatus.endpoints.socket}</span>
+          <button type="button" className="cw-drill-btn" onClick={() => onNavigate('models')}>
+            <div className="cw-socket">
+              <div className={`cw-socket-head tone-${stateTone}`}>
+                <svg
+                  className="cw-pulse-svg"
+                  viewBox="0 0 56 56"
+                  width="56"
+                  height="56"
+                  role="img"
+                  aria-label={`Model socket state: ${socketLabel}`}
+                >
+                  {socketStatus.state === 'live' && (
+                    <>
+                      <circle cx="28" cy="28" r="24" fill="none" stroke="currentColor" strokeWidth="1.5" className="cw-pulse-ring" />
+                      <circle cx="28" cy="28" r="24" fill="none" stroke="currentColor" strokeWidth="1.5" className="cw-pulse-ring is-late" />
+                    </>
+                  )}
+                  <circle cx="28" cy="28" r="22" fill="none" stroke="currentColor" strokeWidth="1.25" strokeOpacity="0.22" />
+                  <circle cx="28" cy="28" r="14" fill="currentColor" fillOpacity="0.12" />
+                  <circle cx="28" cy="28" r="6" fill="currentColor" />
+                </svg>
+                <div className="cw-socket-meta">
+                  <span className="cw-state-badge">
+                    <span className="cw-dot" aria-hidden="true" />
+                    {socketLabel}
+                  </span>
+                  <span className="cw-socket-model" title={socketModelText}>
+                    {socketModelText}
+                  </span>
                 </div>
-                <div className="cw-socket-model" title={socketModelText}>
-                  {socketModelText}
-                </div>
+              </div>
+              <div className="cw-socket-chips">
+                <span className="cw-mini-chip" title="Socket endpoint">
+                  {socketStatus.endpoints.socket}
+                </span>
+                <span className="cw-mini-chip">{socketStatus.simulated ? 'simulated' : 'direct'}</span>
+                <span className="cw-mini-chip">{socketStatus.model_loaded ? 'model loaded' : 'no model'}</span>
               </div>
             </div>
           </button>
@@ -812,39 +939,38 @@ export function CockpitWidgets({
         const bars = [
           {
             key: 'precision',
-            label: 'Prec',
-            full: 'Precision',
+            label: 'Precision',
             val: evalSummary ? clampRatio(evalSummary.precision) : 0,
+            raw: evalSummary ? evalSummary.precision.toFixed(2) : '—',
             color: 'var(--accent)',
           },
           {
             key: 'recall',
-            label: 'Rec',
-            full: 'Recall',
+            label: 'Recall',
             val: evalSummary ? clampRatio(evalSummary.recall) : 0,
+            raw: evalSummary ? evalSummary.recall.toFixed(2) : '—',
             color: 'var(--add)',
           },
           {
             key: 'exactMatch',
-            label: 'Exact',
-            full: 'Exact Match',
+            label: 'Exact match',
             val: evalSummary ? clampRatio(evalSummary.exactMatch) : 0,
+            raw: evalSummary ? evalSummary.exactMatch.toFixed(2) : '—',
             color: 'var(--chg)',
           },
         ];
+        const trackTop = 24;
+        const trackH = 66;
+        const barW = 46;
 
         return (
-          <button
-            type="button"
-            className="cw-drill-btn"
-            onClick={() => onNavigate('eval')}
-          >
+          <button type="button" className="cw-drill-btn" onClick={() => onNavigate('eval')}>
             <div className="cw-eval-row">
               <svg
                 className="cw-bars-svg"
-                viewBox="0 0 96 48"
-                width="96"
-                height="48"
+                viewBox="0 0 240 118"
+                width="100%"
+                style={{ aspectRatio: '240 / 118' }}
                 role="img"
                 aria-label={
                   evalSummary
@@ -852,34 +978,36 @@ export function CockpitWidgets({
                     : 'Evaluation metrics not run yet'
                 }
               >
+                <line
+                  x1="0"
+                  x2="240"
+                  y1={trackTop + trackH / 2}
+                  y2={trackTop + trackH / 2}
+                  stroke="var(--line-2)"
+                  strokeWidth="1"
+                  strokeDasharray="2 4"
+                />
                 {bars.map((bar, idx) => {
-                  const x = 10 + idx * 28;
-                  const maxH = 34;
-                  const barH = evalSummary ? Math.max(2, Math.round(bar.val * maxH)) : 0;
-                  const y = 38 - barH;
+                  const cx = 40 + idx * 80;
+                  const x = cx - barW / 2;
+                  const fillH = evalSummary ? Math.max(4, bar.val * trackH) : 0;
                   return (
                     <g key={bar.key}>
-                      <rect
-                        x={x}
-                        y={4}
-                        width="16"
-                        height={maxH}
-                        rx="3"
-                        fill="var(--sunk)"
-                        stroke="var(--line)"
-                        strokeWidth="1"
-                      />
-                      {barH > 0 && (
+                      <text x={cx} y="14" textAnchor="middle" className="cw-bar-val">
+                        {bar.raw}
+                      </text>
+                      <rect x={x} y={trackTop} width={barW} height={trackH} rx="7" fill="var(--sunk)" />
+                      {fillH > 0 && (
                         <rect
                           x={x}
-                          y={y}
-                          width="16"
-                          height={barH}
-                          rx="3"
+                          y={trackTop + trackH - fillH}
+                          width={barW}
+                          height={fillH}
+                          rx="7"
                           fill={bar.color}
                         />
                       )}
-                      <text x={x + 8} y="47" textAnchor="middle" className="cw-bar-lbl">
+                      <text x={cx} y="110" textAnchor="middle" className="cw-bar-lbl">
                         {bar.label}
                       </text>
                     </g>
@@ -887,18 +1015,18 @@ export function CockpitWidgets({
                 })}
               </svg>
 
-              <dl className="cw-kv-list">
+              <dl className="cw-stat-list">
                 <div>
-                  <dt>Precision</dt>
-                  <dd>{evalSummary ? evalSummary.precision.toFixed(2) : '—'}</dd>
+                  <dt>Total</dt>
+                  <dd>{evalSummary ? `${evalSummary.totalCases} cases` : '—'}</dd>
                 </div>
                 <div>
-                  <dt>Recall</dt>
-                  <dd>{evalSummary ? evalSummary.recall.toFixed(2) : '—'}</dd>
+                  <dt>Held-out</dt>
+                  <dd>{evalSummary?.heldOutCases != null ? `${evalSummary.heldOutCases} cases` : '—'}</dd>
                 </div>
                 <div>
-                  <dt>Exact</dt>
-                  <dd>{evalSummary ? evalSummary.exactMatch.toFixed(2) : '—'}</dd>
+                  <dt>Scenario</dt>
+                  <dd>{evalSummary?.scenarioCases != null ? `${evalSummary.scenarioCases} cases` : '—'}</dd>
                 </div>
               </dl>
             </div>
@@ -906,53 +1034,47 @@ export function CockpitWidgets({
         );
       }
 
-      case 'session-activity':
+      case 'session-activity': {
+        const mix: BarSegment[] = [
+          { key: 'clinician', value: auditStats.clinician, color: 'var(--accent)' },
+          { key: 'ai', value: auditStats.ai, color: 'var(--add)' },
+          { key: 'system', value: auditStats.system, color: 'var(--unk)' },
+        ];
         return (
-          <button
-            type="button"
-            className="cw-drill-btn"
-            onClick={() => onNavigate('audit')}
-          >
+          <button type="button" className="cw-drill-btn" onClick={() => onNavigate('audit')}>
             <div className="cw-activity-wrap">
-              <svg
-                className="cw-spark-svg"
-                viewBox="0 0 148 36"
-                width="100%"
-                height="36"
-                role="img"
-                aria-label={`Session activity sparkline: ${auditStats.total} total actions (${auditStats.clinician} clinician, ${auditStats.ai} AI, ${auditStats.system} system)`}
-              >
-                <path d={auditStats.spark.areaPath} fill="var(--accent)" fillOpacity="0.14" />
-                <polyline
-                  points={auditStats.spark.points}
-                  fill="none"
-                  stroke="var(--accent)"
-                  strokeWidth="1.75"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-                <circle
-                  cx={auditStats.spark.lastX}
-                  cy={auditStats.spark.lastY}
-                  r="2.75"
-                  fill="var(--accent)"
-                />
-              </svg>
-
-              <div className="cw-activity-counts">
-                <span>
-                  <b>{auditStats.clinician}</b> clinician
-                </span>
-                <span>
-                  <b>{auditStats.ai}</b> AI
-                </span>
-                <span>
-                  <b>{auditStats.system}</b> system
-                </span>
+              <div className="cw-hero-row">
+                <div className="cw-hero">
+                  <span className="cw-hero-num">{auditStats.total}</span>
+                  <span className="cw-hero-cap">{auditStats.total === 1 ? 'action' : 'actions'}</span>
+                </div>
+                <div className="cw-activity-counts">
+                  <span className="tone-accent">
+                    <span className="cw-dot" aria-hidden="true" />
+                    <b>{auditStats.clinician}</b> clinician
+                  </span>
+                  <span className="tone-add">
+                    <span className="cw-dot" aria-hidden="true" />
+                    <b>{auditStats.ai}</b> AI
+                  </span>
+                  <span className="tone-unk">
+                    <span className="cw-dot" aria-hidden="true" />
+                    <b>{auditStats.system}</b> system
+                  </span>
+                </div>
               </div>
+
+              <ActivitySpark
+                spark={auditStats.spark}
+                idle={auditStats.total === 0}
+                ariaLabel={`Session activity sparkline: ${auditStats.total} total actions (${auditStats.clinician} clinician, ${auditStats.ai} AI, ${auditStats.system} system)`}
+              />
+
+              <StackedBar segments={mix} total={auditStats.total} height={5} />
             </div>
           </button>
         );
+      }
     }
   };
 
@@ -997,30 +1119,36 @@ export function CockpitWidgets({
               onDragEnter={(e) => handleDragOver(id, e)}
               onDrop={(e) => handleDrop(id, e)}
               onDragEnd={handleDragEnd}
-              className={`cw-card${isDragging ? ' is-dragging' : ''}${
+              className={`cw-card cw-w-${WIDGET_SPAN[id]}${isDragging ? ' is-dragging' : ''}${
                 isDropTarget ? ' is-drop-target' : ''
               }`}
             >
               <header className="cw-card-head">
-                <button
-                  type="button"
-                  className="cw-card-title"
-                  onClick={() => {
-                    if (id === 'diff-breakdown' || id === 'review-progress' || id === 'provenance-health') {
-                      onNavigate('diff', 'all');
-                    } else if (id === 'triage-queue') {
-                      onNavigate('triage');
-                    } else if (id === 'model-socket') {
-                      onNavigate('models');
-                    } else if (id === 'eval-metrics') {
-                      onNavigate('eval');
-                    } else {
-                      onNavigate('audit');
-                    }
-                  }}
-                >
-                  {title}
-                </button>
+                <span className="cw-grip" aria-hidden="true" title="Drag to reorder">
+                  <GripIcon />
+                </span>
+                <div className="cw-card-heading">
+                  <button
+                    type="button"
+                    className="cw-card-title"
+                    onClick={() => {
+                      if (id === 'diff-breakdown' || id === 'review-progress' || id === 'provenance-health') {
+                        onNavigate('diff', 'all');
+                      } else if (id === 'triage-queue') {
+                        onNavigate('triage');
+                      } else if (id === 'model-socket') {
+                        onNavigate('models');
+                      } else if (id === 'eval-metrics') {
+                        onNavigate('eval');
+                      } else {
+                        onNavigate('audit');
+                      }
+                    }}
+                  >
+                    {title}
+                  </button>
+                  <span className="cw-card-sub">{WIDGET_SUBTITLES[id]}</span>
+                </div>
                 <div className="cw-reorder" role="group" aria-label={`Reorder ${title}`}>
                   <button
                     ref={(el) => {
@@ -1033,7 +1161,7 @@ export function CockpitWidgets({
                     disabled={index === 0}
                     onClick={() => moveWidget(id, -1)}
                   >
-                    ‹
+                    <ChevronIcon dir="left" />
                   </button>
                   <button
                     ref={(el) => {
@@ -1046,7 +1174,7 @@ export function CockpitWidgets({
                     disabled={index === order.length - 1}
                     onClick={() => moveWidget(id, 1)}
                   >
-                    ›
+                    <ChevronIcon dir="right" />
                   </button>
                 </div>
               </header>
