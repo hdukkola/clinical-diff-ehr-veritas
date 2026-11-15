@@ -1,0 +1,20 @@
+.manualNotes {
+  display: grid;
+  gap: 6px;
+  margin-top: 12px;
+  color: var(--strong);
+}
+
+.manualNotes small { color: var(--muted); }
+
+.manualNotes textarea {
+  width: 100%;
+  min-height: 96px;
+  resize: vertical;
+  padding: 10px;
+  border: 1px solid var(--line-2);
+  border-radius: 8px;
+  background: var(--sunk);
+  color: var(--text);
+  line-height: 1.5;
+}

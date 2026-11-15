@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { JetBrains_Mono, Plus_Jakarta_Sans } from 'next/font/google';
+import { FirstVisitPrivacyNotice } from '@/components/FirstVisitPrivacyNotice';
 import { BRAND_METADATA } from '../lib/branding';
 import './globals.css';
 
@@ -25,7 +26,10 @@ export default function RootLayout({ children }: LayoutProps<'/'>) {
       suppressHydrationWarning
       className={`${plusJakartaSans.variable} ${jetbrainsMono.variable}`}
     >
-      <body className="veritas-body">{children}</body>
+      <body className="veritas-body">
+        {children}
+        <FirstVisitPrivacyNotice />
+      </body>
     </html>
   );
 }
