@@ -1,0 +1,49 @@
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: diffmd-chat-preview
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/maxScale: "1"
+        run.googleapis.com/container-dependencies: '{"web":["qwen"]}'
+    spec:
+      serviceAccountName: diffmd-inference@clinical-diff-veritas-2026.iam.gserviceaccount.com
+      containerConcurrency: 8
+      timeoutSeconds: 30
+      containers:
+        - name: web
+          image: WEB_IMAGE
+          ports:
+            - containerPort: 8080
+          env:
+            - name: CLINICAL_DIFF_CLOUD_CHAT_MODEL
+              value: /models/model.gguf
+            - name: CLINICAL_DIFF_CHAT_PROXY_ORIGIN
+              value: http://127.0.0.1:3105
+          resources:
+            limits:
+              cpu: "1"
+              memory: 768Mi
+        - name: qwen
+          image: us-central1-docker.pkg.dev/clinical-diff-veritas-2026/cloud-run-source-deploy/diffmd-encounter@sha256:f8a1a7a7f561fbb5bec40bccad684529f20c09af96a6f7481ca48cb15da89e39
+          env:
+            - name: PORT
+              value: "8081"
+            - name: INFERENCE_THREADS
+              value: "4"
+          resources:
+            limits:
+              cpu: "4"
+              memory: 6Gi
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 8081
+            failureThreshold: 24
+            periodSeconds: 5
+            timeoutSeconds: 3
+  traffic:
+    - latestRevision: true
+      percent: 100

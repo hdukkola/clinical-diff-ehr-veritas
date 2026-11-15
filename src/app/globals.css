@@ -4525,6 +4525,32 @@ pre.code .c {
   color: var(--strong);
 }
 .patient-chat-answer { margin-top: 8px; }
+.patient-chat-reply-typing > span {
+  animation: patient-chat-reveal 90ms var(--reply-word-delay) ease-out both;
+}
+.patient-chat-thinking {
+  width: fit-content;
+  color: var(--muted);
+  animation: patient-chat-reveal 120ms 140ms ease-out both;
+}
+@supports (background-clip: text) {
+  .patient-chat-thinking {
+    background: linear-gradient(100deg, var(--muted) 38%, var(--strong) 50%, var(--muted) 62%) 110% 50% / 260% 100%;
+    background-clip: text;
+    color: transparent;
+    animation: patient-chat-reveal 120ms 140ms ease-out both, patient-chat-shimmer 1.6s 140ms linear infinite;
+  }
+}
+@keyframes patient-chat-reveal { from { opacity: 0; } to { opacity: 1; } }
+@keyframes patient-chat-shimmer { to { background-position: -10% 50%; } }
+@media (prefers-reduced-motion: reduce), (forced-colors: active) {
+  .patient-chat-reply-typing > span { animation: none; }
+  .patient-chat-thinking {
+    background: none;
+    color: var(--muted);
+    animation: patient-chat-reveal 1ms 140ms steps(1, end) both;
+  }
+}
 .patient-chat-answer ul { display: grid; gap: 8px; padding-top: 8px; list-style: none; }
 .patient-chat-answer li { padding-left: 10px; border-left: 2px solid var(--line-2); }
 .patient-chat-answer small { display: block; color: var(--muted); }

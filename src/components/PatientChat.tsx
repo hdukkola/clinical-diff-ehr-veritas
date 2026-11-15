@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, type Dispatch, type FormEvent, type Ref, type SetStateAction } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type Dispatch, type FormEvent, type Ref, type SetStateAction } from 'react';
 import type { SyntheticScenario } from '@/lib/fixtures';
 import {
   applyChartCorrections,
@@ -17,8 +17,18 @@ export type ChatThreads = Record<string, ChatTurn[]>;
 type WidgetPage = { id: string; label: string };
 type WidgetChange = { pageId: string; before: string; value: string };
 type Proposal = { kind: 'chart'; change: ChartCorrection } | { kind: 'widget'; change: WidgetChange };
+const cloudChat = process.env.NEXT_PUBLIC_CLINICAL_DIFF_CLOUD_CHAT === '1';
 const fields: CorrectableField[] = ['dose', 'route', 'frequency'];
 const shortName = (chart: SyntheticScenario) => chart.patientLabel.replace(/\s*\(Synthetic.*\)$/, '');
+
+function ReplyText({ text, animate }: { text: string; animate: boolean }) {
+  if (!animate) return <p>{text}</p>;
+  const words = text.match(/\S+\s*|\s+/g) ?? [];
+  const step = Math.min(24, 400 / Math.max(1, words.length - 1));
+  return <p className="patient-chat-reply-typing">{words.map((word, index) => (
+    <span key={index} style={{ '--reply-word-delay': `${index * step}ms` } as CSSProperties}>{word}</span>
+  ))}</p>;
+}
 
 export function PatientChat({
   charts, chart, onChartChange, aspect, onAspectChange, corrections, widgetPages, widgetNotes,
@@ -45,21 +55,24 @@ export function PatientChat({
   const [draft, setDraft] = useState<ChartReply['draft']>();
   const [proposalVersion, setProposalVersion] = useState(0);
   const [status, setStatus] = useState('');
-  const [checking, setChecking] = useState(false);
+  const [pendingQuestion, setPendingQuestion] = useState('');
+  const [animatedTurn, setAnimatedTurn] = useState<ChatTurn>();
   const pending = useRef<AbortController | null>(null);
   const logRef = useRef<HTMLDivElement>(null);
   const threadKey = `${chart.id}:${aspect}`;
   const turns = threads[threadKey] ?? [];
+  const checking = Boolean(pendingQuestion);
 
   useEffect(() => () => pending.current?.abort(), []);
   useEffect(() => {
-    if (logRef.current && turns.length) logRef.current.scrollTop = logRef.current.scrollHeight;
-  }, [threadKey, turns.length]);
+    if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight;
+  }, [threadKey, animatedTurn, checking]);
 
   function switchContext() {
     pending.current?.abort();
     pending.current = null;
-    setChecking(false);
+    setPendingQuestion('');
+    setAnimatedTurn(undefined);
     setQuestion('');
     setEdit(null);
     setMedicationHint('');
@@ -81,10 +94,10 @@ export function PatientChat({
     if (!text || checking || pending.current) return;
     let answer = chartReply(chart, aspect, text, corrections, turns.at(-1)?.answer.medication);
     setQuestion('');
-    if (answer.clarify && ['localhost', '127.0.0.1'].includes(window.location.hostname)) {
+    if (answer.clarify && (cloudChat || ['localhost', '127.0.0.1'].includes(window.location.hostname))) {
       const controller = new AbortController();
       pending.current = controller;
-      setChecking(true);
+      setPendingQuestion(text);
       try {
         const response = await fetch('/api/patient-chat', {
           method: 'POST',
@@ -101,16 +114,18 @@ export function PatientChat({
           if (prompt) answer = { modelAssisted: true, text: `${prompt} ${answer.text}` };
         }
       } catch {
-        // The chart assistant can still ask for clarification if the local model is down.
+        // The chart assistant can still ask for clarification if the model is unavailable.
       } finally {
         if (pending.current === controller) {
           pending.current = null;
-          setChecking(false);
+          setPendingQuestion('');
         }
       }
       if (controller.signal.aborted) return;
     }
-    setThreads((current) => ({ ...current, [threadKey]: [...(current[threadKey] ?? []).slice(-19), { question: text, answer }] }));
+    const turn = { question: text, answer };
+    setAnimatedTurn(turn);
+    setThreads((current) => ({ ...current, [threadKey]: [...(current[threadKey] ?? []).slice(-19), turn] }));
     if (answer.edit) openProposal(answer.edit, answer);
   }
 
@@ -128,6 +143,7 @@ export function PatientChat({
       <header>
         <h1 className="h1" ref={headingRef} id="patient-chat-title" tabIndex={-1}>AI chat</h1>
         <p>Demo chart assistant · Fictional records only</p>
+        {cloudChat && <p>Cloud Qwen may process your question to help ask a follow-up. Do not enter real patient information.</p>}
       </header>
       <div className="patient-chat-context">
         <label>Patient
@@ -155,29 +171,36 @@ export function PatientChat({
       <p className="patient-chat-scope"><strong>{shortName(chart)} · {chart.patientId}</strong> · {chart.title}</p>
 
       <div className="patient-chat-log" ref={logRef} role="log" aria-label={`Conversation for ${shortName(chart)}`}>
-        {turns.length === 0 && <p>Ask what the record documents. For a medication decision, confirm the details with the treating clinician or pharmacist.</p>}
-        {turns.map(({ question, answer }, index) => (
-          <div className="patient-chat-turn" key={index}>
-            <p className="patient-chat-question">{question}</p>
-            <div className="patient-chat-answer">
-              <p>{answer.text}</p>
-              {answer.modelAssisted && <small>Local Qwen assisted with this follow-up.</small>}
-              {!!answer.evidence?.length && (
-                <ul aria-label="Chart sources">
-                  {answer.evidence.map(({ source, date, medication, corrections }, i) => (
-                    <li key={i}>
-                      <strong>{medication.name}</strong> · {medication.dose ?? 'Dose undocumented'} · {medication.route ?? 'Route undocumented'} · {medication.frequency ?? 'Frequency undocumented'}
-                      <small>{source} · {date ?? 'Undated'}</small>
-                      {corrections.map((item, j) => (
-                        <small key={j}>Reviewed {item.field} correction from {item.before || 'undocumented'} to {item.value} · Source: {item.source}</small>
-                      ))}
-                    </li>
-                  ))}
-                </ul>
-              )}
+        {turns.length === 0 && !checking && <p>Ask what the record documents. For a medication decision, confirm the details with the treating clinician or pharmacist.</p>}
+        {turns.map((turn, index) => {
+          const { answer } = turn;
+          return (
+            <div className="patient-chat-turn" key={index}>
+              <p className="patient-chat-question">{turn.question}</p>
+              <div className="patient-chat-answer">
+                <ReplyText text={answer.text} animate={turn === animatedTurn} />
+                {answer.modelAssisted && <small>{cloudChat ? 'Cloud Qwen' : 'Local Qwen'} assisted with this follow-up.</small>}
+                {!!answer.evidence?.length && (
+                  <ul aria-label="Chart sources">
+                    {answer.evidence.map(({ source, date, medication, corrections }, i) => (
+                      <li key={i}>
+                        <strong>{medication.name}</strong> · {medication.dose ?? 'Dose undocumented'} · {medication.route ?? 'Route undocumented'} · {medication.frequency ?? 'Frequency undocumented'}
+                        <small>{source} · {date ?? 'Undated'}</small>
+                        {corrections.map((item, j) => (
+                          <small key={j}>Reviewed {item.field} correction from {item.before || 'undocumented'} to {item.value} · Source: {item.source}</small>
+                        ))}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
+        {checking && <div className="patient-chat-turn" aria-hidden="true">
+          <p className="patient-chat-question">{pendingQuestion}</p>
+          <p className="patient-chat-answer patient-chat-thinking">Checking for a follow-up…</p>
+        </div>}
       </div>
 
       <form className="patient-chat-compose" onSubmit={(event) => { event.preventDefault(); ask(question); }}>
@@ -194,7 +217,7 @@ export function PatientChat({
         <button className="btn" type="button" onClick={() => openProposal('chart')}>Propose chart correction</button>
         <button className="btn" type="button" onClick={() => openProposal('widget')}>Propose widget edit</button>
       </div>
-      <p role="status" className="patient-chat-status">{status}</p>
+      <p role="status" className="patient-chat-status">{checking ? <span className="sr-only">Checking for a follow-up.</span> : status}</p>
 
       {edit && <EditProposal key={`${threadKey}:${proposalVersion}`} kind={edit}
         chart={chart} aspect={aspect} corrections={corrections} medicationHint={medicationHint}

@@ -35,7 +35,9 @@ export default function PrivacyPage() {
           the requested URL and time. DiffMD uses its demo review service to load and save review activity.
         </p>
         <p>
-          On the hosted demo, chat questions, reviewed chart corrections and page notes stay in this browser tab and clear on reload. An optional local development model can process questions on the same computer.
+          Chat history, reviewed chart corrections and page notes are kept in the browser tab and clear on reload.
+          A configured development or private cloud preview can send an unclear question to Qwen to help ask
+          a follow-up. That request contains the question you typed. Do not enter real patient information.
         </p>
         <p>
           When hosted AI is available and you request a comparison, the text you submit can be sent to the

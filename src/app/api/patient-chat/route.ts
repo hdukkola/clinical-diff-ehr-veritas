@@ -4,9 +4,14 @@ let requesting = false;
 export async function POST(request: Request) {
   const headers = { 'Cache-Control': 'no-store' };
   const host = request.headers.get('host') ?? '';
-  const enabled = process.env.CLINICAL_DIFF_LOCAL_CHAT_MODEL?.trim();
-  if (!enabled || process.env.K_SERVICE || !/^(?:localhost|127\.0\.0\.1)(?::\d{1,5})?$/.test(host) ||
-      request.headers.get('origin') !== `http://${host}`) {
+  const origin = request.headers.get('origin');
+  const isPreview = process.env.K_SERVICE === 'diffmd-chat-preview';
+  const localHost = /^(?:localhost|127\.0\.0\.1)(?::\d{1,5})?$/.test(host);
+  const enabled = (isPreview ? process.env.CLINICAL_DIFF_CLOUD_CHAT_MODEL : process.env.CLINICAL_DIFF_LOCAL_CHAT_MODEL)?.trim();
+  const allowed = isPreview
+    ? origin === `https://${host}` || origin === process.env.CLINICAL_DIFF_CHAT_PROXY_ORIGIN
+    : !process.env.K_SERVICE && localHost && origin === `http://${host}`;
+  if (!enabled || !allowed) {
     return Response.json({}, { status: 404, headers });
   }
 
