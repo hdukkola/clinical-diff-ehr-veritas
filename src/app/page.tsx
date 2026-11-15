@@ -29,11 +29,15 @@ import {
 } from '@/lib/diff';
 import {
   createBrowserPatient,
+  getNoteReviewVersion,
   readBrowserNote,
+  readBrowserNoteReviews,
   readBrowserPatients,
   saveBrowserNote,
+  saveBrowserNoteReview,
   subscribeToPatients,
   type BrowserPatient,
+  type NoteReviewDecision,
 } from '@/lib/browser-patients';
 import { BRAND_NAME } from '@/lib/branding';
 import { WorkspaceWidgets, type WorkspaceWidget } from '@/components/WorkspaceWidgets';
@@ -75,7 +79,6 @@ type ViewId = 'home' | 'patient' | 'extract' | 'diff' | 'triage' | 'audit' | 'ch
 type PaletteId = 'void' | 'dimmed' | 'obsidian' | 'forest';
 type DiffFilter = 'all' | 'changed' | 'onlyA' | 'onlyB' | 'same';
 type ReviewDecision = 'verified' | 'flagged' | 'deferred';
-type NoteReviewDecision = 'clarify' | 'reviewed';
 type DiffTab = 'diff' | 'worklist' | 'timeline' | 'documents' | 'snapshots' | 'method';
 type ModelsTab = 'connections' | 'add' | 'contracts';
 
@@ -853,6 +856,7 @@ function toPatientScenario({ id, name }: BrowserPatient): SyntheticScenario {
 const EMPTY_WORKSPACE = toPatientScenario({ id: '', name: '' });
 const noBrowserPatients = () => '[]';
 const emptyBrowserNote = () => '';
+const emptyBrowserReviews = () => '[]';
 
 export default function Home() {
   const exampleWorkspace = process.env.NEXT_PUBLIC_CLINICAL_DIFF_EXAMPLE_WORKSPACE === '1';
@@ -903,18 +907,23 @@ export default function Home() {
   const [extractStatusState, setExtractStatusState] = useState<'replay' | 'live' | 'error'>('replay');
   const [hostedCompareBusy, setHostedCompareBusy] = useState(false);
   const hostedComparePending = useRef(false);
+  const noteCompareRun = useRef(0);
   const [socketStatus, setSocketStatus] = useState<SocketStatus>(INITIAL_SOCKET_STATUS);
   const [completedComparison, setCompletedComparison] = useState<{
+    patientId: string;
+    reviewVersion: string | null;
     result: NoteComparisonResult;
     earlier: string;
     later: string;
   } | null>(null);
-  const [noteReviewDecisions, setNoteReviewDecisions] = useState<Record<string, NoteReviewDecision>>({});
+  const [sessionNoteReviews, setNoteReviewDecisions] = useState<Record<string, NoteReviewDecision>>({});
+  const [noteReviewError, setNoteReviewError] = useState('');
   const [comparisonDrafts, setComparisonDrafts] = useState(() => new Map<string, {
     earlier: string;
     later: string;
     result: NoteComparisonResult | null;
     decisions: Record<string, NoteReviewDecision>;
+    reviewVersion: string | null;
   }>());
 
   /* ---- Snapshot review state ---- */
@@ -979,11 +988,23 @@ export default function Home() {
   const unsavedPatientNotes = unsavedNotes[activeScenario.id];
   const earlierNoteText = isDemoPatient ? exampleEarlierNote : unsavedPatientNotes?.earlier ?? savedEarlierNote;
   const laterNoteText = isDemoPatient ? exampleLaterNote : unsavedPatientNotes?.later ?? savedLaterNote;
-  const extractResult = completedComparison?.earlier === earlierNoteText && completedComparison.later === laterNoteText
-    ? completedComparison.result : null;
-  const setExtractResult = useCallback((result: NoteComparisonResult | null) => {
-    setCompletedComparison(result ? { result, earlier: earlierNoteText, later: laterNoteText } : null);
-  }, [earlierNoteText, laterNoteText]);
+  const comparison = completedComparison?.patientId === activeScenario.id &&
+    completedComparison.earlier === earlierNoteText && completedComparison.later === laterNoteText
+    ? completedComparison : null;
+  const extractResult = comparison?.result ?? null;
+  const reviewVersion = comparison?.reviewVersion ?? null;
+  const getSavedNoteReviews = useCallback(() => reviewVersion && extractResult
+    ? readBrowserNoteReviews(activeScenario.id, reviewVersion, extractResult.differences.map((row) => row.key))
+    : '[]', [activeScenario.id, extractResult, reviewVersion]);
+  const savedNoteReviews = useSyncExternalStore(subscribeToPatients, getSavedNoteReviews, emptyBrowserReviews);
+  const noteReviewDecisions = useMemo<Record<string, NoteReviewDecision>>(() => isDemoPatient
+    ? sessionNoteReviews : Object.fromEntries(JSON.parse(savedNoteReviews)), [isDemoPatient, savedNoteReviews, sessionNoteReviews]);
+  const setExtractResult = useCallback((result: NoteComparisonResult | null, version: string | null = null) => {
+    setNoteReviewError('');
+    setCompletedComparison(result ? {
+      patientId: activeScenario.id, result, reviewVersion: version, earlier: earlierNoteText, later: laterNoteText,
+    } : null);
+  }, [activeScenario.id, earlierNoteText, laterNoteText]);
   const earlierNoteLabel = 'Earlier note';
   const laterNoteLabel = isDemoPatient ? 'Discharge note' : 'Later note';
 
@@ -1412,7 +1433,8 @@ export default function Home() {
           earlier: earlierNoteText,
           later: laterNoteText,
           result: extractResult,
-          decisions: noteReviewDecisions,
+          decisions: sessionNoteReviews,
+          reviewVersion,
         };
         setComparisonDrafts((current) => new Map(current).set(selectedScenarioId, draft));
         const next = comparisonDrafts.get(targetScenario.id);
@@ -1421,8 +1443,12 @@ export default function Home() {
           setEarlierNoteText(next?.earlier ?? DEFAULT_EARLIER_NOTE);
           setLaterNoteText(next?.later ?? DEFAULT_LATER_NOTE);
         }
-        setCompletedComparison(next?.result ? { earlier: next.earlier, later: next.later, result: next.result } : null);
+        setCompletedComparison(next?.result ? {
+          patientId: targetScenario.id, earlier: next.earlier, later: next.later,
+          result: next.result, reviewVersion: next.reviewVersion,
+        } : null);
         setNoteReviewDecisions(next?.decisions ?? {});
+        setNoteReviewError('');
         setExtractError('');
         setChartSearchQuery('');
         setActiveCitationByMed({});
@@ -1441,7 +1467,7 @@ export default function Home() {
       setAnnouncement(`Selected ${cleanPatientName(targetScenario.patientLabel)}`);
       setFocusHeadingNonce((n) => n + 1);
     },
-    [comparisonDrafts, earlierNoteText, extractResult, hostedCompareBusy, laterNoteText, noteReviewDecisions, selectedScenarioId],
+    [comparisonDrafts, earlierNoteText, extractResult, hostedCompareBusy, laterNoteText, reviewVersion, selectedScenarioId, sessionNoteReviews],
   );
 
   const selectPatient = useCallback((scenarioId: string) => {
@@ -1591,6 +1617,7 @@ export default function Home() {
   }, [activeScenario.id, isDemoPatient]);
 
   const handleClearNotes = useCallback(() => {
+    noteCompareRun.current++;
     updateNote('earlier', '');
     updateNote('later', '');
     setExtractError('');
@@ -1709,6 +1736,7 @@ export default function Home() {
     async (e: FormEvent) => {
       e.preventDefault();
       if (hostedComparePending.current) return;
+      const run = ++noteCompareRun.current;
       setExtractError('');
       const earlierLen = Array.from(earlierNoteText).length;
       const laterLen = Array.from(laterNoteText).length;
@@ -1909,8 +1937,10 @@ export default function Home() {
         differences: enrichedDifferences,
       };
 
+      const version = isDemoPatient ? null : await getNoteReviewVersion(earlierNoteText, laterNoteText);
+      if (run !== noteCompareRun.current) return;
       focusExtractResult.current = true;
-      setExtractResult(res);
+      setExtractResult(res, version);
       setNoteReviewDecisions({});
       setExtractStatusText(res.modeLabel);
       setExtractStatusState(hostedResult ? 'live' : 'replay');
@@ -1940,12 +1970,18 @@ export default function Home() {
     (diff: MentionDifference, choice: NoteReviewDecision) => {
       const prev = noteReviewDecisions[diff.key];
       const next: NoteReviewDecision | null = prev === choice ? null : choice;
-      setNoteReviewDecisions((curr) => {
-        const copy = { ...curr };
-        if (next) copy[diff.key] = next;
-        else delete copy[diff.key];
-        return copy;
-      });
+      if (isDemoPatient) {
+        setNoteReviewDecisions((curr) => {
+          const copy = { ...curr };
+          if (next) copy[diff.key] = next;
+          else delete copy[diff.key];
+          return copy;
+        });
+      } else if (!reviewVersion || !saveBrowserNoteReview(activeScenario.id, reviewVersion, diff.key, next)) {
+        setNoteReviewError('Could not save this decision. Check that browser storage is available and try again.');
+        return;
+      }
+      setNoteReviewError('');
       const actions: Record<'clarify' | 'reviewed' | 'cleared', string> = {
         clarify: 'Flagged mention for clarification',
         reviewed: 'Reviewed mention',
@@ -1964,7 +2000,7 @@ export default function Home() {
             : `Cleared review for ${diff.name}`,
       );
     },
-    [addAudit, noteReviewDecisions],
+    [activeScenario.id, addAudit, isDemoPatient, noteReviewDecisions, reviewVersion],
   );
 
   const handleExportFollowUps = useCallback(() => {
@@ -3246,6 +3282,7 @@ export default function Home() {
                             Download follow-ups
                           </button>
                         </div>
+                        {noteReviewError && <p role="alert">{noteReviewError}</p>}
                         <ul className="extract-rows">
                           {extractResult.differences.map((entry) => {
                             const dec = noteReviewDecisions[entry.key] ?? null;

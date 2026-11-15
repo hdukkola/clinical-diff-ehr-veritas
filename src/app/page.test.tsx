@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { webcrypto } from 'node:crypto';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import Home from '@/app/page';
@@ -46,11 +47,12 @@ describe('Clinical Diff Veritas Editorial UI', () => {
 
   it('starts the public workspace empty and compares only notes the reviewer enters', async () => {
     vi.stubEnv('NEXT_PUBLIC_CLINICAL_DIFF_EXAMPLE_WORKSPACE', '0');
+    const digest = vi.spyOn(globalThis.crypto, 'subtle', 'get').mockReturnValue(webcrypto.subtle as SubtleCrypto);
     localStorage.setItem('diffmd-patient-v1:LOCAL-AAAAAAAAAAAA', 'Old example');
     const user = userEvent.setup();
     const network = vi.spyOn(globalThis, 'fetch').mockResolvedValue(Response.json({}));
     try {
-      render(<Home />);
+      const workspace = render(<Home />);
 
       expect(within(getPatientsGroup()).queryAllByRole('button')).toHaveLength(0);
       expect(screen.queryByText(/Morgan Lee|Old example|October 15|Read encounter/i)).not.toBeInTheDocument();
@@ -76,8 +78,30 @@ describe('Clinical Diff Veritas Editorial UI', () => {
       expect(result).toHaveTextContent('Lisinopril 20 mg daily');
       await user.click(within(result).getByRole('button', { name: 'Flag for clarification' }));
       expect(result).toHaveTextContent('1 flagged for clarification');
+
+      workspace.unmount();
+      render(<Home />);
+      await user.click(within(getPatientsGroup()).getByRole('button', { name: /^Case QA-001/ }));
+      await openCompare(user);
+      const reopened = within(screen.getByRole('main'));
+      await user.click(reopened.getByRole('button', { name: 'Compare notes' }));
+      const restored = await reopened.findByRole('region', { name: 'Mention differences' });
+      expect(within(restored).getByRole('button', { name: 'Flag for clarification' })).toHaveAttribute('aria-pressed', 'true');
+
+      const save = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('Storage blocked'); });
+      try {
+        await user.click(within(restored).getByRole('button', { name: 'Mark reviewed' }));
+        expect(reopened.getByRole('alert')).toHaveTextContent('Could not save this decision');
+        expect(within(restored).getByRole('button', { name: 'Flag for clarification' })).toHaveAttribute('aria-pressed', 'true');
+      } finally {
+        save.mockRestore();
+      }
+      fireEvent.change(reopened.getByRole('textbox', { name: 'Later note' }), { target: { value: 'Lisinopril 30 mg daily' } });
+      await user.click(reopened.getByRole('button', { name: 'Compare notes' }));
+      expect(await reopened.findByRole('region', { name: 'Mention differences' })).toHaveTextContent('0 flagged for clarification');
       expect(network.mock.calls.map(([input]) => String(input))).not.toContain('/api/reviews');
     } finally {
+      digest.mockRestore();
       network.mockRestore();
     }
   });

@@ -3,6 +3,7 @@ const changeEvent = 'diffmd-patients-change';
 const patientIdPattern = /^LOCAL-[A-F0-9]{12}$/;
 
 export type BrowserPatient = { id: string; name: string };
+export type NoteReviewDecision = 'clarify' | 'reviewed';
 
 export function subscribeToPatients(onChange: () => void) {
   function onStorage(event: StorageEvent) {
@@ -60,6 +61,42 @@ export function saveBrowserNote(id: string, side: 'earlier' | 'later', value: st
     const key = `${prefix}${id}:${side}`;
     if (value) window.localStorage.setItem(key, value);
     else window.localStorage.removeItem(key);
+    window.dispatchEvent(new Event(changeEvent));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function getNoteReviewVersion(earlier: string, later: string): Promise<string | null> {
+  try {
+    const bytes = new TextEncoder().encode(JSON.stringify(['medication-comparison-v1', earlier, later]));
+    const digest = await crypto.subtle.digest('SHA-256', bytes);
+    return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
+  } catch {
+    return null;
+  }
+}
+
+export function readBrowserNoteReviews(id: string, version: string, keys: string[]): string {
+  try {
+    const decisions: Array<[string, NoteReviewDecision]> = [];
+    for (const key of keys) {
+      const saved = window.localStorage.getItem(`${prefix}${id}:review:${key}`);
+      if (saved === `${version}:clarify`) decisions.push([key, 'clarify']);
+      if (saved === `${version}:reviewed`) decisions.push([key, 'reviewed']);
+    }
+    return JSON.stringify(decisions);
+  } catch {
+    return '[]';
+  }
+}
+
+export function saveBrowserNoteReview(id: string, version: string, key: string, choice: NoteReviewDecision | null): boolean {
+  try {
+    const storageKey = `${prefix}${id}:review:${key}`;
+    if (choice) window.localStorage.setItem(storageKey, `${version}:${choice}`);
+    else window.localStorage.removeItem(storageKey);
     window.dispatchEvent(new Event(changeEvent));
     return true;
   } catch {
