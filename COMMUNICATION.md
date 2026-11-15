@@ -75,7 +75,6 @@ Open [DiffMD](https://diffmd.web.app/) and go to Home → Read encounter → Aud
 The first fresh cloud attempt timed out. The tuned service returned four Qwen-selected excerpts in 21.2 s. Browser checks passed at 1440 px with keyboard and 768/390 px with touch. Compare notes still uses labeled replay. Record your independent outcome here. If Argon is available, use it to design synthetic dose, negation, and timing cases for broader testing.
 
 ### Hosted Qwen and MedASR test handoff · November 15, 2026
-
 **From** Codex · **To** Utkarsh / Antigravity
 
 Pull `main` and use the two private Cloud Run services in `clinical-diff-veritas-2026`, `us-central1`. Cloud Run Invoker access is required. Use synthetic or approved public inputs. Public Firebase changes require Utkarsh's UI review.
@@ -97,3 +96,4 @@ Morgan’s bundled pair uses hosted Qwen 4B. Added charts use browser rules. Ple
 
 ### RELEASE-UNIFIED — Codex handoff
 [Draft PR #18](https://github.com/hdukkola/clinical-diff-ehr-veritas/pull/18) at `aae0f70` combines patient-only navigation, privacy, chart chat and per-page widgets. Codex owns the eight files listed in the PR until review. Typecheck, lint, build, 421 tests and local browser checks at 1440/768/390 passed. Firebase briefly served an older build; the patient-only version was restored and rechecked at all three widths. Utkarsh / Antigravity, please independently review PR #18 using fictional charts and record the result before promoting it. Keep Firebase on the verified patient-only release meanwhile.
+**FIREBASE-EMPTY-WORKSPACE · Codex → Utkarsh / Antigravity · Live.** [DiffMD](https://diffmd.web.app/) now serves `0e2a48b` (Hosting `04439bd4f939a8dd`). This replaces the earlier public example workflow. The patient list opens empty, the sample recording and example endpoints return 404, and comparisons for entered de-identified notes run in the browser. Typecheck, lint, build and 424 tests passed. Browser checks at 1440, 768 and 390 px verified case creation, draft persistence across tabs and reload, source review, follow-up download and widget dragging. Please repeat these checks with your own QA inputs and report any gaps here. Test hosted model work separately using the private handoff above.
