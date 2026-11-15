@@ -383,3 +383,51 @@ Himnish wants Sonnet focused on visual and interaction design. Please use the ac
 **Reusable widget box/template to design (deliver a visible mockup and a spec).** Use the existing 12-column grid/contracts where applicable; propose compact (3 columns), standard (6), wide (9) and full-width (12) variants, plus an appropriate tall variant and responsive stacking on smaller screens. Each is the same reusable shell with slots: header/title and optional icon; concise context/status and optional menu; body for metric, chart, list, timeline or evidence; and footer for source/freshness plus a clear action or link. Define minimum dimensions, content overflow, loading, empty, unavailable, error, stale, partial and permission-restricted states. Include realistic examples of the same shell containing at least one metric, one evidence/list view, and one chart. Show keyboard focus, screen-reader labels, non-color-only status, text alternatives for charts, and mobile behavior. If resize/reorder/customization is only a concept, label it as such; do not simulate persistence or working actions.
 
 **Handoff.** Provide a page-to-widget matrix, prioritized first-release designs and future backlog, annotated desktop and mobile preview, the reusable widget-shell specification, component/prop or TypeScript interface sketches that align with existing contracts, synthetic example data, interaction/state descriptions, and a concise engineering handoff listing data sources, calculations, dependencies and acceptance criteria. Mark current vs proposed vs mocked clearly. Build no backend, EHR integration, clinical decisions, predictions or data writes in this design task. Keep real patient data and credentials out of examples. Maintain human review of all clinical interpretations and do not imply clinical validation. Utkarsh must review and approve appearance and behavior in a preview before deployment, per the existing project direction. Report branch/commit, screenshots or preview instructions, checks and open questions here; request review rather than declaring completion or deployment.
+
+### DESIGN-SONNET-002 — reusable widget template and prompt
+
+**From:** Himnish via Codex | **To:** Utkarsh / Antigravity, for Sonnet if available | **Date:** 2026-11-15 | **Status:** design template and prompt for use; no application implementation claimed
+
+Use this common box as the visual starting point for the page-specific designs requested in `DESIGN-SONNET-001`. Adapt it to the current design system and existing widget contracts after inspecting the active branch; dimensions below are design proposals, not claims about implemented components.
+
+```text
+┌──────────────────────────────────────────────────────┐
+│ [optional icon] Widget title          [status] [ ··· ]│
+│ One line of patient / encounter / time context        │
+│ ──────────────────────────────────────────────────── │
+│                                                      │
+│  CONTENT SLOT                                        │
+│  Metric, chart, list, timeline, evidence or control  │
+│                                                      │
+│ ──────────────────────────────────────────────────── │
+│ Source · last updated / data scope    [Primary action]│
+└──────────────────────────────────────────────────────┘
+```
+
+**Anatomy.** The outer shell has consistent padding, border, background, corner radius and visible keyboard focus. The header identifies the widget and may include a descriptive status and menu. Context identifies the selected patient/encounter or appropriate population and period. The body is a replaceable content slot. The footer shows source and freshness when meaningful and offers an action only if it has a defined destination or behavior. A widget can omit optional elements when they add clutter. Patient identity must remain unambiguous at the page level; show context inside a widget when needed to avoid ambiguity.
+
+**Proposed sizing.** On an existing 12-column grid: compact = 3 columns for one metric or shortcut; standard = 6 for a short list or small chart; wide = 9 for a comparison or timeline; full = 12 for a substantial chart or evidence table. Offer a taller variant for dense content. Define concrete minimum widths/heights and spacing in the design; at tablet and phone widths stack or reflow without clipped content or horizontal page overflow. Sizes describe the shell, not a promise that resizing or persistence already works.
+
+**Reusable design prompt — copy once per widget:**
+
+```text
+Design a widget for Clinical Diff using the DESIGN-SONNET-002 shell.
+
+Widget name: [name]
+Page and placement: [specific page; or patient home for a concise cross-page summary]
+Primary user and task: [who uses it and what decision or action it supports]
+Patient / encounter / population scope and time period: [scope]
+Size: [compact 3 / standard 6 / wide 9 / full 12; optional tall]
+Content: [metric, list, evidence, chart, timeline, or other; give realistic fictional example]
+Data needed and source/freshness: [fields, provenance, update time; mark unavailable inputs]
+Primary action and destination: [action and where it leads; otherwise none]
+States: [normal, loading, empty, unavailable/error, stale, partial, and restricted as applicable]
+Safety and uncertainty: [unknowns, conflicts, missing data, human review, relevant limits]
+Connection to existing work: [existing contract/widget or new proposal; verify first]
+
+Deliver an annotated desktop and mobile design, a filled shell mockup, accessibility and keyboard behavior, chart labels and a text alternative if relevant, and an engineering handoff with required props/data, calculation definitions, interactions and acceptance criteria. Explicitly label fictional data and mock or future functionality. Do not present simulated behavior as integrated, issue clinical advice, or invent data. Keep the widget specific to this page's workflow; a home summary should link to detail rather than reproduce another page. If a requested data source is unavailable, show the unavailable state and list the dependency.
+```
+
+**Worked example for Sonnet.** Name: “Medication changes to review”; page: selected patient's home; user/task: reviewer quickly sees unresolved documented differences and opens the comparison; size: standard; body: fictional count plus up to three source-backed review items and an explicit unknown/missing-evidence indicator; footer: source and last updated, with “Open medication review” linking to the comparison page. Loading, no items, unavailable source and stale data are distinct. The count must have a documented definition and must not be described as confirmed medication errors. In a static mock, label the count fictional and the link as a prototype if it is not wired.
+
+**Deliverable boundary.** Sonnet may create a reviewable static React/TypeScript design prototype and shell sketches. Codex or another implementation model will later connect real app state, data and actions. Respect existing ownership and the required Utkarsh preview review before deployment; report the actual model route, branch, preview and limitations.
