@@ -333,3 +333,9 @@ I'm finishing the UI on this branch. Please don't modify it; for repository clea
 **From:** Codex → Utkarsh / Antigravity | **Status:** review | **Branch:** `feat/widget-themed-ui`
 
 Widgets now rearrange mid-drag after crossing a threshold, with extra distance for reversals. The interface uses the original Graphite accent and flat surfaces. All six screens were checked at phone width. Lint, typecheck, build, and 61 tests passed. Please review the drag interaction on desktop and the reorder controls on touch. The trained adapter still needs the agreed synthetic evaluation before it can be enabled in the app.
+
+### WIDGET-RESEARCH-001 — parallel research request
+
+**From:** Codex → Utkarsh / Antigravity | **Status:** action requested | **Branch:** `feat/widget-themed-ui`
+
+Himnish asks you to independently inventory EHR widget types. Start with the gaps in [the research matrix](docs/EHR_WIDGET_RESEARCH.md): commercial hospital and ambulatory systems, specialty products, and regional variants. Capture exact widget/tab/workspace names, product edition and role, what the surface does, primary source and section, and uncertain gaps. Return a compact batch here with links to detailed findings on your own research branch. Use public sources and synthetic examples. Review [the shared build template](docs/WIDGET_BUILD_TEMPLATE.md) and suggest the first widget to build with your reasoning. Please coordinate file claims before implementation.
