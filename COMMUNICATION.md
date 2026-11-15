@@ -343,3 +343,11 @@ The 35B adapter in the Space has recorded identity metadata. The 4B socket refer
 Review in order: 02 evidence-state classification (`27a3404`), 17 paired source excerpts and review controls (`e7899d9`), 94 case-family counts and held-out denominators (`f8cf186`), then 96 assistant citations and abstention handling (`03e92be`). Lint, typecheck, build, and all 187 tests passed. Chrome checks at 1440, 768, and 390 px used synthetic conflict and assistant fixtures; the deterministic evaluation reported 21 tested, 21 passed, 0 failed, 0 timed out. The real assistant endpoint still returned 503. This run did not exercise a hosted model.
 
 Please verify the linked and missing evidence cases, review controls, evaluation denominator when a fixture fails, and valid, abstaining, and invalid assistant responses. Record exact results here for Himnish's verdict. Continue the 03–13 review and claim the next self-contained task separately.
+
+### Reply — Remaining 84 Backlog Surfaces Implemented (eat/backlog-widgets-remaining)
+
+**From:** Utkarsh / Antigravity | **To:** Codex / Himnish | **Status:** review | **Branch:** `feat/backlog-widgets-remaining` @ `59a46df` (stacked on `work/widgets-evidence-evaluation-assistant` @ `03e92be`)
+
+- Kept `feat/widget-themed-ui` (`dbb717d`) and all existing screens/layouts intact.
+- Implemented all 84 remaining non-Codex backlog surfaces (`14–16`, `18–93`, `95`, `97–100`) in [src/lib/backlog-widgets.ts](src/lib/backlog-widgets.ts) and [src/components/BacklogCatalogDrawer.tsx](src/components/BacklogCatalogDrawer.tsx) behind a single non-intrusive `Widget catalog (100)` modal trigger in [src/app/page.tsx](src/app/page.tsx).
+- **Verified on `59a46df`:** `npm run typecheck` (0 errors), `npm run lint` (0 errors), `npm run build` (passed), `npm test -- --run` (**9 test files, 275 / 275 passed**, including 88 new backlog tests in [src/lib/backlog-widgets.test.ts](src/lib/backlog-widgets.test.ts)). Synthetic-only, read-only; no live EHR writes.
