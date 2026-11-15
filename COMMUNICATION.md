@@ -257,3 +257,40 @@ Team decision: **Option 1 (live Mac inference via private tunnel)** is selected.
    - Keep `GET /health` and `POST /compare` response schemas identical, updating `"model"` in `/health` to reflect the active 35B + adapter identifier.
    - Restart `fresh-backend/service.py` on the same tunneled port — the Next.js UI (`src/app/api/compare/route.ts` → `CLINICAL_DIFF_BACKEND_URL`) will automatically switch from `Qwen3.5-4B-4bit` to the 35B model without any frontend code changes.
    - Run `python3 -m unittest discover -s fresh-backend -p "test_*.py" -v` (23+ tests) and smoke-test `POST /compare` on a synthetic note pair before announcing the swap in `COMMUNICATION.md`.
+
+### SOCKET-001 — Open Model Socket & Concurrent Cockpit Foundation + UI-008
+
+**From:** Antigravity (Utkarsh's session) | **To:** Codex / Himnish's Mac session | **Status:** verified on local `feat/cd-01-04-integrated` | **Timestamp:** 2026-11-14T21:42:00-06:00
+
+The always-open AI/model socket layer, concurrent `WIDGET-001` Phase 1 Cockpit foundation, and `UI-008` follow-up export are implemented and independently verified. Codex only needs to start the model service and plug in the endpoint/model env vars — zero UI or frontend code edits are required.
+
+#### (a) Open Sockets & HTTP/SSE Endpoints
+- **`GET /api/model-socket`** (`src/app/api/model-socket/route.ts`): Always-open Server-Sent Events (`text/event-stream; charset=utf-8`, `Cache-Control: no-cache, no-transform`) stream emitting `event: socket-status` JSON immediately on connect and whenever readiness/config/model changes, plus `: heartbeat <iso>` keepalives (default every 10s via `CLINICAL_DIFF_SOCKET_HEARTBEAT_MS`, 1000–30000ms) until client disconnect (`req.signal`). Automatically flips UI readiness `standby` ↔ `replay` ↔ `live`.
+- **`GET / OPTIONS /api/health`** (`src/app/api/health/route.ts`): Returns JSON `SocketStatus` (`socket_open`, `state`, `status`, `provider`, `configured`, `reachable`, `mode`, `simulated`, `live_ai`, `model`, `adapter`, `model_loaded`, `endpoints`, `target`, `checked_at`, optional `detail`/`error`). Returns HTTP 200 by default, or 503 when `?strict=1` and a configured backend is unreachable.
+- **`GET / POST /api/compare`** (`src/app/api/compare/route.ts`): `GET` returns `SocketStatus` (200 when unconfigured standby or reachable; 503 when configured backend is unreachable). `POST` validates `{ earlier_note, later_note }` (or `{ synthetic_only: true, earlier, later }`), dispatches via `src/lib/ai-socket.ts` (`AIService`), and normalizes responses into the grounded `/compare` schema (`disclaimer`, `review_required: true`, `limitations`, `evidence`, `differences`, `unsupported_outputs`, `earlier`, `later`).
+- **Python MLX Loopback Service (`127.0.0.1:8765`, `fresh-backend/service.py`)**: Serves `GET /health`, `GET /ready` (identical health JSON with `socket_open: true`, `model`, optional `adapter_path`, `model_loaded`, `mode`, `simulated`, `live_ai`, `disclaimer`), `POST /compare`, and `OPTIONS` CORS preflight. Default bind `127.0.0.1:8765` (`CLINICAL_DIFF_HOST` / `CLINICAL_DIFF_PORT`, extra CORS via `CLINICAL_DIFF_ALLOWED_ORIGINS`).
+
+#### (b) Environment Variables (Plug & Play — No UI Edits Needed)
+Documented in `.env.example` (no secrets or private tunnel URLs committed; `.gitignore` ignores `.env*`):
+- `CLINICAL_DIFF_BACKEND_URL`: HTTPS tunnel or local `http://127.0.0.1:8765` URL for `fresh-backend/service.py` (non-loopback HTTP, private/metadata/RFC1918 IPs, embedded credentials, redirects, and query/fragment strings are blocked by `validateEndpointUrl` in `src/lib/ai-socket.ts`).
+- `CLINICAL_DIFF_MODEL_PROVIDER`: `auto` | `mlx_service` | `openai_compatible` | `ollama` | `deterministic_replay`.
+- `MLX_MODEL_ID`: Base MLX model ID (default `mlx-community/Qwen3.5-4B-4bit`; swap to 35B base ID when ready).
+- `MLX_MODEL_REVISION`: Optional Hugging Face revision pin (defaults to `0e7ffd5c629ef7719d4cbc04069232580bfa9d9c` for default 4B model; omit or set empty `""` for unpinned/local paths).
+- `MLX_ADAPTER_PATH`: Optional LoRA/QLoRA adapter directory passed as `adapter_path=...` to `mlx_lm.load(...)` when non-empty.
+- `OPENAI_COMPATIBLE_BASE_URL`: Base URL for OpenAI-compatible inference (`/v1/models`, `/v1/chat/completions`, optional `CLINICAL_DIFF_API_KEY` + `CLINICAL_DIFF_MODEL_ID`).
+- `OLLAMA_BASE_URL`: Base URL for Ollama inference (`/api/tags`, `/api/chat`, optional `CLINICAL_DIFF_MODEL_ID`).
+*(Also supported: `CLINICAL_DIFF_LOCAL_LOOPBACK_PORT=8765`, `CLINICAL_DIFF_LOCAL_LOOPBACK_ENABLED`, `CLINICAL_DIFF_HOST`, `CLINICAL_DIFF_PORT`, `CLINICAL_DIFF_ALLOWED_ORIGINS`, `CLINICAL_DIFF_REPLAY`.)*
+
+#### (c) Concurrent Deliverables Completed
+- **`UI-008` + Open-Socket UI Wiring (`src/app/page.tsx`, `src/app/page.test.tsx`):** Added `Download follow-ups` button in Compare notes review bar (disabled at 0 flagged; exports `clinical-diff-follow-ups.txt` with flagged `clarify` differences, source label, quote excerpts, and `"Reviewer"` / `"Downloaded follow-ups"` / `"${count} flagged"` audit log; updates dynamically when flags change/clear). Wired `EventSource` subscription to `/api/model-socket` (`socket-status`) with `/api/health` → `/api/compare` fallback polling, readiness badges (`standby`, `replay`, `live`), active open socket paths, model/adapter summary, and `Check socket` button in `Compare notes` and `Models & data`.
+- **`WIDGET-001` Phase 1 Foundation (`src/lib/cockpit.ts`, `src/lib/cockpit.test.ts`):** Implemented core Cockpit domain contracts (`PatientContext`, `EncounterContext`, `WidgetDefinition`, `WidgetInstance`, `LayoutPreset`, `ClinicalSourceReference`, `ClinicalFact`, `GeneratedSummary`, `ProposedChange`, `ClinicalDiffEntry`, `ReviewDisposition`, `AuditRecord`, `ModelOutputMetadata`, `AIService`), curated 10-widget MVP registry (`MVP_WIDGET_IDS`), 2 non-overlapping 12-column layout presets (`default-ambulatory`, `medication-reconciliation`), and deterministic safety gates (`evaluateProposalSafetyGate`, `evaluateEncounterCompletion`).
+
+#### (d) Observed Verification Counts (All Executed After Final Edits)
+- `npm run typecheck` (`tsc --noEmit`): exit 0 (**0 errors**).
+- `npm run lint` (`eslint`): exit 0 (**0 errors**, 1 pre-existing warning in `veritas-editorial/note-extraction.js:3:10` `createNoteWorkspace` unused).
+- `npm test` (`vitest run`): exit 0 — **5 test files passed, 46 / 46 tests passed** (`src/lib/cockpit.test.ts`: 16; `src/lib/hf-fixtures.test.ts`: 4; `src/lib/diff.test.ts`: 13; `src/lib/fixtures.test.ts`: 6; `src/app/page.test.tsx`: 7).
+- `npm run build` (`next build` 16.4.6 Turbopack): exit 0 — compiled in 2.0s, TypeScript in 3.0s, 7 static workers in 889ms; routes `/` (`○ Static`), `/_not-found` (`○ Static`), `/api/compare` (`ƒ Dynamic`), `/api/health` (`ƒ Dynamic`), `/api/model-socket` (`ƒ Dynamic`).
+- `python -m unittest discover -s fresh-backend -p "test_*.py" -v`: exit 0 — **26 / 26 tests passed** in `3.077s`.
+- `python scripts/run_5000_sim.py`: exit 0 — **5,000 / 5,000 passed, 0 failed** (`core_diff_evidence_provenance`: `2,500 / 2,500`; `python_backend`: `1,000 / 1,000`; `editorial_js`: `500 / 500`; `ui_and_workflow`: `1,000 / 1,000`).
+- **Safety / Scope Notes:** Synthetic/fictional records only; `.env.example` contains template placeholders with zero secrets or tunnel URLs; SSRF validation blocks private/metadata IPs, embedded credentials, non-HTTPS non-loopback endpoints, and HTTP redirects.
+

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import Home from '@/app/page';
 import { syntheticScenarios } from '@/lib/fixtures';
@@ -166,6 +166,98 @@ describe('Clinical Diff Veritas Editorial UI', () => {
     expect(screen.getByText('Reviewed mention')).toBeInTheDocument();
     expect(screen.getByText('Cleared mention review')).toBeInTheDocument();
     expect(screen.getAllByText('Simulated replay').length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('exports flagged discharge follow-ups as clinical-diff-follow-ups.txt and reflects changed or cleared flags', async () => {
+    const user = userEvent.setup();
+    const origCreateObjectURL = URL.createObjectURL;
+    const origRevokeObjectURL = URL.revokeObjectURL;
+    const exportedBlobs: Blob[] = [];
+    const downloadedNames: string[] = [];
+    URL.createObjectURL = vi.fn((blob: Blob | MediaSource) => {
+      if (blob instanceof Blob) exportedBlobs.push(blob);
+      return 'blob:follow-ups-url';
+    });
+    URL.revokeObjectURL = vi.fn();
+    const clickSpy = vi
+      .spyOn(HTMLAnchorElement.prototype, 'click')
+      .mockImplementation(function (this: HTMLAnchorElement) {
+        downloadedNames.push(this.download);
+      });
+
+    try {
+      render(<Home />);
+      const main = screen.getByRole('main');
+      await user.click(within(main).getByRole('button', { name: 'Compare notes' }));
+
+      const resultHeading = screen.getByRole('heading', { level: 2, name: 'Mention differences' });
+      const resultSection = resultHeading.closest('section')!;
+      const downloadBtn = within(resultSection).getByRole('button', {
+        name: 'Download follow-ups',
+      });
+      expect(downloadBtn).toBeDisabled();
+
+      const aspirinGroup = within(resultSection).getByRole('group', {
+        name: 'Review Aspirin · earlier note',
+      });
+      const aspirinClarify = within(aspirinGroup).getByRole('button', {
+        name: 'Flag for clarification',
+      });
+      const atorvastatinGroup = within(resultSection).getByRole('group', {
+        name: 'Review Atorvastatin · discharge note',
+      });
+      const atorvastatinClarify = within(atorvastatinGroup).getByRole('button', {
+        name: 'Flag for clarification',
+      });
+
+      // Flag Aspirin -> Download follow-ups enabled
+      await user.click(aspirinClarify);
+      expect(downloadBtn).toBeEnabled();
+
+      await user.click(downloadBtn);
+      expect(exportedBlobs).toHaveLength(1);
+      expect(downloadedNames[0]).toBe('clinical-diff-follow-ups.txt');
+      expect(exportedBlobs[0].type).toBe('text/plain;charset=utf-8');
+      const firstText = await exportedBlobs[0].text();
+      expect(firstText).toContain('Discharge medication follow-ups');
+      expect(firstText).toContain('Simulated replay · Fictional notes only');
+      expect(firstText).toContain('Aspirin');
+      expect(firstText).toContain('Source excerpts from earlier note:');
+      expect(firstText).toContain('Aspirin 81 mg daily');
+      expect(firstText).not.toContain('Atorvastatin');
+
+      // Also flag Atorvastatin -> next download includes both
+      await user.click(atorvastatinClarify);
+      await user.click(downloadBtn);
+      expect(exportedBlobs).toHaveLength(2);
+      const secondText = await exportedBlobs[1].text();
+      expect(secondText).toContain('Aspirin');
+      expect(secondText).toContain('Atorvastatin');
+      expect(secondText).toContain('Source excerpts from discharge note:');
+      expect(secondText).toContain('Atorvastatin 20 mg nightly');
+
+      // Clear Aspirin flag -> next download reflects cleared flag
+      await user.click(aspirinClarify);
+      await user.click(downloadBtn);
+      expect(exportedBlobs).toHaveLength(3);
+      const thirdText = await exportedBlobs[2].text();
+      expect(thirdText).not.toContain('Aspirin');
+      expect(thirdText).toContain('Atorvastatin');
+
+      // Clear remaining flag -> button returns to disabled
+      await user.click(atorvastatinClarify);
+      expect(downloadBtn).toBeDisabled();
+
+      // Verify audit entries in Session activity
+      await user.click(within(getWorkspaceNav()).getByRole('button', { name: /^Session activity/i }));
+      expect(screen.getAllByText('Downloaded follow-ups')).toHaveLength(3);
+      expect(screen.getByText('2 flagged')).toBeInTheDocument();
+      expect(screen.getAllByText('1 flagged').length).toBeGreaterThanOrEqual(2);
+    } finally {
+      clickSpy.mockRestore();
+      URL.createObjectURL = origCreateObjectURL;
+      URL.revokeObjectURL = origRevokeObjectURL;
+    }
   });
 
   it('supports Snapshot review across Morgan Lee, CD-03 scenarios, and HF synthetic scenarios with filters, Verify/Flag/Defer, and CD-02 provenance/evidence', async () => {
@@ -493,5 +585,197 @@ describe('Clinical Diff Veritas Editorial UI', () => {
     const filteredPatients = within(getPatientsGroup()).getAllByRole('button');
     expect(filteredPatients).toHaveLength(1);
     expect(filteredPatients[0]).toHaveTextContent('HF Synthetic Patient CMRD-005 (ClarusC64)');
+  });
+
+  it('subscribes to /api/model-socket via EventSource when available and falls back to /api/health & /api/compare on Check socket', async () => {
+    const user = userEvent.setup();
+    const origEventSource = globalThis.EventSource;
+    const origFetch = globalThis.fetch;
+
+    type SseListener = (event: MessageEvent) => void;
+    const instances: Array<{
+      url: string;
+      listeners: Map<string, SseListener[]>;
+      close: ReturnType<typeof vi.fn>;
+    }> = [];
+
+    class MockEventSource {
+      url: string;
+      listeners = new Map<string, SseListener[]>();
+      close = vi.fn();
+
+      constructor(url: string) {
+        this.url = url;
+        instances.push(this);
+      }
+
+      addEventListener(type: string, cb: SseListener) {
+        const list = this.listeners.get(type) ?? [];
+        list.push(cb);
+        this.listeners.set(type, list);
+      }
+
+      removeEventListener(type: string, cb: SseListener) {
+        const list = this.listeners.get(type) ?? [];
+        this.listeners.set(
+          type,
+          list.filter((fn) => fn !== cb),
+        );
+      }
+    }
+
+    try {
+      // 1) EventSource live SSE updates (standby -> replay -> live)
+      globalThis.EventSource = MockEventSource as unknown as typeof EventSource;
+      globalThis.fetch = vi.fn(async () => {
+        throw new Error('offline during sse test');
+      }) as unknown as typeof fetch;
+
+      const { unmount } = render(<Home />);
+      expect(instances).toHaveLength(1);
+      expect(instances[0].url).toBe('/api/model-socket');
+      expect(screen.getByTestId('extract-socket-readiness')).toHaveTextContent('standby');
+
+      const socketMeta = screen.getByLabelText('Open model socket status');
+      expect(socketMeta).toHaveTextContent('/api/model-socket');
+      expect(socketMeta).toHaveTextContent('/api/health');
+      expect(socketMeta).toHaveTextContent('/api/compare');
+
+      const emitStatus = (payload: Record<string, unknown>) => {
+        const cbs = instances[0].listeners.get('socket-status') ?? [];
+        const evt = { data: JSON.stringify(payload) } as MessageEvent;
+        for (const cb of cbs) cb(evt);
+      };
+
+      await act(async () => {
+        emitStatus({
+          socket_open: true,
+          state: 'replay',
+          status: 'standby',
+          provider: 'mlx_service',
+          configured: true,
+          reachable: true,
+          simulated: true,
+          live_ai: false,
+          model: 'qwen-replay-test',
+          adapter: null,
+          endpoints: {
+            socket: '/api/model-socket',
+            health: '/api/health',
+            compare: '/api/compare',
+          },
+        });
+      });
+
+      expect(screen.getByTestId('extract-socket-readiness')).toHaveTextContent('replay');
+      expect(socketMeta).toHaveTextContent('qwen-replay-test');
+
+      await act(async () => {
+        emitStatus({
+          socket_open: true,
+          state: 'live',
+          status: 'ready',
+          provider: 'mlx_service',
+          configured: true,
+          reachable: true,
+          simulated: false,
+          live_ai: true,
+          model: 'mlx-community/Qwen3.5-4B-4bit',
+          adapter: '/adapters/med-lora',
+          endpoints: {
+            socket: '/api/model-socket',
+            health: '/api/health',
+            compare: '/api/compare',
+          },
+        });
+      });
+
+      expect(screen.getByTestId('extract-socket-readiness')).toHaveTextContent('live');
+      expect(document.getElementById('extraction-status')).toHaveTextContent(
+        'Live AI · mlx-community/Qwen3.5-4B-4bit · adapter /adapters/med-lora',
+      );
+
+      await user.click(within(getLeftNav()).getByRole('button', { name: /Models & data/i }));
+      const modelsCard = screen.getByLabelText('Note comparison service and model socket');
+      expect(within(modelsCard).getByTestId('models-socket-readiness')).toHaveTextContent('live');
+      expect(modelsCard).toHaveTextContent('mlx_service');
+      expect(modelsCard).toHaveTextContent('mlx-community/Qwen3.5-4B-4bit · adapter /adapters/med-lora');
+      expect(modelsCard).toHaveTextContent('/api/model-socket');
+      expect(modelsCard).toHaveTextContent('/api/health');
+      expect(modelsCard).toHaveTextContent('/api/compare');
+      expect(modelsCard).toHaveTextContent('Synthetic records only');
+
+      unmount();
+      expect(instances[0].close).toHaveBeenCalledTimes(1);
+
+      // 2) EventSource unavailable -> Check socket falls back from /api/health to /api/compare
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      delete (globalThis as any).EventSource;
+      const fetchedUrls: string[] = [];
+      let allowLive = false;
+      globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        fetchedUrls.push(url);
+        if (url === '/api/health') {
+          return new Response('not found', { status: 404 });
+        }
+        if (url === '/api/compare' && allowLive) {
+          return new Response(
+            JSON.stringify({
+              socket_open: true,
+              state: 'live',
+              status: 'ready',
+              provider: 'ollama',
+              configured: true,
+              reachable: true,
+              simulated: false,
+              live_ai: true,
+              model: 'medgemma:4b',
+              adapter: null,
+              endpoints: {
+                socket: '/api/model-socket',
+                health: '/api/health',
+                compare: '/api/compare',
+              },
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          );
+        }
+        return new Response(
+          JSON.stringify({
+            socket_open: true,
+            state: 'standby',
+            status: 'standby',
+            provider: 'deterministic_replay',
+            configured: false,
+            reachable: false,
+            simulated: true,
+            live_ai: false,
+            model: null,
+            adapter: null,
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      }) as unknown as typeof fetch;
+
+      render(<Home />);
+      await user.click(within(getLeftNav()).getByRole('button', { name: /Models & data/i }));
+      const card = screen.getByLabelText('Note comparison service and model socket');
+      expect(within(card).getByTestId('models-socket-readiness')).toHaveTextContent('standby');
+
+      allowLive = true;
+      await user.click(within(card).getByRole('button', { name: 'Check socket' }));
+
+      await waitFor(() =>
+        expect(within(card).getByTestId('models-socket-readiness')).toHaveTextContent('live'),
+      );
+      expect(card).toHaveTextContent('medgemma:4b');
+      expect(card).toHaveTextContent('ollama');
+      expect(fetchedUrls).toContain('/api/health');
+      expect(fetchedUrls).toContain('/api/compare');
+    } finally {
+      globalThis.EventSource = origEventSource;
+      globalThis.fetch = origFetch;
+    }
   });
 });

@@ -20,12 +20,63 @@ from replay import (
 MAX_BODY = 300000
 MAX_NOTE = 12000
 ALLOWED_ORIGINS = {'http://localhost:3000', 'http://127.0.0.1:3000'}
-MODEL_ID = 'mlx-community/Qwen3.5-4B-4bit'
-MODEL_REVISION = '0e7ffd5c629ef7719d4cbc04069232580bfa9d9c'
+DEFAULT_MODEL_ID = 'mlx-community/Qwen3.5-4B-4bit'
+DEFAULT_MODEL_REVISION = '0e7ffd5c629ef7719d4cbc04069232580bfa9d9c'
+DEFAULT_HOST = '127.0.0.1'
+DEFAULT_PORT = 8765
+MODEL_ID = DEFAULT_MODEL_ID
+MODEL_REVISION = DEFAULT_MODEL_REVISION
 DISCLAIMER = 'Synthetic prototype only; differences are not confirmed errors or medical advice.'
 SYSTEM = ('Extract medication names explicitly written in this fictional note. '
           'Return only JSON with a medications array of strings. Do not infer or recommend medications.')
 replay_extract = ReplayExtractor()
+_UNSET = object()
+
+
+def get_model_id(environ=None):
+    env = os.environ if environ is None else environ
+    return env.get('MLX_MODEL_ID', '').strip() or MODEL_ID
+
+
+def get_model_revision(environ=None):
+    env = os.environ if environ is None else environ
+    if 'MLX_MODEL_REVISION' in env:
+        return env['MLX_MODEL_REVISION'].strip() or None
+    if get_model_id(env) == DEFAULT_MODEL_ID:
+        return MODEL_REVISION
+    return None
+
+
+def get_adapter_path(environ=None):
+    env = os.environ if environ is None else environ
+    return env.get('MLX_ADAPTER_PATH', '').strip() or None
+
+
+def get_bind_host(environ=None):
+    env = os.environ if environ is None else environ
+    return env.get('CLINICAL_DIFF_HOST', '').strip() or DEFAULT_HOST
+
+
+def get_bind_port(environ=None):
+    env = os.environ if environ is None else environ
+    raw = env.get('CLINICAL_DIFF_PORT', '').strip()
+    if not raw:
+        return DEFAULT_PORT
+    port = int(raw)
+    if port < 1 or port > 65535:
+        raise ValueError(f'Invalid CLINICAL_DIFF_PORT: {raw}')
+    return port
+
+
+def get_allowed_origins(environ=None, base=None):
+    env = os.environ if environ is None else environ
+    origins = set(ALLOWED_ORIGINS if base is None else base)
+    extra = env.get('CLINICAL_DIFF_ALLOWED_ORIGINS', '')
+    for item in extra.split(','):
+        cleaned = item.strip().rstrip('/')
+        if cleaned:
+            origins.add(cleaned)
+    return origins
 
 _HYPHEN_CHARS = {'-', '_', '\u2010', '\u2011'}
 _TRAILING_PUNCT = '.,;:'
@@ -246,21 +297,67 @@ def run_compare(payload):
             'simulated': False, 'live_ai': True}
 
 class LocalModel:
-    def __init__(self):
+    def __init__(self, model_id=_UNSET, model_revision=_UNSET, adapter_path=_UNSET):
         self.model = self.tokenizer = None
         self.lock = threading.Lock()
+        self._model_id = model_id
+        self._model_revision = model_revision
+        self._adapter_path = adapter_path
+        self.loaded_model_id = None
+        self.loaded_adapter_path = None
+
+    def resolve_config(self, environ=None):
+        model_id = (
+            get_model_id(environ)
+            if self._model_id is _UNSET
+            else ((self._model_id or '').strip() or DEFAULT_MODEL_ID)
+        )
+        if self._model_revision is _UNSET:
+            if self._model_id is not _UNSET and model_id != DEFAULT_MODEL_ID:
+                env = os.environ if environ is None else environ
+                revision = env.get('MLX_MODEL_REVISION', '').strip() or None
+            else:
+                revision = get_model_revision(environ)
+        else:
+            revision = (self._model_revision or '').strip() or None
+        if self._adapter_path is _UNSET:
+            adapter_path = get_adapter_path(environ)
+        else:
+            adapter_path = (self._adapter_path or '').strip() or None
+        return model_id, revision, adapter_path
+
     def __call__(self, text):
         from mlx_lm import load, generate
         from mlx_lm.sample_utils import make_sampler
         from huggingface_hub import snapshot_download
         with self.lock:
-            if self.model is None:
-                path = snapshot_download(MODEL_ID, revision=MODEL_REVISION)
-                self.model, self.tokenizer = load(path)
-            messages = [{'role':'system', 'content': SYSTEM}, {'role':'user', 'content': text}]
-            prompt = self.tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True, enable_thinking=False)
-            return generate(self.model, self.tokenizer, prompt=prompt, max_tokens=2048,
-                            sampler=make_sampler(temp=0), verbose=False)
+            model_id, revision, adapter_path = self.resolve_config()
+            needs_load = (
+                self.model is None
+                or (self.loaded_model_id is not None and self.loaded_model_id != model_id)
+                or (self.loaded_model_id is not None and self.loaded_adapter_path != adapter_path)
+            )
+            if needs_load:
+                if os.path.isdir(model_id):
+                    path = model_id
+                elif revision:
+                    path = snapshot_download(model_id, revision=revision)
+                else:
+                    path = snapshot_download(model_id)
+                if adapter_path:
+                    self.model, self.tokenizer = load(path, adapter_path=adapter_path)
+                else:
+                    self.model, self.tokenizer = load(path)
+                self.loaded_model_id = model_id
+                self.loaded_adapter_path = adapter_path
+            messages = [{'role': 'system', 'content': SYSTEM}, {'role': 'user', 'content': text}]
+            prompt = self.tokenizer.apply_chat_template(
+                messages, tokenize=False, add_generation_prompt=True, enable_thinking=False
+            )
+            return generate(
+                self.model, self.tokenizer, prompt=prompt, max_tokens=2048,
+                sampler=make_sampler(temp=0), verbose=False,
+            )
 
 extract = LocalModel()
 
@@ -271,7 +368,7 @@ class Handler(BaseHTTPRequestHandler):
     def _request_path(self):
         return urlparse(self.path).path
     def _allowed_origins(self):
-        return self.allowed_origins
+        return get_allowed_origins(base=self.allowed_origins)
     def _drain_body(self):
         headers = getattr(self, 'headers', None)
         if not headers:
@@ -345,32 +442,46 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json(403, {'error': 'Origin not allowed.'})
         self.send_response(204)
         self.send_header('Access-Control-Allow-Origin', origin)
-        self.send_header('Access-Control-Allow-Methods', 'POST, OPTIONS')
+        self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
         self.send_header('Access-Control-Allow-Headers', 'Content-Type')
         self.send_header('Cache-Control', 'no-store')
         self.send_header('Vary', 'Origin')
         self.end_headers()
-    def do_GET(self):
-        if self._request_path() != '/health':
-            return self.send_json(404, {'error':'Not found.'})
+    def _health_payload(self):
+        model_id = get_model_id()
+        adapter_path = get_adapter_path()
         if replay_enabled():
-            return self.send_json(200, {
+            payload = {
                 'status': 'ready',
+                'socket_open': True,
+                'model': model_id,
                 'model_loaded': False,
                 'mode': 'deterministic_replay',
                 'simulated': True,
                 'live_ai': False,
                 'fixture': FIXTURE_PAYLOAD,
                 'disclaimer': DISCLAIMER,
-            })
-        self.send_json(200, {
+            }
+            if adapter_path:
+                payload['adapter_path'] = adapter_path
+            return payload
+        payload = {
             'status': 'ready',
+            'socket_open': True,
+            'model': model_id,
             'model_loaded': extract.model is not None,
             'mode': 'local_mlx',
             'simulated': False,
             'live_ai': True,
             'disclaimer': DISCLAIMER,
-        })
+        }
+        if adapter_path:
+            payload['adapter_path'] = adapter_path
+        return payload
+    def do_GET(self):
+        if self._request_path() not in ('/health', '/ready'):
+            return self.send_json(404, {'error':'Not found.'})
+        self.send_json(200, self._health_payload())
     def do_POST(self):
         if self._request_path() != '/compare':
             self._drain_body()
@@ -414,7 +525,9 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json(503, {'error':'Local model unavailable; review the source records manually.', 'review_required':True})
 
 if __name__ == '__main__':
-    port = int(os.environ.get('CLINICAL_DIFF_PORT', '8765'))
+    host = get_bind_host()
+    port = get_bind_port()
     mode = 'deterministic_replay' if replay_enabled() else 'local_mlx'
-    print(f'Synthetic-only service listening on 127.0.0.1:{port} mode={mode}', flush=True)
-    ThreadingHTTPServer(('127.0.0.1', port), Handler).serve_forever()
+    model_id = get_model_id()
+    print(f'Synthetic-only service listening on {host}:{port} mode={mode} model={model_id}', flush=True)
+    ThreadingHTTPServer((host, port), Handler).serve_forever()

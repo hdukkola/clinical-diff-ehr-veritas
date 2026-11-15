@@ -11,6 +11,12 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
 } from 'react';
 import { analyzeSnapshots, compareSnapshots } from '@/lib/diff';
+import {
+  DEFAULT_MLX_MODEL_ID,
+  SOCKET_ENDPOINTS,
+  type SocketReadiness,
+  type SocketStatus,
+} from '@/lib/ai-socket';
 import { getSyntheticScenario, syntheticScenarios, type SyntheticScenario } from '@/lib/fixtures';
 import { hfDatasetSources, hfNoteComparisonPairs, hfScenarios } from '@/lib/hf-fixtures';
 import type {
@@ -303,6 +309,60 @@ type NoteComparisonResult = {
   simulated: boolean;
 };
 
+const INITIAL_SOCKET_STATUS: SocketStatus = {
+  socket_open: true,
+  state: 'standby',
+  status: 'standby',
+  provider: 'deterministic_replay',
+  configured: false,
+  reachable: false,
+  mode: 'deterministic_replay',
+  simulated: true,
+  live_ai: false,
+  model: null,
+  adapter: null,
+  model_loaded: false,
+  endpoints: SOCKET_ENDPOINTS,
+  target: null,
+  checked_at: '2026-11-14T00:00:00.000Z',
+};
+
+function deriveSocketReadiness(data: Partial<SocketStatus>): SocketReadiness {
+  if (data.state === 'live' || data.state === 'replay' || data.state === 'standby') {
+    return data.state;
+  }
+  if (data.configured && data.reachable && !data.simulated) {
+    return 'live';
+  }
+  if (data.reachable && data.simulated) {
+    return 'replay';
+  }
+  return 'standby';
+}
+
+function normalizeSocketStatusPayload(data: Partial<SocketStatus>): SocketStatus {
+  const state = deriveSocketReadiness(data);
+  return {
+    socket_open: Boolean(data.socket_open ?? true),
+    state,
+    status: data.status ?? (state === 'live' ? 'ready' : 'standby'),
+    provider: data.provider ?? 'deterministic_replay',
+    configured: Boolean(data.configured),
+    reachable: Boolean(data.reachable),
+    mode: data.mode ?? (state === 'live' ? 'local_mlx' : 'deterministic_replay'),
+    simulated: data.simulated ?? state !== 'live',
+    live_ai: Boolean(data.live_ai ?? state === 'live'),
+    model: typeof data.model === 'string' && data.model.trim() ? data.model.trim() : null,
+    adapter: typeof data.adapter === 'string' && data.adapter.trim() ? data.adapter.trim() : null,
+    model_loaded: Boolean(data.model_loaded),
+    endpoints: data.endpoints ?? SOCKET_ENDPOINTS,
+    target: typeof data.target === 'string' ? data.target : null,
+    checked_at: typeof data.checked_at === 'string' ? data.checked_at : new Date().toISOString(),
+    detail: typeof data.detail === 'string' ? data.detail : undefined,
+    error: typeof data.error === 'string' ? data.error : undefined,
+  };
+}
+
 function buildQuoteSnippet(evidence: MentionEvidence, sourceText: string): QuoteSnippet {
   const chars = Array.from(sourceText);
   let first = Math.max(0, evidence.start - 85);
@@ -318,6 +378,24 @@ function buildQuoteSnippet(evidence: MentionEvidence, sourceText: string): Quote
     suffix: chars.slice(evidence.end, last).join(''),
     hasTrailingEllipsis: last < chars.length,
   };
+}
+
+function formatQuoteSnippetText(q: QuoteSnippet): string {
+  return `${q.hasLeadingEllipsis ? '…' : ''}${q.prefix}${q.match}${q.suffix}${q.hasTrailingEllipsis ? '…' : ''}`;
+}
+
+function downloadTextFile(filename: string, content: string, mimeType: string): void {
+  try {
+    const blob = new Blob([content], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  } catch {
+    // Fallback for non-blob test environments
+  }
 }
 
 function escapeRegExp(value: string): string {
@@ -836,6 +914,7 @@ export default function Home() {
     'Simulated replay · deterministic local extractor',
   );
   const [extractStatusState, setExtractStatusState] = useState<'replay' | 'live' | 'error'>('replay');
+  const [socketStatus, setSocketStatus] = useState<SocketStatus>(INITIAL_SOCKET_STATUS);
   const [extractResult, setExtractResult] = useState<NoteComparisonResult | null>(null);
   const [noteReviewDecisions, setNoteReviewDecisions] = useState<Record<string, NoteReviewDecision>>({});
 
@@ -1104,49 +1183,108 @@ export default function Home() {
     setAnnouncement('Cleared notes');
   }, []);
 
+  const applySocketStatus = useCallback((raw: Partial<SocketStatus>): SocketStatus => {
+    const normalized = normalizeSocketStatusPayload(raw);
+    setSocketStatus(normalized);
+    if (normalized.state === 'live') {
+      const modelName = normalized.model || DEFAULT_MLX_MODEL_ID;
+      const adapterSuffix = normalized.adapter ? ` · adapter ${normalized.adapter}` : '';
+      setExtractStatusText(`Live AI · ${modelName}${adapterSuffix}`);
+      setExtractStatusState('live');
+    } else {
+      setExtractStatusText('Simulated replay · deterministic local extractor');
+      setExtractStatusState('replay');
+    }
+    return normalized;
+  }, []);
+
+  const probeSocketHealth = useCallback(async (): Promise<SocketStatus | null> => {
+    const pollingEndpoints = [SOCKET_ENDPOINTS.health, SOCKET_ENDPOINTS.compare];
+    for (const endpoint of pollingEndpoints) {
+      try {
+        const response = await fetch(endpoint, { method: 'GET', cache: 'no-store' });
+        const data = (await response.json().catch(() => null)) as Partial<SocketStatus> | null;
+        if (
+          data &&
+          typeof data === 'object' &&
+          ('state' in data || 'configured' in data || 'reachable' in data)
+        ) {
+          return normalizeSocketStatusPayload(data);
+        }
+      } catch {
+        // Fall back to next polling endpoint.
+      }
+    }
+    return null;
+  }, []);
+
   const handleCheckService = useCallback(async () => {
-    try {
-      const response = await fetch('/api/compare', { method: 'GET', cache: 'no-store' });
-      const data = (await response.json().catch(() => ({}))) as {
-        configured?: boolean;
-        reachable?: boolean;
-        simulated?: boolean;
-        model?: string | null;
-      };
-      if (response.ok && data.configured && data.reachable && !data.simulated) {
-        const modelName = data.model || 'mlx-community/Qwen3.5-4B-4bit';
-        setExtractStatusText(`Live AI · ${modelName}`);
-        setExtractStatusState('live');
-        showToast(`Live Qwen service ready (${modelName})`);
-        setAnnouncement(`Live Qwen service ready: ${modelName}`);
+    const probed = await probeSocketHealth();
+    if (probed) {
+      const applied = applySocketStatus(probed);
+      setConnLog((prev) => [
+        {
+          id: `cl-${Date.now()}`,
+          ts: new Date().toISOString(),
+          msg: `Socket ${applied.state}${applied.model ? ` · ${applied.model}` : ''}`,
+        },
+        ...prev,
+      ]);
+      if (applied.state === 'live') {
+        const modelName = applied.model || DEFAULT_MLX_MODEL_ID;
+        showToast(`Live AI socket ready (${modelName})`);
+        setAnnouncement(`Live AI socket ready: ${modelName}`);
         return;
       }
-    } catch {
-      // Fall back to deterministic local extractor when /api/compare is unavailable.
+      showToast('Deterministic local extractor ready');
+      setAnnouncement('Local deterministic extractor ready');
+      return;
     }
-    setExtractStatusText('Simulated replay · deterministic local extractor');
-    setExtractStatusState('replay');
+    applySocketStatus(INITIAL_SOCKET_STATUS);
     showToast('Deterministic local extractor ready');
     setAnnouncement('Local deterministic extractor ready');
-  }, [showToast]);
+  }, [applySocketStatus, probeSocketHealth, showToast]);
 
   useEffect(() => {
     let active = true;
-    fetch('/api/compare', { method: 'GET', cache: 'no-store' })
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data: { configured?: boolean; reachable?: boolean; simulated?: boolean; model?: string | null } | null) => {
-        if (!active || !data) return;
-        if (data.configured && data.reachable && !data.simulated) {
-          const modelName = data.model || 'mlx-community/Qwen3.5-4B-4bit';
-          setExtractStatusText(`Live AI · ${modelName}`);
-          setExtractStatusState('live');
+
+    void probeSocketHealth().then((status) => {
+      if (active && status) {
+        applySocketStatus(status);
+      }
+    });
+
+    if (typeof EventSource === 'undefined') {
+      return () => {
+        active = false;
+      };
+    }
+
+    let es: EventSource | null = null;
+    try {
+      es = new EventSource(SOCKET_ENDPOINTS.socket);
+      const onSocketStatus = (event: MessageEvent) => {
+        if (!active || typeof event.data !== 'string') return;
+        try {
+          const parsed = JSON.parse(event.data) as Partial<SocketStatus>;
+          applySocketStatus(parsed);
+        } catch {
+          // Ignore malformed SSE event data
         }
-      })
-      .catch(() => {});
-    return () => {
-      active = false;
-    };
-  }, []);
+      };
+      es.addEventListener('socket-status', onSocketStatus as EventListener);
+      return () => {
+        active = false;
+        es?.removeEventListener('socket-status', onSocketStatus as EventListener);
+        es?.close();
+      };
+    } catch {
+      return () => {
+        active = false;
+        es?.close();
+      };
+    }
+  }, [applySocketStatus, probeSocketHealth]);
 
   const handleCompareNotes = useCallback(
     async (e: FormEvent) => {
@@ -1319,6 +1457,37 @@ export default function Home() {
     [addAudit, noteReviewDecisions],
   );
 
+  const handleExportFollowUps = useCallback(() => {
+    if (!extractResult) return;
+    const flagged = extractResult.differences.filter(
+      (entry) => noteReviewDecisions[entry.key] === 'clarify',
+    );
+    if (flagged.length === 0) return;
+    const mode = extractResult.simulated ? 'Simulated replay' : 'Local model';
+    const sections = flagged.map((entry) =>
+      [
+        `Can you confirm whether ${entry.name} belongs on the discharge medication list?`,
+        `Source excerpts from ${entry.label.toLowerCase()}:`,
+        ...entry.quotes.map(
+          (quote) => `> ${formatQuoteSnippetText(quote).replace(/\r?\n/g, '\n> ')}`,
+        ),
+      ].join('\n'),
+    );
+    const text =
+      [
+        'Discharge medication follow-ups',
+        `${mode} · Fictional notes only`,
+        ...sections,
+        'Review both source notes before recording a medication decision.',
+      ].join('\n\n') + '\n';
+    downloadTextFile('clinical-diff-follow-ups.txt', text, 'text/plain;charset=utf-8');
+    addAudit('Reviewer', 'Downloaded follow-ups', `${flagged.length} flagged`);
+    showToast(`Downloaded ${flagged.length} follow-up${flagged.length === 1 ? '' : 's'}`);
+    setAnnouncement(
+      `Downloaded ${flagged.length} flagged follow-up${flagged.length === 1 ? '' : 's'}`,
+    );
+  }, [addAudit, extractResult, noteReviewDecisions, showToast]);
+
   /* ---- Triage & Eval Actions ---- */
   const runTriage = useCallback(() => {
     if (!activeModelConn) return;
@@ -1449,17 +1618,7 @@ export default function Home() {
               .join('\n');
       const mime = format === 'json' ? 'application/json' : 'text/csv';
       const filename = format === 'json' ? 'clinical-diff-audit.json' : 'clinical-diff-audit.csv';
-      try {
-        const blob = new Blob([content], { type: mime });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = filename;
-        a.click();
-        setTimeout(() => URL.revokeObjectURL(url), 1000);
-      } catch {
-        // Fallback for non-blob test environments
-      }
+      downloadTextFile(filename, content, mime);
       addAudit('User', 'Exported audit log', format.toUpperCase());
       showToast(`Exported ${format.toUpperCase()} audit log`);
     },
@@ -1773,6 +1932,11 @@ export default function Home() {
     : 0;
 
   const activePaletteObj = PALETTES.find((p) => p.id === palette) ?? PALETTES[0];
+  const socketModelSummary = socketStatus.model
+    ? socketStatus.adapter
+      ? `${socketStatus.model} · adapter ${socketStatus.adapter}`
+      : socketStatus.model
+    : 'Deterministic local fallback';
 
   /* ---- FHIR Preview Bundle ---- */
   const fhirBundleJson = useMemo(() => {
@@ -2072,6 +2236,38 @@ export default function Home() {
                     </button>
                   </div>
 
+                  <div
+                    className="extract-socket-meta"
+                    aria-label="Open model socket status"
+                    style={{
+                      display: 'flex',
+                      flexWrap: 'wrap',
+                      alignItems: 'center',
+                      gap: '6px 10px',
+                      marginTop: 8,
+                      fontSize: 12,
+                      color: 'var(--muted)',
+                    }}
+                  >
+                    <span>
+                      Socket readiness:{' '}
+                      <span
+                        className={socketStatus.state === 'live' ? 'e-tag verified' : 'e-tag'}
+                        data-testid="extract-socket-readiness"
+                      >
+                        {socketStatus.state}
+                      </span>
+                    </span>
+                    <span>
+                      Model: <span className="mono">{socketModelSummary}</span>
+                    </span>
+                    <span>
+                      Open sockets: <span className="mono">{socketStatus.endpoints.socket}</span> ·{' '}
+                      <span className="mono">{socketStatus.endpoints.health}</span> ·{' '}
+                      <span className="mono">{socketStatus.endpoints.compare}</span>
+                    </span>
+                  </div>
+
                   <div className="extract-presets">
                     <label htmlFor="note-preset-select">Note preset</label>
                     <select
@@ -2200,10 +2396,34 @@ export default function Home() {
 
                     {noteDiffCount > 0 ? (
                       <>
-                        <p className="extract-review-summary" role="status">
-                          {noteDiffCount - noteDecidedCount} to review · {noteFlaggedCount} flagged
-                          for clarification
-                        </p>
+                        <div
+                          className="extract-review-bar"
+                          style={{
+                            display: 'flex',
+                            flexWrap: 'wrap',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            gap: 8,
+                            paddingBottom: 12,
+                          }}
+                        >
+                          <p
+                            className="extract-review-summary"
+                            role="status"
+                            style={{ paddingBottom: 0 }}
+                          >
+                            {noteDiffCount - noteDecidedCount} to review · {noteFlaggedCount}{' '}
+                            flagged for clarification
+                          </p>
+                          <button
+                            type="button"
+                            className="btn"
+                            disabled={noteFlaggedCount === 0}
+                            onClick={handleExportFollowUps}
+                          >
+                            Download follow-ups
+                          </button>
+                        </div>
                         <ul className="extract-rows">
                           {extractResult.differences.map((entry) => {
                             const dec = noteReviewDecisions[entry.key] ?? null;
@@ -3280,21 +3500,74 @@ export default function Home() {
 
                 {modelsTab === 'connections' && (
                   <>
-                    <section className="service-card">
-                      <div>
+                    <section className="service-card" aria-label="Note comparison service and model socket">
+                      <div style={{ minWidth: 0 }}>
                         <h2>Note comparison service</h2>
                         <p>
-                          <span className="dot degraded" aria-hidden="true" />
+                          <span
+                            className={`dot ${
+                              extractStatusState === 'live'
+                                ? 'ok'
+                                : extractStatusState === 'error'
+                                  ? 'error'
+                                  : 'degraded'
+                            }`}
+                            aria-hidden="true"
+                          />
                           {extractStatusText}
                         </p>
+                        <div
+                          className="r-sub"
+                          style={{
+                            marginTop: 6,
+                            display: 'flex',
+                            flexWrap: 'wrap',
+                            gap: '4px 10px',
+                            alignItems: 'center',
+                          }}
+                        >
+                          <span>
+                            Socket readiness:{' '}
+                            <span
+                              className={
+                                socketStatus.state === 'live' ? 'active-tag' : 'e-tag'
+                              }
+                              data-testid="models-socket-readiness"
+                            >
+                              {socketStatus.state}
+                            </span>
+                          </span>
+                          <span>
+                            Provider: <span className="mono">{socketStatus.provider}</span>
+                          </span>
+                          <span>
+                            Model / adapter: <span className="mono">{socketModelSummary}</span>
+                          </span>
+                        </div>
+                        <div className="r-sub" style={{ marginTop: 4 }}>
+                          Active open sockets:{' '}
+                          <span className="mono">{socketStatus.endpoints.socket}</span> ·{' '}
+                          <span className="mono">{socketStatus.endpoints.health}</span> ·{' '}
+                          <span className="mono">{socketStatus.endpoints.compare}</span> ·{' '}
+                          Synthetic records only
+                        </div>
                       </div>
-                      <button
-                        type="button"
-                        className="btn"
-                        onClick={() => navigateTo('extract')}
-                      >
-                        Open comparison
-                      </button>
+                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                        <button
+                          type="button"
+                          className="btn quiet"
+                          onClick={handleCheckService}
+                        >
+                          Check socket
+                        </button>
+                        <button
+                          type="button"
+                          className="btn"
+                          onClick={() => navigateTo('extract')}
+                        >
+                          Open comparison
+                        </button>
+                      </div>
                     </section>
 
                     <section className="sec" id="o-hf">
