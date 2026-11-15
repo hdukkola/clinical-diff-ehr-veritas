@@ -1104,15 +1104,52 @@ export default function Home() {
     setAnnouncement('Cleared notes');
   }, []);
 
-  const handleCheckService = useCallback(() => {
+  const handleCheckService = useCallback(async () => {
+    try {
+      const response = await fetch('/api/compare', { method: 'GET', cache: 'no-store' });
+      const data = (await response.json().catch(() => ({}))) as {
+        configured?: boolean;
+        reachable?: boolean;
+        simulated?: boolean;
+        model?: string | null;
+      };
+      if (response.ok && data.configured && data.reachable && !data.simulated) {
+        const modelName = data.model || 'mlx-community/Qwen3.5-4B-4bit';
+        setExtractStatusText(`Live AI · ${modelName}`);
+        setExtractStatusState('live');
+        showToast(`Live Qwen service ready (${modelName})`);
+        setAnnouncement(`Live Qwen service ready: ${modelName}`);
+        return;
+      }
+    } catch {
+      // Fall back to deterministic local extractor when /api/compare is unavailable.
+    }
     setExtractStatusText('Simulated replay · deterministic local extractor');
     setExtractStatusState('replay');
     showToast('Deterministic local extractor ready');
     setAnnouncement('Local deterministic extractor ready');
   }, [showToast]);
 
+  useEffect(() => {
+    let active = true;
+    fetch('/api/compare', { method: 'GET', cache: 'no-store' })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: { configured?: boolean; reachable?: boolean; simulated?: boolean; model?: string | null } | null) => {
+        if (!active || !data) return;
+        if (data.configured && data.reachable && !data.simulated) {
+          const modelName = data.model || 'mlx-community/Qwen3.5-4B-4bit';
+          setExtractStatusText(`Live AI · ${modelName}`);
+          setExtractStatusState('live');
+        }
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, []);
+
   const handleCompareNotes = useCallback(
-    (e: FormEvent) => {
+    async (e: FormEvent) => {
       e.preventDefault();
       setExtractError('');
       const earlierLen = Array.from(earlierNoteText).length;
@@ -1126,6 +1163,88 @@ export default function Home() {
         setExtractResult(null);
         setExtractError('Each note needs between 1 and 12,000 characters of fictional text.');
         return;
+      }
+
+      if (extractStatusState === 'live') {
+        try {
+          const response = await fetch('/api/compare', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              earlier_note: { source_id: 'earlier-note', text: earlierNoteText },
+              later_note: { source_id: 'later-note', text: laterNoteText },
+            }),
+          });
+          const data = (await response.json().catch(() => ({}))) as {
+            error?: string;
+            simulated?: boolean;
+            model?: string;
+            evidence?: Array<{ source_id: string; name: string; start: number; end: number }>;
+            differences?: Array<{ kind: 'earlier_only' | 'later_only'; name: string; source_id: string }>;
+            unsupported_outputs?: Array<{ source_id: string; text: string }>;
+          };
+          if (response.ok && Array.isArray(data.differences) && Array.isArray(data.evidence)) {
+            const evByKey = new Map<string, MentionEvidence[]>();
+            const earlierQuotes: QuoteSnippet[] = [];
+            const laterQuotes: QuoteSnippet[] = [];
+            for (const ev of data.evidence) {
+              const sourceText = ev.source_id === 'earlier-note' ? earlierNoteText : laterNoteText;
+              const snippet = buildQuoteSnippet(
+                { sourceId: ev.source_id, name: ev.name, start: ev.start, end: ev.end },
+                sourceText,
+              );
+              if (ev.source_id === 'earlier-note') earlierQuotes.push(snippet);
+              else laterQuotes.push(snippet);
+              const k = `${ev.source_id}:${normalizeName(ev.name)}`;
+              const list = evByKey.get(k) ?? [];
+              list.push({ sourceId: ev.source_id, name: ev.name, start: ev.start, end: ev.end });
+              evByKey.set(k, list);
+            }
+
+            const differences: MentionDifference[] = data.differences.map((d) => {
+              const norm = normalizeName(d.name);
+              const sourceText = d.kind === 'earlier_only' ? earlierNoteText : laterNoteText;
+              const matches = evByKey.get(`${d.source_id}:${norm}`) ?? [];
+              return {
+                key: `${d.kind}:${norm}`,
+                kind: d.kind,
+                name: d.name,
+                normName: norm,
+                label: d.kind === 'earlier_only' ? earlierNoteLabel : laterNoteLabel,
+                quotes: matches.map((m) => buildQuoteSnippet(m, sourceText)),
+              };
+            });
+
+            const modelName = data.model || 'mlx-community/Qwen3.5-4B-4bit';
+            const res: NoteComparisonResult = {
+              differences,
+              earlier: { label: earlierNoteLabel, quotes: earlierQuotes, unsupported: [] },
+              later: { label: laterNoteLabel, quotes: laterQuotes, unsupported: [] },
+              modeLabel: `Live AI · ${modelName}`,
+              simulated: Boolean(data.simulated),
+            };
+            setExtractResult(res);
+            setNoteReviewDecisions({});
+            setExtractStatusText(res.modeLabel);
+            setExtractStatusState(res.simulated ? 'replay' : 'live');
+            const count = res.differences.length;
+            addAudit('Comparison', `Live AI (${modelName})`, `${count} mention ${count === 1 ? 'difference' : 'differences'}`);
+            setAnnouncement(`Comparison complete: ${count} mention ${count === 1 ? 'difference' : 'differences'} found.`);
+            requestAnimationFrame(() => {
+              extractResultHeadingRef.current?.focus();
+            });
+            return;
+          }
+          setExtractError(data.error || 'Live Qwen backend returned an unexpected response.');
+          setExtractStatusState('error');
+          setExtractStatusText('Live AI unavailable · check service');
+          return;
+        } catch {
+          setExtractError('Unable to reach live Qwen backend. Click Check service or switch to Simulated replay.');
+          setExtractStatusState('error');
+          setExtractStatusText('Live AI unavailable · check service');
+          return;
+        }
       }
 
       const extraCandidates = activePreset
@@ -1163,6 +1282,7 @@ export default function Home() {
       allMedicationTerms,
       earlierNoteLabel,
       earlierNoteText,
+      extractStatusState,
       laterNoteLabel,
       laterNoteText,
     ],
