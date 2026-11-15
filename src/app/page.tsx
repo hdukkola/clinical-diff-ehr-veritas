@@ -30,6 +30,7 @@ import {
 } from '@/lib/diff';
 import { BRAND_NAME } from '@/lib/branding';
 import { WorkspaceWidgets, type WorkspaceWidget } from '@/components/WorkspaceWidgets';
+import { EncounterNoteDraft } from '@/components/EncounterNoteDraft';
 import { ASPIRIN_TRANSCRIPT_LINK_ID, EncounterTranscript } from '@/components/EncounterTranscript';
 import { AssistantPanel } from '@/components/AssistantPanel';
 import { SYNTHETIC_ASSISTANT_NOTES } from '@/lib/assistant-evidence';
@@ -2992,6 +2993,7 @@ export default function Home() {
                       onTraceNote={(targetId) => openEncounterNotes(targetId)}
                       onTraceMedication={(medId) => handleSelectEvidenceChange(medId, 'patient')}
                     />
+                    <EncounterNoteDraft />
                     <AssistantPanel
                       patientLabel={cleanPatientName(activeScenario.patientLabel)}
                       patientId={activeScenario.patientId}

@@ -4426,3 +4426,54 @@ pre.code .c {
     flex-wrap: wrap;
   }
 }
+
+.encounter-transcript li[id] {
+  scroll-margin-top: 80px;
+}
+
+.encounter-transcript li:target {
+  outline: 1px solid var(--line);
+  outline-offset: 3px;
+}
+
+.encounter-note-sections {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.encounter-note-sections > section {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 12px;
+}
+
+.encounter-note-sections h3 {
+  color: var(--strong);
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.encounter-note-excerpt,
+.encounter-note-omitted {
+  margin-top: 10px;
+  color: var(--text);
+  font-size: 13px;
+}
+
+.encounter-note-excerpt a,
+.encounter-note-omitted a {
+  color: var(--strong);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.encounter-note-excerpt blockquote {
+  margin-top: 4px;
+}
+
+.encounter-note-omitted a + a {
+  margin-inline-start: 8px;
+}
