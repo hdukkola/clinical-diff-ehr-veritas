@@ -58,3 +58,5 @@ For each product and edition record surface, user role, specialty, item name, no
 Open coverage lanes include legacy hospital installs and public examples, US ambulatory long tail (Veradigm, Practice Fusion, Greenway, AdvancedMD), deeper EMIS and SystmOne coverage and additional international systems (Dedalus, System C, Indici), open-source systems, and specialty products spanning ED, ICU, surgery, maternity, oncology, pediatrics, behavioral health, dental, and post-acute. Include patient and administrative surfaces. Account for unobservable vendor configurations explicitly and deduplicate by the job the clinician or staff member performs.
 
 [Widget build template](WIDGET_BUILD_TEMPLATE.md)
+
+[100-item implementation backlog](EHR_WIDGET_BACKLOG.md)
