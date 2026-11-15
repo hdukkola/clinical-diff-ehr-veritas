@@ -201,3 +201,7 @@ Codex verified offline 4B comparison from the app on two fictional notes and che
 ### UI-007 — discharge review and follow-up
 
 Codex added clarification and review controls beside the original notes' evidence in Compare notes. Decisions appear in the session export. Verified keyboard use, follow-up states, and export with live local inference and mobile replay. The change is on draft PR #9.
+
+### UI-008 — discharge follow-up handoff
+
+Codex added a text download that includes flagged questions and their source excerpts. A changed or cleared flag is reflected in the next download. The draft also includes two fictional cases for comparing review with the app against plain notes.
