@@ -56,7 +56,7 @@ import { PatientChat, type ChatThreads } from '@/components/PatientChat';
 import { AssistantPanel } from '@/components/AssistantPanel';
 import { applyChartCorrections, chartCorrectionsFor, type ChartAspect, type ChartCorrection } from '@/lib/patient-chat';
 import { EncounterAudioNote } from '@/components/EncounterAudioNote';
-import { RecordingTranscription } from '@/components/RecordingTranscription';
+import { LiveMeetingNotes } from '@/components/LiveMeetingNotes';
 import { SYNTHETIC_ASSISTANT_NOTES } from '@/lib/assistant-evidence';
 import {
   DEFAULT_MLX_MODEL_ID,
@@ -3238,18 +3238,16 @@ function Workspace({ session }: { session: ReturnType<typeof useCloudSession> })
                 {view === 'patient' && patientRemovalError?.id === activeScenario.id &&
                   <p role="alert">{patientRemovalError.message}</p>}
                 {view === 'patient' && cloudCase && session.user && process.env.NEXT_PUBLIC_DIFFMD_RECORDING_TRANSCRIPTION === '1' && (
-                  <RecordingTranscription key={session.user.uid + '/' + cloudCase.id} uid={session.user.uid}
+                  <LiveMeetingNotes key={session.user.uid + '/' + cloudCase.id} uid={session.user.uid}
                     caseId={cloudCase.id} getToken={() => session.user!.getIdToken()}
-                    noteExists={Boolean(laterNoteText.trim())} disabled={cloudWrite || !cloud.connected}
+                    disabled={cloudWrite || !cloud.connected || Boolean(cloudEditConflict)}
                     onUse={(text) => {
                       const note = [laterNoteText.trimEnd(), text].filter(Boolean).join('\n\n');
-                      if (note.length > 12_000) {
-                        setAnnouncement('The later note and transcript exceed 12,000 characters. Shorten either before importing.');
-                        return;
-                      }
+                      if (note.length > 12_000) return false;
                       updateNote('later', note);
-                      setAnnouncement('Transcript added to the later note draft. Review and save the note.');
+                      setAnnouncement('Meeting transcript added to the later note draft. Review and save the note.');
                       navigateTo('extract');
+                      return true;
                     }} />
                 )}
                 {view === 'home' && cloudWorkspaceEnabled && (
