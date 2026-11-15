@@ -35,14 +35,14 @@ export default function PrivacyPage() {
           the requested URL and time. DiffMD uses its demo review service to load and save review activity.
         </p>
         <p>
-          Chat history, reviewed chart corrections and page notes are kept in the browser tab and clear on reload.
-          A configured development or private cloud preview can send an unclear question to Qwen to help ask
-          a follow-up. That request contains the question you typed. Do not enter real patient information.
+          Added charts, chat history, reviewed chart corrections and page notes stay in the browser tab and clear
+          on reload. A configured development or private cloud preview can send an unclear question about the
+          bundled Morgan Lee chart to Qwen to help ask a follow-up. That request contains the question you typed.
         </p>
         <p>
-          When hosted AI is available and you request a comparison, the text you submit can be sent to the
-          configured model service. The encounter note demo uses the bundled fictional encounter. Keep personal
-          information out of text fields, including manual notes. This app uses no advertising or analytics trackers.
+          The public workspace can ask the hosted model to compare the bundled notes or process the bundled
+          encounter recording. It processes edited notes and added charts in your browser. Keep personal information
+          out of all text fields. This app uses no advertising or analytics trackers.
         </p>
       </section>
 

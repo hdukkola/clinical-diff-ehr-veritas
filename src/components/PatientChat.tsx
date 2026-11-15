@@ -31,11 +31,12 @@ function ReplyText({ text, animate }: { text: string; animate: boolean }) {
 }
 
 export function PatientChat({
-  charts, chart, onChartChange, aspect, onAspectChange, corrections, widgetPages, widgetNotes,
+  charts, chart, allowModelFollowUp, onChartChange, aspect, onAspectChange, corrections, widgetPages, widgetNotes,
   onChartApproval, onWidgetApproval, openWidgetPage, headingRef, threads, setThreads,
 }: {
   charts: SyntheticScenario[];
   chart: SyntheticScenario;
+  allowModelFollowUp: boolean;
   onChartChange: (chartId: string) => void;
   aspect: ChartAspect;
   onAspectChange: (aspect: ChartAspect) => void;
@@ -94,7 +95,7 @@ export function PatientChat({
     if (!text || checking || pending.current) return;
     let answer = chartReply(chart, aspect, text, corrections, turns.at(-1)?.answer.medication);
     setQuestion('');
-    if (answer.clarify && (cloudChat || ['localhost', '127.0.0.1'].includes(window.location.hostname))) {
+    if (answer.clarify && allowModelFollowUp && (cloudChat || ['localhost', '127.0.0.1'].includes(window.location.hostname))) {
       const controller = new AbortController();
       pending.current = controller;
       setPendingQuestion(text);
@@ -143,7 +144,7 @@ export function PatientChat({
       <header>
         <h1 className="h1" ref={headingRef} id="patient-chat-title" tabIndex={-1}>AI chat</h1>
         <p>Demo chart assistant · Fictional records only</p>
-        {cloudChat && <p>Cloud Qwen may process your question to help ask a follow-up. Do not enter real patient information.</p>}
+        {cloudChat && allowModelFollowUp && <p>Cloud Qwen may process your question to help ask a follow-up. Do not enter real patient information.</p>}
       </header>
       <div className="patient-chat-context">
         <label>Patient
@@ -279,7 +280,7 @@ function EditProposal({
           <p className="patient-chat-scope">
             {proposal.kind === 'chart'
               ? `${shortName(chart)} · ${chart.patientId} · ${snapshot.source} · ${snapshot.recordedAt ?? 'Undated'} · ${med?.name} ${field}`
-              : `${widgetPages.find((page) => page.id === pageId)?.label} · Page note`}
+              : `${shortName(chart)} · ${chart.patientId} · ${widgetPages.find((page) => page.id === pageId)?.label} · Page note`}
           </p>
           <dl>
             <dt>Current</dt><dd>{proposal.change.before || 'Undocumented'}</dd>
