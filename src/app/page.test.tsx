@@ -1505,4 +1505,32 @@ describe('Clinical Diff Veritas Editorial UI', () => {
     const evidenceRegion = screen.getByLabelText('Evidence and provenance for Lisinopril');
     await waitFor(() => expect(evidenceRegion).toHaveFocus());
   });
+
+  it('groups unresolved medication changes into Added, Removed, Changed, and Unclear in Worklist', async () => {
+    const user = userEvent.setup();
+    render(<Home />);
+
+    await user.click(within(getPatientsGroup()).getAllByRole('button')[0]);
+    const tablist = screen.getByRole('tablist', { name: 'Snapshot review tabs' });
+    const worklistTab = within(tablist).getByRole('tab', { name: 'Worklist' });
+    await user.click(worklistTab);
+    expect(worklistTab).toHaveAttribute('aria-selected', 'true');
+
+    const counts = screen.getByLabelText('Reconciliation worklist counts');
+    expect(counts).toHaveTextContent('4 unresolved');
+    expect(counts).toHaveTextContent('0 reviewed');
+
+    expect(screen.getByRole('region', { name: 'Added medications' })).toHaveTextContent('Atorvastatin');
+    expect(screen.getByRole('region', { name: 'Removed medications' })).toHaveTextContent('Aspirin');
+    const changedSec = screen.getByRole('region', { name: 'Changed medications' });
+    expect(changedSec).toHaveTextContent('Lisinopril');
+    const unclearSec = screen.getByRole('region', { name: 'Unclear medications' });
+    expect(unclearSec).toHaveTextContent('Metformin');
+    expect(unclearSec).toHaveTextContent('Missing regimen detail');
+
+    // Inspect & review jumps directly to the item's expanded evidence
+    await user.click(within(changedSec).getByRole('button', { name: 'Inspect & review' }));
+    const evidenceRegion = screen.getByLabelText('Evidence and provenance for Lisinopril');
+    await waitFor(() => expect(evidenceRegion).toHaveFocus());
+  });
 });

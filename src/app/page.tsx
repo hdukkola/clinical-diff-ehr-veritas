@@ -14,6 +14,7 @@ import {
   analyzeSnapshots,
   buildDocumentIndex,
   buildEncounterTimeline,
+  buildReconciliationWorklist,
   classifyChangeEvidenceState,
   classifyLinkEvidenceState,
   compareNoteRegimens,
@@ -57,7 +58,7 @@ type PaletteId = 'void' | 'dimmed' | 'obsidian' | 'forest';
 type DiffFilter = 'all' | 'changed' | 'onlyA' | 'onlyB' | 'same';
 type ReviewDecision = 'verified' | 'flagged' | 'deferred';
 type NoteReviewDecision = 'clarify' | 'reviewed';
-type DiffTab = 'diff' | 'timeline' | 'documents' | 'snapshots' | 'method';
+type DiffTab = 'diff' | 'worklist' | 'timeline' | 'documents' | 'snapshots' | 'method';
 type ModelsTab = 'connections' | 'add' | 'contracts';
 
 const VIEW_NAMES: Record<ViewId, string> = {
@@ -1022,6 +1023,11 @@ export default function Home() {
   const documentIndex = useMemo(
     () => buildDocumentIndex(activeScenario.earlier, activeScenario.later, activeReport),
     [activeReport, activeScenario.earlier, activeScenario.later],
+  );
+
+  const reconciliationWorklist = useMemo(
+    () => buildReconciliationWorklist(activeReport.changes, reviews, activeScenario.id),
+    [activeReport.changes, activeScenario.id, reviews],
   );
 
   const chartSearchMatches = useMemo(
@@ -3133,6 +3139,7 @@ export default function Home() {
                   {(
                     [
                       ['diff', 'Differences'],
+                      ['worklist', 'Worklist'],
                       ['timeline', 'Encounter timeline'],
                       ['documents', 'Document index'],
                       ['snapshots', 'Source snapshots'],
@@ -3822,6 +3829,71 @@ export default function Home() {
                       </ol>
                     </section>
                   </>
+                )}
+
+                {diffTab === 'worklist' && (
+                  <div className="doc-index-wrap">
+                    <div className="doc-index-summary" aria-label="Reconciliation worklist counts">
+                      <span className="e-tag">{reconciliationWorklist.totalUnresolved} unresolved</span>
+                      <span className="e-tag">{reconciliationWorklist.resolvedCount} reviewed</span>
+                      <span className="e-tag">{reconciliationWorklist.added.length} added</span>
+                      <span className="e-tag">{reconciliationWorklist.removed.length} removed</span>
+                      <span className="e-tag">{reconciliationWorklist.changed.length} changed</span>
+                      <span className="e-tag evidence-state-conflicting_excerpts">
+                        {reconciliationWorklist.unclear.length} unclear
+                      </span>
+                    </div>
+
+                    {(
+                      [
+                        ['added', 'Added medications', reconciliationWorklist.added],
+                        ['removed', 'Removed medications', reconciliationWorklist.removed],
+                        ['changed', 'Changed medications', reconciliationWorklist.changed],
+                        ['unclear', 'Unclear medications', reconciliationWorklist.unclear],
+                      ] as const
+                    ).map(([bucketKey, heading, items]) => (
+                      <section key={bucketKey} className="sec" aria-label={heading}>
+                        <h2 className="sec-h">
+                          {heading} · {items.length}
+                        </h2>
+                        {items.length === 0 ? (
+                          <p className="nd">No unresolved items in {heading.toLowerCase()}.</p>
+                        ) : (
+                          <ul className="timeline-list">
+                            {items.map((item) => (
+                              <li
+                                key={item.medicationId}
+                                className={`timeline-item${bucketKey === 'unclear' ? ' is-undated' : ''}`}
+                              >
+                                <div className="timeline-head">
+                                  <span className="e-tag">{bucketKey}</span>
+                                  <span
+                                    className={`e-tag evidence-state-${item.evidenceState}`}
+                                  >
+                                    {EVIDENCE_STATE_LABELS[item.evidenceState]}
+                                  </span>
+                                  <strong className="timeline-title">{item.name}</strong>
+                                  <button
+                                    type="button"
+                                    className="timeline-inspect-btn"
+                                    onClick={() => handleSelectEvidenceChange(item.medicationId)}
+                                  >
+                                    Inspect &amp; review
+                                  </button>
+                                </div>
+                                <p className="timeline-detail">{item.summary}</p>
+                                {item.unclearReasons.length > 0 && (
+                                  <p className="timeline-source">
+                                    Unclear: {item.unclearReasons.join(' · ')}
+                                  </p>
+                                )}
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </section>
+                    ))}
+                  </div>
                 )}
 
                 {diffTab === 'timeline' && (

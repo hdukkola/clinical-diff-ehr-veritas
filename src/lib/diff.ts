@@ -1968,3 +1968,113 @@ export function buildDocumentIndex(
     },
   };
 }
+
+export type ReconciliationWorklistBucket = 'added' | 'removed' | 'changed' | 'unclear';
+
+export interface ReconciliationWorklistItem {
+  medicationId: string;
+  name: string;
+  bucket: ReconciliationWorklistBucket;
+  summary: string;
+  evidenceState: EvidenceStateKind;
+  unclearReasons: string[];
+}
+
+export interface ReconciliationWorklistResult {
+  added: ReconciliationWorklistItem[];
+  removed: ReconciliationWorklistItem[];
+  changed: ReconciliationWorklistItem[];
+  unclear: ReconciliationWorklistItem[];
+  totalUnresolved: number;
+  resolvedCount: number;
+}
+
+const UNCLEAR_FLAGS = new Set<ProvenanceFlag>([
+  'unknown_provenance',
+  'ambiguous_source_attribution',
+  'conflicting_provenance',
+  'ambiguous_evidence_link',
+  'unresolved_evidence_link',
+  'undocumented_field',
+  'blank_field_value',
+]);
+
+/**
+ * Group unresolved medication changes into Added, Removed, Changed, and
+ * Unclear buckets, excluding items that already have a clinician review decision.
+ */
+export function buildReconciliationWorklist(
+  changes: ReadonlyArray<MedicationChange>,
+  reviews: Record<string, string | undefined>,
+  scenarioId: string,
+): ReconciliationWorklistResult {
+  const added: ReconciliationWorklistItem[] = [];
+  const removed: ReconciliationWorklistItem[] = [];
+  const changed: ReconciliationWorklistItem[] = [];
+  const unclear: ReconciliationWorklistItem[] = [];
+  let resolvedCount = 0;
+
+  for (const change of changes) {
+    if (reviews[`${scenarioId}:${change.medicationId}`]) {
+      resolvedCount += 1;
+      continue;
+    }
+
+    const evidenceState = classifyChangeEvidenceState(change);
+    const unclearReasons: string[] = [];
+
+    if (evidenceState === 'conflicting_excerpts') {
+      unclearReasons.push('Conflicting excerpts');
+    } else if (evidenceState === 'missing_reference') {
+      unclearReasons.push('Missing reference');
+    } else if (evidenceState === 'unavailable_document') {
+      unclearReasons.push('Unavailable document');
+    }
+
+    if (change.provenance?.hasUnknownProvenance) {
+      unclearReasons.push('Unknown provenance');
+    }
+    if (change.provenance?.hasAmbiguousProvenance) {
+      unclearReasons.push('Ambiguous provenance');
+    }
+    if (change.provenanceFlags?.includes('undocumented_field')) {
+      unclearReasons.push('Missing regimen detail');
+    }
+    if (change.provenanceFlags?.includes('blank_field_value')) {
+      unclearReasons.push('Blank field value');
+    }
+
+    const hasUnclearFlag = (change.provenanceFlags ?? []).some((f) => UNCLEAR_FLAGS.has(f));
+    const bucket: ReconciliationWorklistBucket =
+      unclearReasons.length > 0 || hasUnclearFlag
+        ? 'unclear'
+        : change.kind === 'added'
+          ? 'added'
+          : change.kind === 'removed'
+            ? 'removed'
+            : 'changed';
+
+    const item: ReconciliationWorklistItem = {
+      medicationId: change.medicationId,
+      name: change.name,
+      bucket,
+      summary: formatTimelineChangeDetail(change),
+      evidenceState,
+      unclearReasons: [...new Set(unclearReasons)],
+    };
+
+    if (bucket === 'added') added.push(item);
+    else if (bucket === 'removed') removed.push(item);
+    else if (bucket === 'changed') changed.push(item);
+    else unclear.push(item);
+  }
+
+  return {
+    added,
+    removed,
+    changed,
+    unclear,
+    totalUnresolved: added.length + removed.length + changed.length + unclear.length,
+    resolvedCount,
+  };
+}

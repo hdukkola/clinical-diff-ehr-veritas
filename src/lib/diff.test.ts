@@ -3,6 +3,7 @@ import {
   analyzeSnapshots,
   buildDocumentIndex,
   buildEncounterTimeline,
+  buildReconciliationWorklist,
   classifyChangeEvidenceState,
   classifyLinkEvidenceState,
   compareNoteRegimens,
@@ -795,5 +796,27 @@ describe('compareNoteRegimens & normalizeNoteText', () => {
         (d) => d.status === 'unavailable' && d.statusLabel === 'Unavailable document',
       ),
     ).toBe(true);
+  });
+
+  it('groups unresolved medication changes into added, removed, changed, and unclear worklist buckets', () => {
+    const report = analyzeSnapshots(fixtureEarlier, fixtureLater);
+    const initial = buildReconciliationWorklist(report.changes, {}, 'scenario-morgan-lee-baseline');
+
+    expect(initial.totalUnresolved).toBe(4);
+    expect(initial.resolvedCount).toBe(0);
+    expect(initial.added.map((i) => i.name)).toEqual(['Atorvastatin']);
+    expect(initial.removed.map((i) => i.name)).toEqual(['Aspirin']);
+    expect(initial.changed.map((i) => i.name)).toEqual(['Lisinopril']);
+    expect(initial.unclear.map((i) => i.name)).toEqual(['Metformin']);
+    expect(initial.unclear[0].unclearReasons).toContain('Missing regimen detail');
+
+    const afterVerify = buildReconciliationWorklist(
+      report.changes,
+      { 'scenario-morgan-lee-baseline:m1': 'verified' },
+      'scenario-morgan-lee-baseline',
+    );
+    expect(afterVerify.totalUnresolved).toBe(3);
+    expect(afterVerify.resolvedCount).toBe(1);
+    expect(afterVerify.changed).toEqual([]);
   });
 });
