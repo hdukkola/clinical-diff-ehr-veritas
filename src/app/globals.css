@@ -4371,6 +4371,58 @@ pre.code .c {
   font-weight: 650;
 }
 
+.encounter-audio-note audio {
+  display: block;
+  width: min(100%, 400px);
+  margin-top: 14px;
+  color-scheme: dark;
+}
+
+.encounter-audio-note details,
+.audio-note-editor {
+  margin-top: 14px;
+}
+
+.encounter-audio-note summary {
+  cursor: pointer;
+  margin-bottom: 8px;
+}
+
+.encounter-audio-note li {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 8px;
+}
+
+.encounter-audio-note li button {
+  font-variant-numeric: tabular-nums;
+}
+
+.audio-note-editor {
+  display: grid;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.audio-note-editor textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font: inherit;
+  color: var(--text);
+  background: transparent;
+  overflow-wrap: anywhere;
+}
+
+.audio-note-editor input {
+  margin-right: 6px;
+}
+
+.audio-note-editor button {
+  justify-self: start;
+}
+
 .workspace-tools {
   display: block;
   min-width: 0;

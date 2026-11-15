@@ -37,6 +37,7 @@ import { ASPIRIN_TRANSCRIPT_LINK_ID, EncounterTranscript } from '@/components/En
 import { PatientChat, type ChatThreads } from '@/components/PatientChat';
 import { AssistantPanel } from '@/components/AssistantPanel';
 import { applyChartCorrections, chartCorrectionsFor, type ChartAspect, type ChartCorrection } from '@/lib/patient-chat';
+import { EncounterAudioNote } from '@/components/EncounterAudioNote';
 import { SYNTHETIC_ASSISTANT_NOTES } from '@/lib/assistant-evidence';
 import {
   DEFAULT_MLX_MODEL_ID,
@@ -166,6 +167,7 @@ const DIFF_GLYPHS: Record<'changed' | 'onlyA' | 'onlyB' | 'same', { glyph: strin
 
 const DEFAULT_EARLIER_NOTE = SYNTHETIC_ASSISTANT_NOTES.earlier.text;
 const DEFAULT_LATER_NOTE = SYNTHETIC_ASSISTANT_NOTES.later.text;
+const HOSTED_COMPARE_ENABLED = process.env.NEXT_PUBLIC_CLINICAL_DIFF_HOSTED_COMPARE === '1';
 
 /* ------------------------------------------------------------------
    Deterministic Local Medication-Mention Extractor
@@ -985,6 +987,8 @@ export default function Home() {
     'Standby · local extractor',
   );
   const [extractStatusState, setExtractStatusState] = useState<'replay' | 'live' | 'error'>('replay');
+  const [hostedCompareBusy, setHostedCompareBusy] = useState(false);
+  const hostedComparePending = useRef(false);
   const [socketStatus, setSocketStatus] = useState<SocketStatus>(INITIAL_SOCKET_STATUS);
   const [extractResult, setExtractResult] = useState<NoteComparisonResult | null>(null);
   const [noteReviewDecisions, setNoteReviewDecisions] = useState<Record<string, NoteReviewDecision>>({});
@@ -1712,6 +1716,7 @@ export default function Home() {
   const handleCompareNotes = useCallback(
     async (e: FormEvent) => {
       e.preventDefault();
+      if (hostedComparePending.current) return;
       setExtractError('');
       const earlierLen = Array.from(earlierNoteText).length;
       const laterLen = Array.from(laterNoteText).length;
@@ -1726,25 +1731,38 @@ export default function Home() {
         return;
       }
 
-      if (extractStatusState === 'live') {
+      const hostedExample = HOSTED_COMPARE_ENABLED && selectedPresetId === 'default' &&
+        earlierNoteText === DEFAULT_EARLIER_NOTE && laterNoteText === DEFAULT_LATER_NOTE;
+      let hostedResult: NoteComparisonResult | undefined;
+      if (hostedExample || (!HOSTED_COMPARE_ENABLED && extractStatusState === 'live')) {
+        if (hostedExample) {
+          hostedComparePending.current = true;
+          setHostedCompareBusy(true);
+          setExtractResult(null);
+        }
         try {
-          const response = await fetch('/api/compare', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              earlier_note: { source_id: 'earlier-note', text: earlierNoteText },
-              later_note: { source_id: 'later-note', text: laterNoteText },
-            }),
-          });
+          const response = hostedExample
+            ? await fetch('/api/encounter-compare', { method: 'POST', signal: AbortSignal.timeout(55_000) })
+            : await fetch('/api/compare', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                earlier_note: { source_id: 'earlier-note', text: earlierNoteText },
+                later_note: { source_id: 'later-note', text: laterNoteText },
+              }),
+            });
           const data = (await response.json().catch(() => ({}))) as {
             error?: string;
             simulated?: boolean;
+            live_ai?: boolean;
+            cached?: boolean;
             model?: string;
             evidence?: Array<{ source_id: string; name: string; start: number; end: number }>;
             differences?: Array<{ kind: 'earlier_only' | 'later_only'; name: string; source_id: string }>;
             unsupported_outputs?: Array<{ source_id: string; text: string }>;
           };
-          if (response.ok && Array.isArray(data.differences) && Array.isArray(data.evidence)) {
+          if (response.ok && Array.isArray(data.differences) && Array.isArray(data.evidence) &&
+              (!hostedExample || (data.live_ai === true && data.simulated === false && typeof data.cached === 'boolean'))) {
             const evByKey = new Map<string, MentionEvidence[]>();
             const earlierQuotes: QuoteSnippet[] = [];
             const laterQuotes: QuoteSnippet[] = [];
@@ -1781,30 +1799,42 @@ export default function Home() {
               differences,
               earlier: { label: earlierNoteLabel, quotes: earlierQuotes, unsupported: [] },
               later: { label: laterNoteLabel, quotes: laterQuotes, unsupported: [] },
-              modeLabel: `Live AI · ${modelName}`,
+              modeLabel: hostedExample
+                ? `Qwen 4B extraction · ${data.cached ? 'cached' : 'live'} · rules for dose changes`
+                : `Live AI · ${modelName}`,
               simulated: Boolean(data.simulated),
             };
-            setExtractResult(res);
-            setNoteReviewDecisions({});
-            setExtractStatusText(res.modeLabel);
-            setExtractStatusState(res.simulated ? 'replay' : 'live');
-            const count = res.differences.length;
-            addAudit('Comparison', `Live AI (${modelName})`, `${count} mention ${count === 1 ? 'difference' : 'differences'}`);
-            setAnnouncement(`Comparison complete: ${count} mention ${count === 1 ? 'difference' : 'differences'} found.`);
-            requestAnimationFrame(() => {
-              extractResultHeadingRef.current?.focus();
-            });
+            if (hostedExample) {
+              hostedResult = res;
+            } else {
+              setExtractResult(res);
+              setNoteReviewDecisions({});
+              setExtractStatusText(res.modeLabel);
+              setExtractStatusState(res.simulated ? 'replay' : 'live');
+              const count = res.differences.length;
+              addAudit('Comparison', `Live AI (${modelName})`, `${count} mention ${count === 1 ? 'difference' : 'differences'}`);
+              setAnnouncement(`Comparison complete: ${count} mention ${count === 1 ? 'difference' : 'differences'} found.`);
+              requestAnimationFrame(() => extractResultHeadingRef.current?.focus());
+              return;
+            }
+          } else if (!hostedExample) {
+            setExtractError(data.error || 'Live Qwen backend returned an unexpected response.');
+            setExtractStatusState('error');
+            setExtractStatusText('Live AI unavailable · check service');
             return;
           }
-          setExtractError(data.error || 'Live Qwen backend returned an unexpected response.');
-          setExtractStatusState('error');
-          setExtractStatusText('Live AI unavailable · check service');
-          return;
         } catch {
-          setExtractError('Unable to reach live Qwen backend. Click Check service or switch to Local standby.');
-          setExtractStatusState('error');
-          setExtractStatusText('Live AI unavailable · check service');
-          return;
+          if (!hostedExample) {
+            setExtractError('Unable to reach live Qwen backend. Click Check service or switch to Local standby.');
+            setExtractStatusState('error');
+            setExtractStatusText('Live AI unavailable · check service');
+            return;
+          }
+        } finally {
+          if (hostedExample) {
+            hostedComparePending.current = false;
+            setHostedCompareBusy(false);
+          }
         }
       }
 
@@ -1812,7 +1842,7 @@ export default function Home() {
         ? [...activePreset.referenceMedications, ...allMedicationTerms]
         : allMedicationTerms;
 
-      const baseRes = runDeterministicNoteComparison(
+      const baseRes = hostedResult ?? runDeterministicNoteComparison(
         earlierNoteText,
         laterNoteText,
         earlierNoteLabel,
@@ -1891,17 +1921,18 @@ export default function Home() {
 
       const res: NoteComparisonResult = {
         ...baseRes,
+        modeLabel: hostedExample && !hostedResult ? 'Rules fallback · Qwen result unavailable' : baseRes.modeLabel,
         differences: enrichedDifferences,
       };
 
       setExtractResult(res);
       setNoteReviewDecisions({});
       setExtractStatusText(res.modeLabel);
-      setExtractStatusState('replay');
+      setExtractStatusState(hostedResult ? 'live' : 'replay');
       const count = res.differences.length;
       addAudit(
         'Comparison',
-        'Local standby',
+        HOSTED_COMPARE_ENABLED ? res.modeLabel : 'Local standby',
         `${count} mention ${count === 1 ? 'difference' : 'differences'}`,
       );
       setAnnouncement(
@@ -1920,6 +1951,7 @@ export default function Home() {
       extractStatusState,
       laterNoteLabel,
       laterNoteText,
+      selectedPresetId,
     ],
   );
 
@@ -1960,7 +1992,8 @@ export default function Home() {
       (entry) => noteReviewDecisions[entry.key] === 'clarify',
     );
     if (flagged.length === 0) return;
-    const mode = extractResult.simulated ? 'Local standby' : 'Local model';
+    const mode = HOSTED_COMPARE_ENABLED ? extractResult.modeLabel
+      : extractResult.simulated ? 'Local standby' : 'Local model';
     const sections = flagged.map((entry) =>
       [
         `Can you confirm whether ${entry.name} belongs on the discharge medication list?`,
@@ -3032,6 +3065,7 @@ export default function Home() {
                     <EncounterDocumentationNotice />
                     <EncounterNoteDraft />
                     <button className="btn" type="button" onClick={openChartChat}>Ask AI about {patientName}</button>
+                    <EncounterAudioNote />
                     <AssistantPanel
                       patientLabel={cleanPatientName(activeScenario.patientLabel)}
                       patientId={activeScenario.patientId}
@@ -3111,7 +3145,9 @@ export default function Home() {
                         }`}
                         aria-hidden="true"
                       />
-                      {extractStatusText}
+                      {hostedCompareBusy ? 'Checking bundled notes with Qwen 4B…'
+                        : HOSTED_COMPARE_ENABLED ? extractResult?.modeLabel ?? 'Ready to compare'
+                        : extractStatusText}
                     </p>
                     <button
                       type="button"
@@ -3119,12 +3155,14 @@ export default function Home() {
                       id="extraction-retry"
                       onClick={handleCheckService}
                     >
-                      Check service
+                      {HOSTED_COMPARE_ENABLED ? 'Check local extractor' : 'Check service'}
                     </button>
                   </div>
 
                   <p className="extract-scope" style={{ marginTop: 8 }}>
-                    Use example records only. The status above identifies the comparison method.
+                    {HOSTED_COMPARE_ENABLED
+                      ? 'Qwen 4B can read the bundled example. Edited or alternate example notes use rules in this browser. Use fictional records only.'
+                      : 'Use example records only. The status above identifies the comparison method.'}
                   </p>
 
                   <details className="extract-diagnostics" style={{ marginTop: 8 }}>
@@ -3185,6 +3223,7 @@ export default function Home() {
                     <select
                       id="note-preset-select"
                       value={selectedPresetId}
+                      disabled={hostedCompareBusy}
                       onChange={(e) => handleSelectPreset(e.target.value)}
                     >
                       <option value="default">
@@ -3198,7 +3237,7 @@ export default function Home() {
                     </select>
                   </div>
 
-                  <form id="extraction-form" onSubmit={handleCompareNotes}>
+                  <form id="extraction-form" onSubmit={handleCompareNotes} aria-busy={hostedCompareBusy}>
                     <div className="extract-note-grid">
                       <div className="extract-note">
                         <label htmlFor="earlier-note">
@@ -3207,6 +3246,7 @@ export default function Home() {
                         <textarea
                           id="earlier-note"
                           rows={5}
+                          readOnly={hostedCompareBusy}
                           placeholder="Enter example note text"
                           value={earlierNoteText}
                           onChange={(e) => {
@@ -3229,6 +3269,7 @@ export default function Home() {
                         <textarea
                           id="later-note"
                           rows={5}
+                          readOnly={hostedCompareBusy}
                           placeholder="Enter example note text"
                           value={laterNoteText}
                           onChange={(e) => {
@@ -3246,13 +3287,14 @@ export default function Home() {
                     </div>
 
                     <div className="extract-actions">
-                      <button className="btn primary" type="submit">
-                        Compare notes
+                      <button className="btn primary" type="submit" disabled={hostedCompareBusy}>
+                        {hostedCompareBusy ? 'Comparing…' : 'Compare notes'}
                       </button>
                       <button
                         className="btn quiet"
                         type="button"
                         id="extraction-example"
+                        disabled={hostedCompareBusy}
                         onClick={handleLoadExample}
                       >
                         Load example
@@ -3261,6 +3303,7 @@ export default function Home() {
                         className="btn quiet"
                         type="button"
                         id="extraction-reset"
+                        disabled={hostedCompareBusy}
                         onClick={handleClearNotes}
                       >
                         Clear notes
