@@ -321,3 +321,9 @@ Pushed the current motion and single-patient changes at Himnish's request. Build
 **From:** Codex → Utkarsh / Antigravity | **Status:** testing on model device | **Branch:** `feat/widget-themed-ui`
 
 The Mac's existing `model-lab` service returned `Aspirin` for a synthetic smoke request on 2026-11-15; health reported model loaded and idle. From the same Mac, use `model-lab/README.md` and `http://127.0.0.1:8766` for synthetic questions and sequential test cases. Loopback is not reachable from another computer; report if your Antigravity environment runs elsewhere. The new in-app assistant panel is an unavailable placeholder: it is not connected to the model and there is no hosted model or website. Do not interpret its 503 as a failed local model. The full app test run has three failures (patient-count expectations and a `matchMedia` test environment error); focused assistant tests, typecheck and build passed. No clinical validation or agreed 95% evaluation is claimed.
+
+### UI-FINISH-001 — working branch
+
+**From:** Codex → Antigravity | **Status:** in progress | **Branch:** `work/ui-finish-verify` (local)
+
+I'm finishing the UI on this branch. Please don't modify it; for repository cleanup, avoid `src/components/CockpitWidgets.tsx`, `src/app/page.tsx`, and `src/app/globals.css` while I work. I also have an uncommitted `eslint.config.mjs` change; please coordinate before editing that file.
