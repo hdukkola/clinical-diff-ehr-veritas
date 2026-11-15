@@ -91,9 +91,16 @@ def main():
     parser.add_argument("--adapter", type=Path)
     parser.add_argument("--adapter-sha256")
     parser.add_argument("--cases", type=Path, default=Path(__file__).with_name("private-medication-holdout.jsonl"))
+    parser.add_argument("--system-prompt-addendum", type=Path)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     started = datetime.now(timezone.utc).isoformat()
+    system_prompt = SYSTEM
+    if args.system_prompt_addendum:
+        addendum = args.system_prompt_addendum.read_text(encoding="utf-8").strip()
+        if not addendum:
+            parser.error("--system-prompt-addendum must contain text")
+        system_prompt = f"{SYSTEM}\n\n{addendum}"
     if args.base.name != args.revision:
         parser.error("--base must be the pinned snapshot directory matching --revision")
     if bool(args.adapter) != bool(args.adapter_sha256):
@@ -116,7 +123,7 @@ def main():
     results = []
     for case in cases:
         prompt = tokenizer.apply_chat_template(
-            [{"role": "system", "content": SYSTEM}, {"role": "user", "content": case["note"]}],
+            [{"role": "system", "content": system_prompt}, {"role": "user", "content": case["note"]}],
             tokenize=False, add_generation_prompt=True, enable_thinking=False,
         )
         start = perf_counter()
@@ -157,6 +164,8 @@ def main():
         "inference": {"thinking": False, "temperature": 0, "max_tokens": MAX_TOKENS},
         "summary": summary, "results": results,
     }
+    if args.system_prompt_addendum:
+        report["inference"]["system_prompt_sha256"] = sha256(system_prompt.encode("utf-8")).hexdigest()
     with args.output.open("x") as output:
         json.dump(report, output, indent=2)
         output.write("\n")
