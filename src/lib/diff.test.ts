@@ -8,6 +8,7 @@ import {
   compareSnapshots,
   EVIDENCE_STATE_LABELS,
   normalizeNoteText,
+  searchChartRecords,
 } from './diff';
 import { earlier as fixtureEarlier, later as fixtureLater } from './fixtures';
 import type { EvidenceLink, Medication, Snapshot } from './types';
@@ -701,5 +702,30 @@ describe('compareNoteRegimens & normalizeNoteText', () => {
       '2026-10-15',
     ]);
     expect(timeline.dated.map((d) => d.kind)).toEqual(['note', 'encounter', 'change']);
+  });
+
+  it('searches synthetic notes, snapshot diffs, and evidence links with source labels', () => {
+    const report = analyzeSnapshots(fixtureEarlier, fixtureLater);
+    const matches = searchChartRecords({
+      query: 'Lisinopril',
+      earlierNoteLabel: 'Earlier note',
+      earlierNoteText: 'Outpatient list: Lisinopril 10 mg daily.',
+      laterNoteLabel: 'Discharge note',
+      laterNoteText: 'Discharge list: Lisinopril 20 mg daily.',
+      earlierSnapshot: fixtureEarlier,
+      laterSnapshot: fixtureLater,
+      report,
+    });
+
+    expect(matches.some((m) => m.sourceKind === 'earlier_note' && m.sourceLabel === 'Earlier note · Earlier note')).toBe(true);
+    expect(matches.some((m) => m.sourceKind === 'later_note' && m.sourceLabel === 'Later note · Discharge note')).toBe(true);
+    expect(
+      matches.some(
+        (m) =>
+          m.sourceKind === 'medication_diff' &&
+          m.medicationId === 'm1' &&
+          m.sourceLabel.includes('Medication diff'),
+      ),
+    ).toBe(true);
   });
 });

@@ -19,6 +19,8 @@ import {
   compareSnapshots,
   EVIDENCE_STATE_LABELS,
   normalizeNoteText,
+  searchChartRecords,
+  type ChartSearchMatch,
   type NoteRegimenChangeCategory,
 } from '@/lib/diff';
 import { BRAND_NAME } from '@/lib/branding';
@@ -946,6 +948,8 @@ export default function Home() {
   const [selectedMedId, setSelectedMedId] = useState<string | null>(null);
   const [evidenceReturnMedId, setEvidenceReturnMedId] = useState<string | null>(null);
   const [activeCitationByMed, setActiveCitationByMed] = useState<Record<string, number>>({});
+  const [chartSearchQuery, setChartSearchQuery] = useState('');
+  const chartSearchInputRef = useRef<HTMLInputElement | null>(null);
   const [reviews, setReviews] = useState<Record<string, ReviewDecision>>({});
   const [notes, setNotes] = useState<Record<string, string>>({});
 
@@ -1009,6 +1013,32 @@ export default function Home() {
   const encounterTimeline = useMemo(
     () => buildEncounterTimeline(activeScenario.earlier, activeScenario.later, activeReport),
     [activeReport, activeScenario.earlier, activeScenario.later],
+  );
+
+  const chartSearchMatches = useMemo(
+    () =>
+      searchChartRecords({
+        query: chartSearchQuery,
+        earlierNoteLabel,
+        earlierNoteText,
+        laterNoteLabel,
+        laterNoteText,
+        earlierSnapshot: activeScenario.earlier,
+        laterSnapshot: activeScenario.later,
+        report: activeReport,
+        extractResult: extractResult ? compareNoteRegimens(earlierNoteText, laterNoteText) : null,
+      }),
+    [
+      activeReport,
+      activeScenario.earlier,
+      activeScenario.later,
+      chartSearchQuery,
+      earlierNoteLabel,
+      earlierNoteText,
+      extractResult,
+      laterNoteLabel,
+      laterNoteText,
+    ],
   );
 
   const activeDbConn = useMemo(
@@ -1267,6 +1297,55 @@ export default function Home() {
         );
         item?.scrollIntoView?.({ block: 'nearest' });
       });
+    },
+    [activeScenario.id],
+  );
+
+  const openChartSearchMatch = useCallback(
+    (match: ChartSearchMatch) => {
+      setMobileNavOpen(false);
+      if (match.targetView === 'extract') {
+        setView('extract');
+        setAnnouncement(`Opened match from ${match.sourceLabel}`);
+        requestAnimationFrame(() => {
+          const targetId =
+            match.sourceKind === 'earlier_note'
+              ? 'note-earlier'
+              : match.sourceKind === 'later_note'
+                ? 'note-later'
+                : 'extract-results';
+          const el =
+            document.getElementById(targetId) ??
+            document.querySelector<HTMLElement>('.extract-hero h1');
+          el?.focus({ preventScroll: true });
+          el?.scrollIntoView?.({ block: 'nearest' });
+        });
+        return;
+      }
+
+      setView('diff');
+      setDiffTab('diff');
+      setDiffFilter('all');
+      if (match.medicationId) {
+        setSelectedMedId(match.medicationId);
+        setEvidenceReturnMedId(null);
+        if (match.citationIdx !== undefined) {
+          const citKey = `${activeScenario.id}:${match.medicationId}`;
+          setActiveCitationByMed((curr) => ({ ...curr, [citKey]: match.citationIdx! }));
+        }
+        setAnnouncement(`Opened match for ${match.title} from ${match.sourceLabel}`);
+        requestAnimationFrame(() => {
+          const evidenceEl = document.querySelector<HTMLElement>(
+            `.entry[data-value="${CSS.escape(match.medicationId!)}"] .evidence-block`,
+          );
+          const rowEl = document.querySelector<HTMLElement>(
+            `.entry-trigger[data-value="${CSS.escape(match.medicationId!)}"]`,
+          );
+          const target = evidenceEl ?? rowEl;
+          target?.focus({ preventScroll: true });
+          target?.scrollIntoView?.({ block: 'nearest' });
+        });
+      }
     },
     [activeScenario.id],
   );
@@ -2524,6 +2603,65 @@ export default function Home() {
                   {activeScenario.earlier.recordedAt ?? 'Undated'}) → Later:{' '}
                   {activeScenario.later.source} ({activeScenario.later.recordedAt ?? 'Undated'})
                 </span>
+              </div>
+              <div className="chart-search" role="search" aria-label="Chart search">
+                <div className="chart-search-row">
+                  <input
+                    ref={chartSearchInputRef}
+                    type="search"
+                    className="chart-search-input"
+                    aria-label="Search synthetic notes and results"
+                    placeholder="Search notes & results (e.g. Lisinopril, 20 mg, Aspirin)…"
+                    value={chartSearchQuery}
+                    onChange={(e) => setChartSearchQuery(e.target.value)}
+                  />
+                  {chartSearchQuery.trim().length > 0 && (
+                    <button
+                      type="button"
+                      className="chart-search-clear"
+                      onClick={() => {
+                        setChartSearchQuery('');
+                        chartSearchInputRef.current?.focus();
+                      }}
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+                {chartSearchQuery.trim().length > 0 && (
+                  <div className="chart-search-results" aria-live="polite">
+                    {chartSearchMatches.length === 0 ? (
+                      <p className="nd">
+                        No matches found in synthetic notes or results for &ldquo;
+                        {chartSearchQuery.trim()}&rdquo;.
+                      </p>
+                    ) : (
+                      <ul
+                        className="chart-search-list"
+                        aria-label="Chart search matches"
+                      >
+                        {chartSearchMatches.map((match) => (
+                          <li key={match.id} className="chart-search-item">
+                            <button
+                              type="button"
+                              className="chart-search-btn"
+                              onClick={() => openChartSearchMatch(match)}
+                            >
+                              <span className="chart-search-meta">
+                                <span className="e-tag">{match.sourceLabel}</span>
+                                {match.recordedAt && (
+                                  <span className="e-tag mono">{match.recordedAt}</span>
+                                )}
+                                <strong className="chart-search-title">{match.title}</strong>
+                              </span>
+                              <span className="chart-search-snippet">{match.snippet}</span>
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                )}
               </div>
             </section>
             <AssistantPanel

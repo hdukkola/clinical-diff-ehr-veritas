@@ -1578,3 +1578,181 @@ export function buildEncounterTimeline(
 
   return { dated, undated };
 }
+
+export type ChartSearchSourceKind =
+  | 'earlier_note'
+  | 'later_note'
+  | 'earlier_snapshot'
+  | 'later_snapshot'
+  | 'medication_diff'
+  | 'evidence_link';
+
+export interface ChartSearchMatch {
+  id: string;
+  sourceKind: ChartSearchSourceKind;
+  sourceLabel: string;
+  recordedAt: string | null;
+  title: string;
+  snippet: string;
+  targetView: 'extract' | 'diff';
+  medicationId?: string;
+  citationIdx?: number;
+}
+
+export interface SearchChartParams {
+  query: string;
+  earlierNoteLabel: string;
+  earlierNoteText: string;
+  laterNoteLabel: string;
+  laterNoteText: string;
+  earlierSnapshot: Snapshot;
+  laterSnapshot: Snapshot;
+  report: Pick<SnapshotComparisonReport, 'changes'>;
+  extractResult?: NoteRegimenComparisonReport | null;
+}
+
+function extractMatchSnippet(text: string, queryLower: string, maxLen = 110): string {
+  const idx = text.toLowerCase().indexOf(queryLower);
+  if (idx < 0) return text.slice(0, maxLen);
+  if (text.length <= maxLen) return text;
+  const half = Math.floor((maxLen - queryLower.length) / 2);
+  const start = Math.max(0, idx - half);
+  const end = Math.min(text.length, start + maxLen);
+  const prefix = start > 0 ? '…' : '';
+  const suffix = end < text.length ? '…' : '';
+  return `${prefix}${text.slice(start, end).trim()}${suffix}`;
+}
+
+/**
+ * Search across synthetic notes, structured snapshots, diff changes, and
+ * cited evidence links, returning source-labeled matches with jump targets.
+ */
+export function searchChartRecords(params: SearchChartParams): ChartSearchMatch[] {
+  const trimmed = params.query.trim();
+  if (!trimmed) return [];
+  const q = trimmed.toLowerCase();
+  const matches: ChartSearchMatch[] = [];
+
+  if (params.earlierNoteText.toLowerCase().includes(q)) {
+    matches.push({
+      id: 'match-earlier-note',
+      sourceKind: 'earlier_note',
+      sourceLabel: `Earlier note · ${params.earlierNoteLabel}`,
+      recordedAt: normalizeOptionalText(params.earlierSnapshot.recordedAt),
+      title: params.earlierNoteLabel,
+      snippet: extractMatchSnippet(params.earlierNoteText, q),
+      targetView: 'extract',
+    });
+  }
+
+  if (params.laterNoteText.toLowerCase().includes(q)) {
+    matches.push({
+      id: 'match-later-note',
+      sourceKind: 'later_note',
+      sourceLabel: `Later note · ${params.laterNoteLabel}`,
+      recordedAt: normalizeOptionalText(params.laterSnapshot.recordedAt),
+      title: params.laterNoteLabel,
+      snippet: extractMatchSnippet(params.laterNoteText, q),
+      targetView: 'extract',
+    });
+  }
+
+  if (params.extractResult) {
+    for (const item of params.extractResult.items) {
+      const searchable = [
+        item.medicationName,
+        item.statusLabel,
+        ...item.changeCategories,
+        item.earlierExcerpt ?? '',
+        item.laterExcerpt ?? '',
+      ]
+        .join(' ')
+        .trim();
+      if (searchable.toLowerCase().includes(q)) {
+        matches.push({
+          id: `match-extract-${item.normalizedName}`,
+          sourceKind: 'medication_diff',
+          sourceLabel: 'Compare notes result',
+          recordedAt: null,
+          title: `${item.medicationName} (${item.statusLabel})`,
+          snippet: extractMatchSnippet(searchable, q),
+          targetView: 'extract',
+        });
+      }
+    }
+  }
+
+  const matchedDiffMedIds = new Set<string>();
+  for (const change of params.report.changes) {
+    const fieldSummary = change.fields
+      .map((f) => `${f.field}: ${f.before ?? 'Not documented'} → ${f.after ?? 'Not documented'}`)
+      .join(' · ');
+    const diffText = `${change.name} ${change.kind} ${fieldSummary}`.trim();
+    if (diffText.toLowerCase().includes(q)) {
+      matchedDiffMedIds.add(change.medicationId);
+      matches.push({
+        id: `match-diff-${change.medicationId}`,
+        sourceKind: 'medication_diff',
+        sourceLabel: `Medication diff · ${params.laterSnapshot.source}`,
+        recordedAt: normalizeOptionalText(params.laterSnapshot.recordedAt),
+        title: `${change.name} (${change.kind})`,
+        snippet: extractMatchSnippet(fieldSummary || diffText, q),
+        targetView: 'diff',
+        medicationId: change.medicationId,
+      });
+    }
+
+    (change.evidenceLinks ?? []).forEach((link, idx) => {
+      const linkText = [
+        link.excerpt ?? '',
+        link.note ?? '',
+        link.sourceLabel ?? '',
+        link.section ?? '',
+      ]
+        .join(' ')
+        .trim();
+      if (linkText && linkText.toLowerCase().includes(q)) {
+        matches.push({
+          id: `match-ev-${change.medicationId}-${idx}`,
+          sourceKind: 'evidence_link',
+          sourceLabel: `Evidence · ${
+            link.sourceLabel ??
+            (link.side === 'earlier'
+              ? params.earlierSnapshot.source
+              : params.laterSnapshot.source)
+          }`,
+          recordedAt: normalizeOptionalText(link.recordedAt),
+          title: `${change.name} · citation ${idx + 1}`,
+          snippet: extractMatchSnippet(link.excerpt ?? linkText, q),
+          targetView: 'diff',
+          medicationId: change.medicationId,
+          citationIdx: idx,
+        });
+      }
+    });
+  }
+
+  for (const [kind, snap, labelPrefix] of [
+    ['earlier_snapshot', params.earlierSnapshot, 'Earlier snapshot'] as const,
+    ['later_snapshot', params.laterSnapshot, 'Later snapshot'] as const,
+  ]) {
+    for (const m of snap.medications) {
+      if (matchedDiffMedIds.has(m.id)) continue;
+      const medText = [m.name, m.dose ?? '', m.route ?? '', m.frequency ?? ''].join(' ').trim();
+      if (medText.toLowerCase().includes(q)) {
+        matches.push({
+          id: `match-${kind}-${m.id}`,
+          sourceKind: kind,
+          sourceLabel: `${labelPrefix} · ${snap.source}`,
+          recordedAt: normalizeOptionalText(snap.recordedAt),
+          title: m.name,
+          snippet: extractMatchSnippet(medText, q),
+          targetView: 'diff',
+          medicationId: m.id,
+        });
+      }
+    }
+  }
+
+  return matches;
+}

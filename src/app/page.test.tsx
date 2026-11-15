@@ -1349,4 +1349,35 @@ describe('Clinical Diff Veritas Editorial UI', () => {
     expect(contextBar).toHaveTextContent('Morgan Lee (Synthetic)');
     expect(contextBar).toHaveTextContent('DEMO-001');
   });
+
+  it('searches synthetic notes and results, labels sources, and opens the exact match', async () => {
+    const user = userEvent.setup();
+    render(<Home />);
+
+    const searchRegion = screen.getByRole('search', { name: 'Chart search' });
+    const searchInput = within(searchRegion).getByRole('searchbox', {
+      name: 'Search synthetic notes and results',
+    });
+
+    await user.type(searchInput, 'Atorvastatin');
+
+    const matchList = within(searchRegion).getByRole('list', { name: 'Chart search matches' });
+    expect(matchList).toHaveTextContent('Later note · Discharge note');
+    expect(matchList).toHaveTextContent('Medication diff · Fictional discharge medication list');
+
+    // Open the exact Snapshot diff match for Atorvastatin
+    const diffMatchBtn = within(matchList).getByRole('button', {
+      name: /Medication diff.*Atorvastatin/i,
+    });
+    await user.click(diffMatchBtn);
+
+    const evidenceRegion = screen.getByLabelText('Evidence and provenance for Atorvastatin');
+    await waitFor(() => expect(evidenceRegion).toHaveFocus());
+
+    // Clear search returns focus to the search input
+    const clearBtn = within(searchRegion).getByRole('button', { name: 'Clear' });
+    await user.click(clearBtn);
+    expect(searchInput).toHaveValue('');
+    expect(searchInput).toHaveFocus();
+  });
 });
