@@ -237,3 +237,23 @@ To run Himnish's trained Apple MLX model/adapter inside the Next.js Veritas Edit
 
 3. **Option 3 (Static/frozen evaluation outputs for UI demo):**
    - Run the trained Mac model against the 8 `hfNoteComparisonPairs` in `src/lib/hf-fixtures.ts` and commit the resulting JSON predictions (like `fresh-eval/development-results.json`, text/JSON only — no weights, no PHI) so the UI can also display verified recorded model outputs offline.
+
+### LIVE-MODEL-002 — Option 1 Confirmed: Qwen3.5-4B-4bit Now, Swap to Trained 35B QLoRA When Ready
+
+**From:** Antigravity (Utkarsh's session) | **To:** Codex / Himnish's Mac session | **Status:** decision confirmed — ready for Mac setup | **Timestamp:** 2026-11-14T20:50:26-06:00
+
+Team decision: **Option 1 (live Mac inference via private tunnel)** is selected. Use **`Qwen3.5-4B-4bit`** now, and **replace it with the 35B QLoRA model** once Himnish's 35B training on the Mac finishes and passes evaluation.
+
+#### Detailed Instructions for Codex (Himnish's Mac)
+
+1. **Phase A — Serve `Qwen3.5-4B-4bit` Now:**
+   - Start `fresh-backend/service.py` on the Mac using `mlx-community/Qwen3.5-4B-4bit` (revision `0e7ffd5c629ef7719d4cbc04069232580bfa9d9c`).
+   - Expose the loopback port via a private tunnel (`cloudflared tunnel --url http://127.0.0.1:<port>`, `ngrok`, or Tailscale) and share the tunnel URL privately with Utkarsh (**never** commit tunnel URLs, tokens, or weights to GitHub).
+   - Ensure `GET /health` returns `{ "status": "ok", "mode": "local_mlx", "simulated": false, "model": "mlx-community/Qwen3.5-4B-4bit" }` and `POST /compare` accepts `{ "earlier_note": { "source_id", "text" }, "later_note": { "source_id", "text" } }`.
+
+2. **Phase B — Swap in the Trained 35B QLoRA Model (Zero UI Changes Needed):**
+   - Once the 35B QLoRA run completes and passes `python3 -m mlx_runner.evaluate_foreground "$RUN_DIR"` (and Himnish approves promotion):
+   - Parameterize `fresh-backend/service.py` (`LocalModel`) with `MLX_MODEL_ID` (default `mlx-community/Qwen3.5-4B-4bit`, set to the 35B base snapshot path/ID) and `MLX_ADAPTER_PATH` (path to the trained 35B `adapters.safetensors` directory on the Mac), passing `adapter_path=os.environ.get("MLX_ADAPTER_PATH")` to `mlx_lm.load(...)`.
+   - Keep `GET /health` and `POST /compare` response schemas identical, updating `"model"` in `/health` to reflect the active 35B + adapter identifier.
+   - Restart `fresh-backend/service.py` on the same tunneled port — the Next.js UI (`src/app/api/compare/route.ts` → `CLINICAL_DIFF_BACKEND_URL`) will automatically switch from `Qwen3.5-4B-4bit` to the 35B model without any frontend code changes.
+   - Run `python3 -m unittest discover -s fresh-backend -p "test_*.py" -v` (23+ tests) and smoke-test `POST /compare` on a synthetic note pair before announcing the swap in `COMMUNICATION.md`.
