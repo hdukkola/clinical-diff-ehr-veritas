@@ -443,6 +443,23 @@ function formatQuoteSnippetText(q: QuoteSnippet): string {
   return `${q.hasLeadingEllipsis ? '…' : ''}${q.prefix}${q.match}${q.suffix}${q.hasTrailingEllipsis ? '…' : ''}`;
 }
 
+function NoteEvidenceExcerpts({ difference }: { difference: MentionDifference }) {
+  const excerpts = [
+    difference.earlierExcerpt ?? (difference.kind === 'earlier_only' && difference.quotes[0]
+      ? formatQuoteSnippetText(difference.quotes[0]) : null),
+    difference.laterExcerpt ?? (difference.kind === 'later_only' && difference.quotes[0]
+      ? formatQuoteSnippetText(difference.quotes[0]) : null),
+  ];
+  return (
+    <dl className="note-evidence-excerpts">
+      <dt>Earlier note</dt>
+      <dd>{excerpts[0] || 'Source unavailable'}</dd>
+      <dt>Later note</dt>
+      <dd>{excerpts[1] || 'Source unavailable'}</dd>
+    </dl>
+  );
+}
+
 function downloadTextFile(filename: string, content: string, mimeType: string): void {
   try {
     const blob = new Blob([content], { type: mimeType });
@@ -959,6 +976,7 @@ function Workspace({ session }: { session: ReturnType<typeof useCloudSession> })
   } | null>(null);
   const [sessionNoteReviews, setNoteReviewDecisions] = useState<Record<string, NoteReviewDecision>>({});
   const [noteReviewError, setNoteReviewError] = useState('');
+  const [noteEvidenceReturn, setNoteEvidenceReturn] = useState<string | null>(null);
   const [comparisonDrafts, setComparisonDrafts] = useState(() => new Map<string, {
     earlier: string;
     later: string;
@@ -1054,6 +1072,7 @@ function Workspace({ session }: { session: ReturnType<typeof useCloudSession> })
     ? sessionNoteReviews : Object.fromEntries(JSON.parse(savedNoteReviews)), [cloudUser, isDemoPatient, savedNoteReviews, sessionNoteReviews]);
   const setExtractResult = useCallback((result: NoteComparisonResult | null, version: string | null = null) => {
     setNoteReviewError('');
+    setNoteEvidenceReturn(null);
     setCompletedComparison(result ? {
       patientId: activeScenario.id, result, reviewVersion: version, earlier: earlierNoteText, later: laterNoteText,
     } : null);
@@ -1302,6 +1321,7 @@ function Workspace({ session }: { session: ReturnType<typeof useCloudSession> })
     setWidgetEditPage(undefined);
     setSelectedMedId(null);
     setEvidenceReturn(null);
+    setNoteEvidenceReturn(null);
     setMobileNavOpen(false);
     setPaletteMenuOpen(false);
     setAnnouncement(`Navigated to ${VIEW_NAMES[nextView]}`);
@@ -2602,9 +2622,9 @@ function Workspace({ session }: { session: ReturnType<typeof useCloudSession> })
   const serviceStatus = socketReady === 'live' ? 'Connected' : socketStatus.configured && !socketStatus.reachable ? 'Unavailable' : 'Standby';
   const outsideCount = activeScenario.externalRecords?.length ?? 0;
 
-  function focusSection(id: string) {
+  function focusSection(id: string, fallbackId?: string) {
     requestAnimationFrame(() => {
-      const element = document.getElementById(id);
+      const element = document.getElementById(id) ?? (fallbackId ? document.getElementById(fallbackId) : null);
       if (!element) return;
       const focusTarget = element.matches('input, textarea, select, button, [tabindex]')
         ? element
@@ -2673,10 +2693,23 @@ function Workspace({ session }: { session: ReturnType<typeof useCloudSession> })
   function caseMetric(id: string, savedTitle?: string): WorkspaceWidget {
     const card = caseCatalog.get(id);
     if (!card) throw new Error(`Unknown workspace widget: ${id}`);
-    const rows = id === 'difference-list' ? card.rows?.slice(0, 3) : undefined;
+    const rows = id === 'difference-list' && card.state === 'ready' ? extractResult?.differences.slice(0, 3) : undefined;
     const detail = rows?.length ? <>
-      <ul className="widget-medications">
-        {rows.map((row) => <li key={row.id}>{row.label}</li>)}
+      <ul className="widget-evidence">
+        {rows.map((row) => {
+          const target = encodeURIComponent(row.key);
+          return (
+            <li key={row.key}>
+              <button type="button" className="btn quiet" id={`widget-evidence-${target}`}
+                aria-label={`View source evidence for ${row.name}`} onClick={() => {
+                  navigateTo('extract', false);
+                  setNoteEvidenceReturn(row.key);
+                  focusSection(`comparison-evidence-${target}`, 'extraction-result-title');
+                }}>{row.name}</button>
+              <NoteEvidenceExcerpts difference={row} />
+            </li>
+          );
+        })}
       </ul>
       {(card.rows?.length ?? 0) > rows.length && <p>Open comparison for the full list.</p>}
     </> : card.detail;
@@ -3597,7 +3630,8 @@ function Workspace({ session }: { session: ReturnType<typeof useCloudSession> })
                           {extractResult.differences.map((entry) => {
                             const dec = noteReviewDecisions[entry.key] ?? null;
                             return (
-                              <li key={entry.key}>
+                              <li key={entry.key} id={`comparison-evidence-${encodeURIComponent(entry.key)}`}
+                                tabIndex={-1} aria-label={`Source evidence for ${entry.name}`}>
                                 <div className="extract-row-title">
                                   <strong>{entry.name}</strong>
                                   <span>{entry.statusLabel ?? `${entry.label} only`}</span>
@@ -3629,7 +3663,7 @@ function Workspace({ session }: { session: ReturnType<typeof useCloudSession> })
                                     {entry.absenceNote}
                                   </p>
                                 )}
-                                {entry.quotes.map((q) => (
+                                {isDemoPatient ? entry.quotes.map((q) => (
                                   <blockquote key={q.key}>
                                     {q.hasLeadingEllipsis ? '…' : ''}
                                     {q.prefix}
@@ -3637,7 +3671,13 @@ function Workspace({ session }: { session: ReturnType<typeof useCloudSession> })
                                     {q.suffix}
                                     {q.hasTrailingEllipsis ? '…' : ''}
                                   </blockquote>
-                                ))}
+                                )) : <NoteEvidenceExcerpts difference={entry} />}
+                                {noteEvidenceReturn === entry.key && (
+                                  <button type="button" className="btn quiet" onClick={() => {
+                                    navigateTo('diff', false);
+                                    focusSection(`widget-evidence-${encodeURIComponent(entry.key)}`, 'case-snapshot-heading');
+                                  }}>Return to Snapshot review</button>
+                                )}
                                 <div
                                   className="extract-review-controls"
                                   role="group"
@@ -3719,7 +3759,7 @@ function Workspace({ session }: { session: ReturnType<typeof useCloudSession> })
             {/* ==================== SNAPSHOT REVIEW ==================== */}
             {view === 'diff' && !isDemoPatient && !patientRequired && (
               <section aria-label="Snapshot review">
-                <h1 className="h1" ref={headingRef} tabIndex={-1}>{patientName}</h1>
+                <h1 id="case-snapshot-heading" className="h1" ref={headingRef} tabIndex={-1}>{patientName}</h1>
                 <p className="lede">{extractResult
                   ? `${noteDiffCount} medication differences and ${noteDecidedCount} review decisions in the current comparison.`
                   : 'Compare an earlier and a later note to review the medication differences.'}</p>

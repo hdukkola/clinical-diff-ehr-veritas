@@ -161,6 +161,52 @@ describe('Clinical Diff Veritas Editorial UI', () => {
     }
   });
 
+  it('opens exact case evidence from a medication control and returns focus to that control', async () => {
+    const user = userEvent.setup();
+    vi.stubEnv('NEXT_PUBLIC_CLINICAL_DIFF_EXAMPLE_WORKSPACE', '0');
+    const digest = vi.spyOn(globalThis.crypto, 'subtle', 'get').mockReturnValue(webcrypto.subtle as SubtleCrypto);
+    const network = vi.spyOn(globalThis, 'fetch').mockResolvedValue(Response.json({}));
+    const caseKey = 'diffmd-case-v1:LOCAL-AAAAAAAAAAAA';
+    localStorage.setItem(caseKey, 'Case QA evidence');
+    localStorage.setItem(`${caseKey}:earlier`, 'Lisinopril 10 mg daily\nAspirin 81 mg daily');
+    localStorage.setItem(`${caseKey}:later`, 'Lisinopril 20 mg daily');
+    try {
+      render(<Home />);
+      const main = within(screen.getByRole('main'));
+      await user.click(within(getPatientsGroup()).getByRole('button', { name: /^Case QA evidence/ }));
+      await openCompare(user);
+      await user.click(main.getByRole('button', { name: 'Compare notes' }));
+      await main.findByRole('region', { name: 'Mention differences' });
+      await openSnapshot(user);
+
+      const widget = main.getByRole('region', { name: 'Snapshot tools' })
+        .querySelector<HTMLElement>('[data-page-widget="Comparison items"]')!;
+      const medication = within(widget).getByRole('button', { name: 'View source evidence for Lisinopril' });
+      expect(medication.parentElement).toHaveTextContent('Earlier noteLisinopril 10 mg dailyLater noteLisinopril 20 mg daily');
+      const aspirin = within(widget).getByRole('button', { name: 'View source evidence for Aspirin' });
+      expect(aspirin.parentElement).toHaveTextContent('Earlier noteAspirin 81 mg dailyLater noteSource unavailable');
+
+      medication.focus();
+      await user.keyboard('{Enter}');
+      const evidence = main.getByRole('listitem', { name: 'Source evidence for Lisinopril' });
+      await waitFor(() => expect(evidence).toHaveFocus());
+      expect(evidence).toHaveTextContent('Earlier noteLisinopril 10 mg dailyLater noteLisinopril 20 mg daily');
+      await user.click(within(evidence).getByRole('button', { name: 'Mark reviewed' }));
+      await user.click(within(evidence).getByRole('button', { name: 'Return to Snapshot review' }));
+      await waitFor(() => expect(main.getByRole('button', { name: 'View source evidence for Lisinopril' })).toHaveFocus());
+
+      await user.click(main.getByRole('button', { name: 'View source evidence for Aspirin' }));
+      const earlierOnly = main.getByRole('listitem', { name: 'Source evidence for Aspirin' });
+      await waitFor(() => expect(earlierOnly).toHaveFocus());
+      expect(earlierOnly).toHaveTextContent('Earlier noteAspirin 81 mg dailyLater noteSource unavailable');
+      expect(within(main.getByRole('listitem', { name: 'Source evidence for Lisinopril' }))
+        .getByRole('button', { name: 'Mark reviewed' })).toHaveAttribute('aria-pressed', 'true');
+    } finally {
+      digest.mockRestore();
+      network.mockRestore();
+    }
+  });
+
   it('starts meeting notes from the microphone and saves only the reviewed draft', async () => {
     vi.stubEnv('NEXT_PUBLIC_CLINICAL_DIFF_EXAMPLE_WORKSPACE', '0');
     vi.stubEnv('NEXT_PUBLIC_DIFFMD_RECORDING_TRANSCRIPTION', '1');
