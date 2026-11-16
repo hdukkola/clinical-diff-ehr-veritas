@@ -265,6 +265,7 @@ const BASE_MEDICATION_LEXICON = [
   'Tamsulosin',
   'Tramadol',
   'Vancomycin',
+  'Vitamin D',
   'Vitamin D3',
   'Warfarin',
   'Zolpidem',
