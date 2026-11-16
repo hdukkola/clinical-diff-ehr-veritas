@@ -260,6 +260,29 @@ describe('Clinical Diff Veritas Editorial UI', () => {
     expect(screen.getAllByText('Local standby').length).toBeGreaterThanOrEqual(2);
   });
 
+  it('shows a later-only Vitamin D mention with its source without matching unchanged Vitamin D3', async () => {
+    const user = userEvent.setup();
+    render(<Home />);
+    await openCompare(user);
+
+    const main = within(screen.getByRole('main'));
+    const unchanged = 'Vitamin D3 was listed in the medication history.';
+    const added = 'Vitamin D 1000 units by mouth daily.';
+    fireEvent.change(main.getByLabelText(/Earlier note/i), { target: { value: unchanged } });
+    fireEvent.change(main.getByLabelText(/Discharge note/i), {
+      target: { value: `${unchanged}\n${added}` },
+    });
+    await user.click(main.getByRole('button', { name: 'Compare notes' }));
+
+    const result = within(await main.findByRole('region', { name: 'Mention differences' }));
+    const vitaminDGroup = result.getByRole('group', { name: 'Review Vitamin D · discharge note' });
+    const vitaminDRow = vitaminDGroup.closest('li')!;
+    expect(vitaminDRow).toHaveTextContent('Vitamin D');
+    expect(vitaminDRow).toHaveTextContent('Mentioned only in later note');
+    expect(vitaminDRow).toHaveTextContent(added);
+    expect(result.queryByRole('group', { name: /Review Vitamin D3/i })).not.toBeInTheDocument();
+  });
+
   it('exports flagged discharge follow-ups as clinical-diff-follow-ups.txt and reflects changed or cleared flags', async () => {
     const user = userEvent.setup();
     const origCreateObjectURL = URL.createObjectURL;

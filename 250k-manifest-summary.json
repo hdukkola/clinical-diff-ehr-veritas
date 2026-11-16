@@ -28,9 +28,9 @@
       "exitCode": 0,
       "testFilesPassed": 25,
       "testFilesTotal": 25,
-      "testsPassed": 452,
-      "testsTotal": 452,
-      "durationSeconds": 24.76
+      "testsPassed": 453,
+      "testsTotal": 453,
+      "durationSeconds": 22.96
     },
     "prior75kAcceptanceSuites": {
       "branch": "feat/workspace-page-widgets-ag",

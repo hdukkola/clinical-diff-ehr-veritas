@@ -34,8 +34,8 @@
 
 - `npm run typecheck`: **Exit 0** (`next typegen && tsc --noEmit`, 0 errors)
 - `npm run lint`: **Exit 0** (`eslint`, 0 errors, 2 pre-existing warnings in `src/lib/eval-ai-25k.test.ts`)
-- `npm test`: **Exit 0** (`vitest run`, **25/25 test files passed**, **452/452 tests passed**, 0 failed, 0 skipped, duration `24.76s`)
-  - Includes all existing baseline + 75k+ suites (`eval-accuracy-25k.test.ts`, `eval-ai-25k.test.ts`, `security-pentest-25k.test.ts`, `app-features-50k.test.ts`, `diff-scale.test.ts`) and all 8 new 250k QA suites (`qa-250k-comparison-60k.test.ts`, `qa-250k-evidence-35k.test.ts`, `qa-250k-lifecycle-30k.test.ts`, `qa-250k-widgets-20k.test.ts`, `qa-250k-access-25k.test.ts`, `qa-250k-recorder-15k.test.ts`, `qa-250k-api-10k.test.ts`, `qa-250k-browser-900.test.tsx`).
+- `npm test`: **Exit 0** (`vitest run`, **25/25 test files passed**, **453/453 tests passed**, 0 failed, 0 skipped, duration `22.96s`)
+  - Includes all existing baseline + 75k+ suites (`eval-accuracy-25k.test.ts`, `eval-ai-25k.test.ts`, `security-pentest-25k.test.ts`, `app-features-50k.test.ts`, `diff-scale.test.ts`), the `BASE_MEDICATION_LEXICON` `'Vitamin D'` regression test in `src/app/page.test.tsx` (`28/28` tests passed), and all 8 new 250k QA suites (`qa-250k-comparison-60k.test.ts`, `qa-250k-evidence-35k.test.ts`, `qa-250k-lifecycle-30k.test.ts`, `qa-250k-widgets-20k.test.ts`, `qa-250k-access-25k.test.ts`, `qa-250k-recorder-15k.test.ts`, `qa-250k-api-10k.test.ts`, `qa-250k-browser-900.test.tsx`).
 
 ## Browser & Synthetic Presentation Case (`QA-001`) Verification
 

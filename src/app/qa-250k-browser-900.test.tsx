@@ -404,10 +404,24 @@ describe('qa-250k-browser-900: Rows 9, 10, and 11 (900 Viewport/Workflow checks,
       expect(resultSection).toHaveTextContent('Atorvastatin');
       expect(resultSection).toHaveTextContent('Vitamin D');
 
+      const vitaminDGroup = within(resultSection).getByRole('group', {
+        name: /Review Vitamin D · discharge note/i,
+      });
+      const vitaminDRow = vitaminDGroup.closest('li')!;
+      expect(vitaminDRow).toHaveTextContent('Vitamin D');
+      expect(vitaminDRow).toHaveTextContent('Mentioned only in later note');
+      expect(vitaminDRow).toHaveTextContent('Vitamin D 1000 units by mouth daily.');
+      expect(
+        within(resultSection).queryByRole('group', { name: /Review Vitamin D3/i }),
+      ).not.toBeInTheDocument();
+
       // Flag Atorvastatin for follow-up because it appears only in the earlier note
       const atorvastatinGroup = within(resultSection).getByRole('group', {
         name: /Review Atorvastatin · earlier note/i,
       });
+      const atorvastatinRow = atorvastatinGroup.closest('li')!;
+      expect(atorvastatinRow).toHaveTextContent('Atorvastatin');
+      expect(atorvastatinRow).toHaveTextContent('Mentioned only in earlier note');
       const clarifyBtn = within(atorvastatinGroup).getByRole('button', {
         name: 'Flag for clarification',
       });
