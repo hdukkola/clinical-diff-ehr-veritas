@@ -71,7 +71,12 @@ export function LiveMeetingNotes({ caseId, getToken, onUse, disabled }: {
     let captured = 0;
     let stopping = false;
     let finishing = false;
+    let serviceRejected = false;
     let draft = '';
+
+    function recordGap(offset: number) {
+      setGaps((current) => [...current, timestamp(offset)].sort());
+    }
 
     function closeMicrophone() {
       window.clearTimeout(limit);
@@ -144,7 +149,7 @@ export function LiveMeetingNotes({ caseId, getToken, onUse, disabled }: {
         const offset = captured * 1000 / rate;
         captured += data.length;
         if (pending >= maxPending || draft.length >= noteLimit) {
-          setGaps((current) => [...current, timestamp(offset)]);
+          recordGap(offset);
           setError('Capture stopped because the transcription queue or note reached its limit. Review the partial draft.');
           stop();
           return;
@@ -152,6 +157,10 @@ export function LiveMeetingNotes({ caseId, getToken, onUse, disabled }: {
         pending++;
         queued = queued.then(async () => {
           if (signal.aborted) return;
+          if (serviceRejected) {
+            recordGap(offset);
+            return;
+          }
           const token = await getToken();
           if (signal.aborted) return;
           const response = await fetch('/api/recording-transcription', {
@@ -160,19 +169,36 @@ export function LiveMeetingNotes({ caseId, getToken, onUse, disabled }: {
             body: await meetingWav(data, rate),
             signal: AbortSignal.any([signal, AbortSignal.timeout(49_000)]),
           });
+          if (signal.aborted) return;
+          if (!response.ok) {
+            void response.body?.cancel().catch(() => {});
+            if (response.status === 422) return;
+            if (response.status === 429 || response.status >= 500) throw new Error('Transcription temporarily unavailable.');
+            serviceRejected = true;
+            recordGap(offset);
+            setError(response.status === 401 || response.status === 403
+              ? 'Access to this case could no longer be verified. Recording stopped.'
+              : 'The transcription service rejected the recording. Review the partial draft.');
+            stop();
+            return;
+          }
           const result: unknown = await response.json();
-          if (signal.aborted || response.status === 422) return;
-          if (!response.ok || !isRecordingTranscript(result)) throw new Error('Could not transcribe this section.');
+          if (signal.aborted) return;
+          if (!isRecordingTranscript(result)) throw new Error('Could not transcribe this section.');
           const lines = result.segments.map((segment) => '[' + timestamp(offset + segment.startMs) + '] ' + segment.text);
           const next = [draft, ...lines].filter(Boolean).join('\n');
-          if (next.length > noteLimit) throw new Error('Meeting note reached its length limit.');
+          if (next.length > noteLimit) {
+            recordGap(offset);
+            setError('The meeting note reached its length limit. Review the partial draft.');
+            stop();
+            return;
+          }
           draft = next;
           setNote(draft);
         }).catch(() => {
           if (signal.aborted) return;
-          setGaps((current) => [...current, timestamp(offset)]);
-          setError('Some audio could not be transcribed. Review the partial draft.');
-          stop();
+          recordGap(offset);
+          setError((current) => current || 'Some audio could not be transcribed. Review the missing sections.');
         }).finally(() => { pending--; });
       };
       const interrupted = () => {
