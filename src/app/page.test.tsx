@@ -161,6 +161,28 @@ describe('Clinical Diff Veritas Editorial UI', () => {
     }
   });
 
+  it('shows a later-only Vitamin D mention with its source without matching unchanged Vitamin D3', async () => {
+    vi.stubEnv('NEXT_PUBLIC_CLINICAL_DIFF_EXAMPLE_WORKSPACE', '0');
+    const user = userEvent.setup();
+    render(<Home />);
+    await openCompare(user);
+    const main = within(screen.getByRole('main'));
+    await user.click(main.getByRole('button', { name: 'Add patient' }));
+    await user.type(main.getByRole('textbox', { name: 'Case reference' }), 'QA-VITAMIN-D');
+    await user.click(main.getByRole('button', { name: 'Create patient' }));
+    await openCompare(user);
+    const unchanged = 'Vitamin D3 was listed in the medication history.';
+    const added = 'Vitamin D 1000 units by mouth daily.';
+    fireEvent.change(main.getByRole('textbox', { name: 'Earlier note' }), { target: { value: unchanged } });
+    fireEvent.change(main.getByRole('textbox', { name: 'Later note' }), { target: { value: `${unchanged}\n${added}` } });
+    await user.click(main.getByRole('button', { name: 'Compare notes' }));
+    const result = within(await main.findByRole('region', { name: 'Mention differences' }));
+    const evidence = result.getByRole('listitem', { name: 'Source evidence for Vitamin D' });
+    expect(evidence).toHaveTextContent('Mentioned only in later note');
+    expect(evidence).toHaveTextContent(added);
+    expect(result.queryByRole('listitem', { name: 'Source evidence for Vitamin D3' })).not.toBeInTheDocument();
+  });
+
   it('opens exact case evidence from a medication control and returns focus to that control', async () => {
     const user = userEvent.setup();
     vi.stubEnv('NEXT_PUBLIC_CLINICAL_DIFF_EXAMPLE_WORKSPACE', '0');
