@@ -53,6 +53,7 @@ import { EncounterDocumentationNotice } from '@/components/EncounterDocumentatio
 import { EncounterNoteDraft } from '@/components/EncounterNoteDraft';
 import { ASPIRIN_TRANSCRIPT_LINK_ID, EncounterTranscript } from '@/components/EncounterTranscript';
 import { PatientChat, type ChatThreads } from '@/components/PatientChat';
+import { QwenModelTest } from '@/components/QwenModelTest';
 import { AssistantPanel } from '@/components/AssistantPanel';
 import { applyChartCorrections, chartCorrectionsFor, type ChartAspect, type ChartCorrection } from '@/lib/patient-chat';
 import { EncounterAudioNote } from '@/components/EncounterAudioNote';
@@ -3391,6 +3392,9 @@ function Workspace({ session }: { session: ReturnType<typeof useCloudSession> })
                   ...current, [chatChart.id]: { ...current[chatChart.id], [pageId]: value },
                 }))} />
             )}
+
+            {view === 'chat' && <QwenModelTest key={cloudUser ?? 'signed-out'} user={session.user}
+              authPending={session.pending} authError={session.error} signIn={() => void session.changeAccount(true)} />}
 
             {/* ==================== COMPARE NOTES (DEFAULT) ==================== */}
             {view === 'extract' && !patientRequired && (
