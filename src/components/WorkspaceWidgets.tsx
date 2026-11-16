@@ -2,6 +2,8 @@
 
 import { useCallback, useLayoutEffect, useRef, useState, useSyncExternalStore, type PointerEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
+import { getWidgetReviewProgress } from '@/lib/widget-review-progress';
+import progressStyles from './WorkspaceWidgetProgress.module.css';
 
 export type WorkspaceWidget = {
   title: string;
@@ -287,6 +289,7 @@ export function WorkspaceWidgets({
             const widget = catalog.get(id);
             if (!widget) return null;
             const { title: name, value, detail, action } = widget;
+            const progress = getWidgetReviewProgress(name, value, detail);
             return (
               <article key={id} className="page-widget" data-page-widget={id}
                 data-dragging={preview?.id === id || undefined}>
@@ -308,6 +311,14 @@ export function WorkspaceWidgets({
                     }}><span aria-hidden="true">⠿</span></button>}
                 </header>
                 {value != null && <div className="page-widget-value">{value}</div>}
+                {progress && <>
+                  <div className={progressStyles.track} role="progressbar" aria-label={`${name}: review decisions`}
+                    aria-valuemin={0} aria-valuemax={progress.total} aria-valuenow={progress.decided}
+                    aria-valuetext={`${progress.decided} of ${progress.total} differences have a decision; decisions can include clarification requests`}>
+                    <span className={progressStyles.fill} style={{ width: `${progress.decided / progress.total * 100}%` }} />
+                  </div>
+                  <div className={progressStyles.caption}>{progress.total - progress.decided} awaiting a decision</div>
+                </>}
                 {detail != null && <div className="page-widget-detail">{detail}</div>}
                 {action && (
                   <button type="button" className="page-widget-action" onClick={action.run}>
