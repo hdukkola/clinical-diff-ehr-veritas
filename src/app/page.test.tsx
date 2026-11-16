@@ -48,6 +48,43 @@ describe('Clinical Diff Veritas Editorial UI', () => {
 
   afterEach(() => vi.unstubAllEnvs());
 
+  it('renames a browser case without changing its notes, review, or identity', async () => {
+    vi.stubEnv('NEXT_PUBLIC_CLINICAL_DIFF_EXAMPLE_WORKSPACE', '0');
+    const user = userEvent.setup();
+    const id = 'LOCAL-AAAAAAAAAAAA';
+    const key = `diffmd-case-v1:${id}`;
+    localStorage.setItem(key, 'QA-001');
+    localStorage.setItem(`${key}:earlier`, 'Lisinopril 10 mg daily');
+    localStorage.setItem(`${key}:review:lisinopril`, 'version:reviewed');
+    const workspace = render(<Home />);
+    await user.click(within(getPatientsGroup()).getByRole('button', { name: /^QA-001/ }));
+    const edit = screen.getByRole('button', { name: 'Edit case reference' });
+    await user.click(edit);
+    const field = screen.getByRole('textbox', { name: 'Case reference' });
+    expect(field).toHaveFocus();
+    expect(field).toHaveValue('QA-001');
+    await user.clear(field);
+    await user.type(field, '   ');
+    await user.click(screen.getByRole('button', { name: 'Save reference' }));
+    expect(screen.getByRole('alert')).toHaveTextContent('Enter a case reference between 1 and 80 characters');
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    await waitFor(() => expect(edit).toHaveFocus());
+    expect(localStorage.getItem(key)).toBe('QA-001');
+
+    await user.click(edit);
+    const reopened = screen.getByRole('textbox', { name: 'Case reference' });
+    await user.clear(reopened);
+    await user.type(reopened, '  QA-002  ');
+    await user.click(screen.getByRole('button', { name: 'Save reference' }));
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'QA-002' })).toHaveFocus());
+    expect(localStorage.getItem(key)).toBe('QA-002');
+    expect(localStorage.getItem(`${key}:earlier`)).toBe('Lisinopril 10 mg daily');
+    expect(localStorage.getItem(`${key}:review:lisinopril`)).toBe('version:reviewed');
+    workspace.unmount();
+    render(<Home />);
+    expect(within(getPatientsGroup()).getByRole('button', { name: /^QA-002/ })).toBeVisible();
+  });
+
   it('removes only the selected browser case and prevents stale edits from restoring its stored data', async () => {
     const user = userEvent.setup();
     const removedId = 'LOCAL-AAAAAAAAAAAA';

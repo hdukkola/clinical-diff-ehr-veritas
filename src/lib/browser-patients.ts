@@ -48,6 +48,20 @@ export function createBrowserPatient(name: string): BrowserPatient | null {
   }
 }
 
+export function renameBrowserPatient(patient: BrowserPatient, name: string): boolean {
+  if (!patientIdPattern.test(patient.id)) return false;
+  try {
+    const storage = window.localStorage;
+    const key = prefix + patient.id;
+    if (storage.getItem(key) !== patient.name) return false;
+    storage.setItem(key, name);
+    window.dispatchEvent(new Event(changeEvent));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function removeBrowserPatient(id: string): boolean {
   if (!patientIdPattern.test(id)) return false;
   try {

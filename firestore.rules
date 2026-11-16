@@ -27,8 +27,11 @@ service cloud.firestore {
         && request.resource.data.version == 1
         && request.resource.data.earlier == '' && request.resource.data.later == '';
       allow update: if ownsWorkspace(uid) && validCase(id)
-        && request.resource.data.name == resource.data.name
-        && request.resource.data.version == resource.data.version + 1;
+        && (
+          (request.resource.data.name == resource.data.name
+            && request.resource.data.version == resource.data.version + 1)
+          || request.resource.data.diff(resource.data).affectedKeys() == ['name'].toSet()
+        );
       allow delete: if ownsWorkspace(uid) && id.matches('^SYNC-[A-F0-9]{32}$');
     }
   }

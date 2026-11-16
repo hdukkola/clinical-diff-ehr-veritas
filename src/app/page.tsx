@@ -35,6 +35,7 @@ import {
   readBrowserNoteReviews,
   readBrowserPatients,
   removeBrowserPatient,
+  renameBrowserPatient,
   saveBrowserNote,
   saveBrowserNoteReview,
   subscribeToPatients,
@@ -43,7 +44,7 @@ import {
 } from '@/lib/browser-patients';
 import {
   CLOUD_CASE_LIMIT, CloudCaseConflict, cloudWorkspaceEnabled, createCloudCase,
-  removeCloudCase, saveCloudCaseNotes, useCloudCases, useCloudSession, type CaseNotes,
+  removeCloudCase, renameCloudCase, saveCloudCaseNotes, useCloudCases, useCloudSession, type CaseNotes,
 } from '@/lib/cloud-workspace';
 import { BRAND_NAME } from '@/lib/branding';
 import { WorkspaceWidgets, type WorkspaceWidget } from '@/components/WorkspaceWidgets';
@@ -915,6 +916,8 @@ function Workspace({ session }: { session: ReturnType<typeof useCloudSession> })
   const [creatingPatient, setCreatingPatient] = useState(false);
   const [patientFormError, setPatientFormError] = useState('');
   const [patientRemovalError, setPatientRemovalError] = useState<{ id: string; message: string }>();
+  const [editingCase, setEditingCase] = useState<BrowserPatient>();
+  const [caseReferenceError, setCaseReferenceError] = useState('');
   const patientScenarios = useMemo(
     () => [
       ...(exampleWorkspace && !cloudUser ? [DEMO_PATIENT] : []),
@@ -1027,6 +1030,7 @@ function Workspace({ session }: { session: ReturnType<typeof useCloudSession> })
   const extractResultHeadingRef = useRef<HTMLHeadingElement>(null);
   const focusExtractResult = useRef(false);
   const railSearchRef = useRef<HTMLInputElement>(null);
+  const editReferenceRef = useRef<HTMLButtonElement>(null);
   const cmdInputRef = useRef<HTMLInputElement>(null);
   const canvasRef = useRef<HTMLElement>(null);
   const paletteWrapRef = useRef<HTMLDivElement>(null);
@@ -1039,6 +1043,8 @@ function Workspace({ session }: { session: ReturnType<typeof useCloudSession> })
   );
   const hasSelectedPatient = Boolean(activeScenario.id);
   const isDemoPatient = activeScenario.id === DEMO_PATIENT.id;
+  const editingCaseReference = view === 'patient' && editingCase?.id === activeScenario.id;
+  const canEditCaseReference = !cloudWrite && !hostedCompareBusy && (!cloudUser || cloud.connected);
   const getSavedEarlier = useCallback(
     () => isDemoPatient ? '' : readBrowserNote(activeScenario.id, 'earlier'),
     [activeScenario.id, isDemoPatient],
@@ -1175,6 +1181,10 @@ function Workspace({ session }: { session: ReturnType<typeof useCloudSession> })
   useEffect(() => {
     if (view === 'home' && creatingPatient) document.getElementById('new-patient-name')?.focus();
   }, [creatingPatient, view]);
+
+  useEffect(() => {
+    if (editingCaseReference) document.getElementById('edit-case-reference')?.focus();
+  }, [editingCaseReference]);
 
   useEffect(() => {
     if (focusHeadingNonce === 0) return;
@@ -1319,6 +1329,7 @@ function Workspace({ session }: { session: ReturnType<typeof useCloudSession> })
 
   const navigateTo = useCallback((nextView: ViewId, focusHeading = true) => {
     setView(nextView);
+    setEditingCase(undefined);
     setWidgetEditPage(undefined);
     setSelectedMedId(null);
     setEvidenceReturn(null);
@@ -1537,6 +1548,7 @@ function Workspace({ session }: { session: ReturnType<typeof useCloudSession> })
       setActiveExternalRecordId(null);
       setMobileNavOpen(false);
       setCreatingPatient(false);
+      setEditingCase(undefined);
       setView('patient');
       setAnnouncement(`Selected ${cleanPatientName(targetScenario.patientLabel)}`);
       setFocusHeadingNonce((n) => n + 1);
@@ -1588,6 +1600,49 @@ function Workspace({ session }: { session: ReturnType<typeof useCloudSession> })
     }
     setRailFilter('');
     openPatient(toPatientScenario(patient));
+  }
+
+  function showCaseReferenceForm() {
+    setCaseReferenceError('');
+    setEditingCase({ id: activeScenario.id, name: activeScenario.patientLabel });
+  }
+
+  async function saveCaseReference(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!editingCase || !editingCaseReference || !canEditCaseReference || cloudWritePending.current) return;
+    const name = String(new FormData(event.currentTarget).get('case-reference') ?? '').trim();
+    if (!name || name.length > 80) {
+      setCaseReferenceError('Enter a case reference between 1 and 80 characters.');
+      return;
+    }
+    if (name !== editingCase.name) {
+      if (cloudUser) {
+        cloudWritePending.current = true;
+        setCloudWrite(true);
+        try {
+          await renameCloudCase(cloudUser, editingCase, name);
+        } catch (error) {
+          setCaseReferenceError(error instanceof CloudCaseConflict
+            ? 'The case reference changed on another device. Cancel and reopen this form to use the latest reference.'
+            : 'Could not update the case reference. Check your connection and try again.');
+          return;
+        } finally {
+          cloudWritePending.current = false;
+          setCloudWrite(false);
+        }
+      } else if (!renameBrowserPatient(editingCase, name)) {
+        setCaseReferenceError('Could not update the case reference. Check the case is still open and browser storage is available.');
+        return;
+      }
+      setRailFilter('');
+      setAnnouncement('Case reference updated.');
+    }
+    setEditingCase(undefined);
+    requestAnimationFrame(() => {
+      if (selectedPatientRef.current === editingCase.id && editReferenceRef.current) {
+        headingRef.current?.focus({ preventScroll: true });
+      }
+    });
   }
 
   async function removePatient() {
@@ -3255,6 +3310,10 @@ function Workspace({ session }: { session: ReturnType<typeof useCloudSession> })
                   {view === 'patient' && !isDemoPatient && (
                     <div className="patient-create-actions">
                       <button type="button" className="btn primary" onClick={() => navigateTo('extract')}>Edit patient notes</button>
+                      <button type="button" className="btn quiet" ref={editReferenceRef}
+                        aria-expanded={editingCaseReference}
+                        disabled={!canEditCaseReference || editingCaseReference}
+                        onClick={showCaseReferenceForm}>Edit case reference</button>
                       <button type="button" className="btn quiet"
                         disabled={cloudWrite || hostedCompareBusy || Boolean(cloudUser && (!cloud.connected || cloudEditConflict))}
                         onClick={() => void removePatient()}>Remove patient</button>
@@ -3271,6 +3330,27 @@ function Workspace({ session }: { session: ReturnType<typeof useCloudSession> })
                 </header>
                 {view === 'patient' && patientRemovalError?.id === activeScenario.id &&
                   <p role="alert">{patientRemovalError.message}</p>}
+                {editingCaseReference && (
+                  <form className="patient-create-form" onSubmit={saveCaseReference} aria-labelledby="edit-case-reference-title">
+                    <h2 id="edit-case-reference-title" className="h2">Edit case reference</h2>
+                    <p id="edit-case-reference-help">Use a de-identified reference without a patient name or medical record number.</p>
+                    <label htmlFor="edit-case-reference">Case reference</label>
+                    <input id="edit-case-reference" name="case-reference" defaultValue={editingCase?.name}
+                      className="search" required maxLength={80} autoComplete="off" readOnly={cloudWrite}
+                      aria-describedby="edit-case-reference-help" aria-invalid={Boolean(caseReferenceError)}
+                      onChange={() => setCaseReferenceError('')} />
+                    {caseReferenceError && <p role="alert">{caseReferenceError}</p>}
+                    <div className="patient-create-actions">
+                      <button type="submit" className="btn primary" disabled={!canEditCaseReference}>
+                        {cloudWrite ? 'Saving…' : 'Save reference'}
+                      </button>
+                      <button type="button" className="btn quiet" disabled={cloudWrite} onClick={() => {
+                        setEditingCase(undefined);
+                        requestAnimationFrame(() => editReferenceRef.current?.focus());
+                      }}>Cancel</button>
+                    </div>
+                  </form>
+                )}
                 {view === 'patient' && cloudCase && session.user && process.env.NEXT_PUBLIC_DIFFMD_RECORDING_TRANSCRIPTION === '1' && (
                   <LiveMeetingNotes key={session.user.uid + '/' + cloudCase.id} uid={session.user.uid}
                     caseId={cloudCase.id} getToken={() => session.user!.getIdToken()}
