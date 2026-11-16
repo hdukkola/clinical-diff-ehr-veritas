@@ -508,11 +508,71 @@ const baseSyntheticScenarios: SyntheticScenario[] = [
   },
 ];
 
+export const qa001PresentationNotes = {
+  caseId: 'QA-001',
+  title: 'Synthetic presentation case (QA-001)',
+  earlierNote: [
+    'Medication review at the first visit.',
+    'Lisinopril 10 mg by mouth daily.',
+    'Metformin 500 mg by mouth twice daily.',
+    'Aspirin 81 mg by mouth daily.',
+    'Atorvastatin 20 mg by mouth nightly.',
+  ].join('\n'),
+  laterNote: [
+    'Medication review at follow-up.',
+    'Lisinopril 20 mg by mouth daily.',
+    'Metformin 500 mg by mouth twice daily.',
+    'Aspirin was discontinued.',
+    'Vitamin D 1000 units by mouth daily.',
+  ].join('\n'),
+  recordingScript: [
+    'Clinician: This is a fictional medication review for DiffMD. May I record this conversation for the demonstration?',
+    'Patient: Yes. My earlier list said lisinopril ten milligrams daily. The current list says twenty milligrams daily. My metformin is still five hundred milligrams twice daily.',
+    'Clinician: This note explicitly says aspirin was discontinued. It also lists vitamin D, one thousand units daily. The earlier list included atorvastatin, and the current note doesn’t mention it. We’ll flag that for follow-up.',
+    'Patient: That matches what I see in the two notes.',
+  ].join('\n'),
+} as const;
+
+export const qa001PresentationScenario: SyntheticScenario = {
+  id: 'scenario-qa-001-presentation',
+  patientId: 'QA-001',
+  patientLabel: 'Veritas Presentation Case (Synthetic • QA-001)',
+  title: 'First visit medication review to follow-up reconciliation (QA-001)',
+  summary:
+    'Synthetic presentation case QA-001: Lisinopril 10 mg to 20 mg daily, Metformin 500 mg twice daily unchanged, Aspirin 81 mg explicitly discontinued, Atorvastatin 20 mg nightly omitted for follow-up, and Vitamin D 1000 units daily added.',
+  category: 'baseline-reconciliation',
+  tags: ['presentation', 'qa-001', 'discontinuation', 'omission'],
+  earlier: {
+    id: 's-qa001-1',
+    source: 'Synthetic first visit medication review (QA-001)',
+    recordedAt: '2026-10-01',
+    medications: [
+      { id: 'qa001-m1', name: 'Lisinopril', dose: '10 mg', route: 'oral', frequency: 'daily' },
+      { id: 'qa001-m2', name: 'Metformin', dose: '500 mg', route: 'oral', frequency: 'twice daily' },
+      { id: 'qa001-m3', name: 'Aspirin', dose: '81 mg', route: 'oral', frequency: 'daily' },
+      { id: 'qa001-m4', name: 'Atorvastatin', dose: '20 mg', route: 'oral', frequency: 'nightly' },
+    ],
+  },
+  later: {
+    id: 's-qa001-2',
+    source: 'Synthetic follow-up medication review (QA-001)',
+    recordedAt: '2026-10-15',
+    medications: [
+      { id: 'qa001-m1', name: 'Lisinopril', dose: '20 mg', route: 'oral', frequency: 'daily' },
+      { id: 'qa001-m2', name: 'Metformin', dose: '500 mg', route: 'oral', frequency: 'twice daily' },
+      { id: 'qa001-m5', name: 'Vitamin D', dose: '1000 units', route: 'oral', frequency: 'daily' },
+    ],
+  },
+};
+
 export const syntheticScenarios: SyntheticScenario[] = [
   ...baseSyntheticScenarios,
   ...hfScenarios,
 ];
 
 export function getSyntheticScenario(id: string): SyntheticScenario | undefined {
+  if (id === 'QA-001' || id === qa001PresentationScenario.id) {
+    return qa001PresentationScenario;
+  }
   return syntheticScenarios.find((scenario) => scenario.id === id);
 }

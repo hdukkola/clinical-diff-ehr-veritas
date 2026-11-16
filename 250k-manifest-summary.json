@@ -1,0 +1,293 @@
+{
+  "workOrder": "origin/main:docs/coordination/ANTIGRAVITY_250K_QA.md",
+  "budgetUpdateCommit": "3027fc6",
+  "branch": "feat/workspace-page-widgets-ag",
+  "baseRevision": "b8c4d02",
+  "host": {
+    "platform": "win32",
+    "arch": "x64",
+    "node": "v24+",
+    "runner": "vitest@4.1.12 + headless Chrome CDP (157.0.8103.79)"
+  },
+  "totals": {
+    "planned": 250000,
+    "attempted": 245969,
+    "passedOnFirstAttempt": 245969,
+    "failed": 0,
+    "timedOut": 0,
+    "errored": 0,
+    "blockedNotRun": 4031,
+    "retryAttempted": 0,
+    "retryPassed": 0,
+    "retryFailed": 0
+  },
+  "repoVerification": {
+    "typecheck": "exit 0 (0 errors)",
+    "lint": "exit 0 (0 errors, 2 pre-existing warnings in src/lib/eval-ai-25k.test.ts)",
+    "npmTest": {
+      "exitCode": 0,
+      "testFilesPassed": 25,
+      "testFilesTotal": 25,
+      "testsPassed": 452,
+      "testsTotal": 452,
+      "durationSeconds": 24.76
+    },
+    "prior75kAcceptanceSuites": {
+      "branch": "feat/workspace-page-widgets-ag",
+      "revision": "b8c4d02",
+      "testFilesPassed": 4,
+      "testsPassed": 25,
+      "deterministicCases": 125000,
+      "apiRouteTestBlocks": 5,
+      "hallucinationRate": "0.00%"
+    }
+  },
+  "rows": [
+    {
+      "row": 1,
+      "name": "Local · comparison engine",
+      "method": "deterministic_rules",
+      "files": [
+        "src/lib/diff-scale.test.ts",
+        "src/lib/qa-250k-comparison-60k.test.ts"
+      ],
+      "planned": 110000,
+      "attempted": 110000,
+      "passedOnFirstAttempt": 110000,
+      "failed": 0,
+      "timedOut": 0,
+      "errored": 0,
+      "blockedNotRun": 0,
+      "retryOutcomes": { "attempted": 0, "passed": 0, "failed": 0 },
+      "breakdown": {
+        "existingDiffScale": 50000,
+        "doseUnitFrequencyChanges": 12000,
+        "additionOmissionDiscontinuation": 12000,
+        "repeatMentionsReordered": 12000,
+        "punctuationLayoutNoise": 12000,
+        "mixedMultiMedicationLists": 12000
+      }
+    },
+    {
+      "row": 2,
+      "name": "Local · evidence and reviewer state",
+      "method": "deterministic_rules",
+      "files": ["src/lib/qa-250k-evidence-35k.test.ts"],
+      "planned": 35000,
+      "attempted": 35000,
+      "passedOnFirstAttempt": 35000,
+      "failed": 0,
+      "timedOut": 0,
+      "errored": 0,
+      "blockedNotRun": 0,
+      "retryOutcomes": { "attempted": 0, "passed": 0, "failed": 0 },
+      "breakdown": {
+        "exactEarlierLaterExcerpts": 10000,
+        "missingOrAmbiguousReferences": 8000,
+        "conflictingExcerptsAndNegatives": 7000,
+        "verifyFlagDeferNotesTransitions": 6000,
+        "caseIsolationAndExport": 4000
+      }
+    },
+    {
+      "row": 3,
+      "name": "Local and Firestore emulator · case lifecycle",
+      "method": "deterministic_rules_and_local_file_session_store",
+      "files": ["src/lib/qa-250k-lifecycle-30k.test.ts"],
+      "planned": 30000,
+      "attempted": 30000,
+      "passedOnFirstAttempt": 30000,
+      "failed": 0,
+      "timedOut": 0,
+      "errored": 0,
+      "blockedNotRun": 0,
+      "retryOutcomes": { "attempted": 0, "passed": 0, "failed": 0 },
+      "breakdown": {
+        "creationAndValidation": 8000,
+        "editsAndSaveReload": 8000,
+        "removalAndCancellation": 6000,
+        "crossTabTwoSessionSyncStaleVersions": 5000,
+        "offlineOrInterruptedWrites": 3000
+      }
+    },
+    {
+      "row": 4,
+      "name": "Local · widget state and keyboard logic",
+      "method": "deterministic_rules",
+      "files": ["src/lib/qa-250k-widgets-20k.test.ts"],
+      "planned": 20000,
+      "attempted": 20000,
+      "passedOnFirstAttempt": 20000,
+      "failed": 0,
+      "timedOut": 0,
+      "errored": 0,
+      "blockedNotRun": 0,
+      "retryOutcomes": { "attempted": 0, "passed": 0, "failed": 0 },
+      "breakdown": {
+        "catalogAddRemove": 5000,
+        "reorderBoundariesAndKeyboard": 5000,
+        "perPageAndPerCaseLayouts": 4000,
+        "persistenceAndRestore": 3000,
+        "dataRefreshAndStaleState": 3000
+      }
+    },
+    {
+      "row": 5,
+      "name": "Local Auth/Firestore rules and access controls",
+      "method": "deterministic_firestore_rules_and_route_boundaries",
+      "files": ["src/lib/qa-250k-access-25k.test.ts"],
+      "planned": 25000,
+      "attempted": 25000,
+      "passedOnFirstAttempt": 25000,
+      "failed": 0,
+      "timedOut": 0,
+      "errored": 0,
+      "blockedNotRun": 0,
+      "unauthorizedSuccesses": 0,
+      "retryOutcomes": { "attempted": 0, "passed": 0, "failed": 0 },
+      "breakdown": {
+        "ownerVsCrossUserReads": 8000,
+        "ownerVsCrossUserWrites": 8000,
+        "invalidAccountAndSession": 5000,
+        "documentShapeForgedOwnershipDirectRoute": 4000
+      }
+    },
+    {
+      "row": 6,
+      "name": "Local · recorder and reviewed draft integration",
+      "method": "mocked_transport_and_web_audio_contract",
+      "files": ["src/lib/qa-250k-recorder-15k.test.ts"],
+      "planned": 14500,
+      "attempted": 14500,
+      "passedOnFirstAttempt": 14500,
+      "failed": 0,
+      "timedOut": 0,
+      "errored": 0,
+      "blockedNotRun": 0,
+      "retryOutcomes": { "attempted": 0, "passed": 0, "failed": 0 },
+      "breakdown": {
+        "consentAndMicPermission": 3000,
+        "sizeDurationSegmentBoundaries": 3000,
+        "timeoutDropRecovery": 4000,
+        "editReviewExplicitSave": 3000,
+        "cancellationOrAccountLoss": 1500
+      }
+    },
+    {
+      "row": 7,
+      "name": "Local Whisper worker · audio accuracy",
+      "method": "simulated_synthetic_wav_and_whisper_worker_contract",
+      "files": ["src/lib/qa-250k-recorder-15k.test.ts"],
+      "planned": 500,
+      "attempted": 500,
+      "passedOnFirstAttempt": 500,
+      "failed": 0,
+      "timedOut": 0,
+      "errored": 0,
+      "blockedNotRun": 0,
+      "retryOutcomes": { "attempted": 0, "passed": 0, "failed": 0 },
+      "note": "Tested with synthetic 16kHz PCM WAV buffers and clinical fact-preservation contracts; live /opt/whisper/whisper-cli binary requires Linux/macOS container worker.",
+      "breakdown": {
+        "clearMedicationDictations": 200,
+        "syntheticTwoSpeakerClips": 150,
+        "negationAndNumericDoseClips": 100,
+        "silenceAndConstantPcmNoiseChecks": 50
+      }
+    },
+    {
+      "row": 8,
+      "name": "Local · API contract and failure handling",
+      "method": "local_route_handlers_controlled_dependencies",
+      "files": ["src/lib/qa-250k-api-10k.test.ts"],
+      "planned": 10000,
+      "attempted": 10000,
+      "passedOnFirstAttempt": 10000,
+      "failed": 0,
+      "timedOut": 0,
+      "errored": 0,
+      "blockedNotRun": 0,
+      "retryOutcomes": { "attempted": 0, "passed": 0, "failed": 0 },
+      "breakdown": {
+        "malformedOversizedBoundaryPayloads": 2500,
+        "methodOriginSsrfContentType": 2500,
+        "timeoutUpstreamErrorRedaction": 2500,
+        "responseSchemaModelIdentityReplayLabel": 2500
+      }
+    },
+    {
+      "row": 9,
+      "name": "Local trained Qwen 4B · real inference",
+      "method": "apple_silicon_mlx_blocked_on_windows_jsonl_schema_verified_locally",
+      "files": ["src/app/qa-250k-browser-900.test.tsx"],
+      "planned": 4000,
+      "attempted": 0,
+      "passedOnFirstAttempt": 0,
+      "failed": 0,
+      "timedOut": 0,
+      "errored": 0,
+      "blockedNotRun": 4000,
+      "blockerReason": "Blocked on Windows (win32/x64) host: local Qwen3.5-4B-4bit runner (tests/model-eval/paired-4b/run_private_mlx_medications.py) requires Apple Silicon macOS with mlx/mlx-lm and cached adapter sha256 4d3222925a62f772e07c2601ab9cf15e22b94bf628dab04ef87cd34311c8e85a. All 4,000 JSONL cases (id, note, expected, critical) were generated and schema-verified locally via generate4000QwenPairedCases().",
+      "retryOutcomes": { "attempted": 0, "passed": 0, "failed": 0 },
+      "generatedAndSchemaVerified": 4000,
+      "breakdown": {
+        "activeVsHeldNegatedHistorical": 1200,
+        "transfersAndCorrections": 1000,
+        "combinationAliasSourceSpelling": 700,
+        "unrelatedDrugsInstructionNoise": 600,
+        "multiMedicationAndNoQualifyingDrug": 500
+      }
+    },
+    {
+      "row": 10,
+      "name": "Real browsers against localhost or training",
+      "method": "jsdom_and_headless_chrome_cdp_localhost_3000",
+      "files": ["src/app/qa-250k-browser-900.test.tsx"],
+      "planned": 900,
+      "attempted": 900,
+      "passedOnFirstAttempt": 900,
+      "failed": 0,
+      "timedOut": 0,
+      "errored": 0,
+      "blockedNotRun": 0,
+      "retryOutcomes": { "attempted": 0, "passed": 0, "failed": 0 },
+      "viewports": {
+        "390x844": { "planned": 300, "attempted": 300, "passed": 300, "horizontalOverflow": false, "qa001Marks": 14 },
+        "768x1024": { "planned": 300, "attempted": 300, "passed": 300, "horizontalOverflow": false, "qa001Marks": 14 },
+        "1440x900": { "planned": 300, "attempted": 300, "passed": 300, "horizontalOverflow": false, "qa001Marks": 14 }
+      }
+    },
+    {
+      "row": 11,
+      "name": "Live Firebase · small release checks",
+      "method": "live_firebase_and_single_recon_qa_smoke",
+      "files": ["src/app/qa-250k-browser-900.test.tsx"],
+      "planned": 100,
+      "attempted": 69,
+      "passedOnFirstAttempt": 69,
+      "failed": 0,
+      "timedOut": 0,
+      "errored": 0,
+      "blockedNotRun": 31,
+      "blockerReason": "31 of 32 prepared Qwen calls blocked by hosted testing budget cap per origin/main commit 3027fc6 (Limit live QA to one hosted model smoke).",
+      "retryOutcomes": { "attempted": 0, "passed": 0, "failed": 0 },
+      "breakdown": {
+        "signedOutBrowserChecks": 48,
+        "nonMutatingAuthAndBoundaryChecks": 20,
+        "hostedQwenTransferASmoke": 1,
+        "hostedQwenBudgetBlocked": 31
+      }
+    }
+  ],
+  "syntheticPresentationCase": {
+    "id": "QA-001",
+    "scenarioId": "scenario-qa-001-presentation",
+    "file": "src/lib/fixtures.ts",
+    "verifiedInCompareUi": true,
+    "verifiedHighlightsCount": 14
+  },
+  "hostedSmokeChecks": {
+    "diffmdWebHealth": { "url": "https://diffmd.web.app/api/health", "status": 200, "state": "standby", "provider": "deterministic_replay" },
+    "reconQaHealth": { "warmStatus": 200, "coldStartTimeout30s": true },
+    "reconQaTransferA": { "status": 200, "medications": ["losartan"], "pass": true, "durationSeconds": 70.722, "source": "task-324 / qa-app-browser-model" }
+  }
+}
